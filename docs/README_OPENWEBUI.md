@@ -1,15 +1,28 @@
-# 📦 Open WebUI + Crawl4AI Integration Package
+# 📦 REE AI Platform Selection - THEO SƠ ĐỒ CTO
 
 ## Tổng quan
 
-Package hoàn chỉnh về kiến trúc **Real Estate RAG System** sử dụng:
-- **Open WebUI** (Layer 1: UI + Auth + Conversation Management)
-- **LangChain** (Layer 2: RAG Orchestration)
-- **FastAPI Services** (Layer 3: Domain Logic)
-- **Crawl4AI** (Layer 4: Data Ingestion) ⭐ **THAY SCRAPY**
-- **OpenSearch** (Layer 5: Vector + Keyword Search)
-- **PostgreSQL** (Layer 5: Relational Data)
-- **Redis** (Layer 5: Cache & Queue)
+Package này **BÁM SÁT sơ đồ gốc CTO** (`REE AI-architecture.drawio.xml`) và tìm platform MIỄN PHÍ, PHỔ BIẾN để implement:
+
+### ✅ 10 Services theo CTO → FREE Platforms:
+1. **Orchestrator** (routing: create/search RE) → **FastAPI + gRPC**
+2. **Hybrid Semantic Chunking** (6 steps) → **Sentence-Transformers**
+3. **Attribute Extraction** (LLM-driven) → **GPT-4 mini + Pydantic**
+4. **Classification Service** (3 modes) → **FastAPI + GPT-4 mini**
+5. **Completeness Feedback** → **GPT-4 mini**
+6. **Price Suggestion** → **GPT-4 mini**
+7. **Rerank Service** → **cross-encoder (HuggingFace)**
+8. **User Account Service** → **FastAPI + PostgreSQL + JWT**
+9. **Core Service/Gateway** (Q3) → **LiteLLM + Redis**
+10. **Real Estate Crawler** → **Crawl4AI + Playwright**
+
+### ✅ TRẢ LỜI 4 CÂU HỎI CTO:
+- **Q1:** Context Memory → PostgreSQL + conversation_id (KHÔNG dùng OpenAI)
+- **Q2:** Mapping user → conversation_id → Orchestrator gen UUID
+- **Q3:** Core Service tập trung OpenAI → CÓ (LiteLLM Gateway)
+- **Q4:** History loading → Load từ PostgreSQL → Inject prompt
+
+### 💰 Chi phí: $0 tools + $100-300/month OpenAI API
 
 ---
 

@@ -1,107 +1,125 @@
-# Tích hợp Crawl4AI vào Open WebUI Architecture
+# Platform Selection - THEO SƠ ĐỒ GỐC CTO
 
-## ✅ ĐÃ HOÀN THÀNH
+## ✅ MỤC ĐÍCH TÀI LIỆU NÀY
 
-### 1. Kiến trúc hoàn chỉnh với Open WebUI
-- ✅ Tạo file: `REE_AI-OpenWebUI-Complete-Architecture.drawio.xml`
-- ✅ 6 Layers đầy đủ:
-  - **Layer 1**: Open WebUI (UI + Auth + Conversation Mgmt)
-  - **Layer 2**: Pipeline (LangChain Orchestration)
-  - **Layer 3**: Domain Services (FastAPI)
-  - **Layer 4**: **Crawl4AI** (Data Ingestion) ⭐
-  - **Layer 5**: Storage (OpenSearch + PostgreSQL + Redis)
-  - **Layer 6**: External APIs (OpenAI + Gateway)
+**BÁM SÁT** sơ đồ gốc CTO (`REE AI-architecture.drawio.xml`) và đề xuất platform MIỄN PHÍ, PHỔ BIẾN để implement.
 
-### 2. Tài liệu Crawl4AI đã update
-- ✅ `crawl4ai_integration_guide_v2.md` - Phù hợp với Open WebUI
-- ✅ Architecture diagrams cập nhật
-- ✅ Implementation examples
+### 1. Kiến trúc THEO CTO (KHÔNG dùng Open WebUI, LangChain)
+- ✅ Services độc lập (microservices):
+  - **Orchestrator**: FastAPI + gRPC (routing message)
+  - **Semantic Chunking**: Sentence-Transformers (6 bước CTO)
+  - **Attribute Extraction**: GPT-4 mini + Pydantic
+  - **Classification**: 3 modes (filter/semantic/both)
+  - **Completeness Feedback**: GPT-4 mini
+  - **Price Suggestion**: GPT-4 mini
+  - **Rerank**: cross-encoder (HuggingFace)
+  - **User Account**: FastAPI + PostgreSQL
+  - **Core Gateway**: LiteLLM (Q3 CTO)
+  - **Crawler**: Crawl4AI ⭐
+
+### 2. TRẢ LỜI 4 CÂU HỎI CTO
+- ✅ **Q1:** Context Memory - OpenAI API KHÔNG quản lý → PostgreSQL + conversation_id
+- ✅ **Q2:** Mapping user → Orchestrator gen UUID → Gửi mọi service
+- ✅ **Q3:** Core Service tập trung → CÓ (LiteLLM Gateway) rate limit + cost tracking
+- ✅ **Q4:** Conversation history → Load PostgreSQL → Inject vào prompt GPT
 
 ---
 
-## 🏗️ Kiến Trúc Tổng Quan
+## 🏗️ Kiến Trúc THEO SƠ ĐỒ CTO
 
 ```
+USER (Web/Mobile/API)
+  ↓
 ┌─────────────────────────────────────────────────────────┐
-│  LAYER 1: OPEN WEBUI (Browser UI)                       │
-│  ✅ Chat Interface                                       │
-│  ✅ Authentication (Users, Roles)                        │
-│  ✅ Conversation History (PostgreSQL)                    │
-│  ✅ Document Upload                                      │
-│                                                          │
-│  AUTO-SOLVED:                                            │
-│  • Q1: Context Memory ✅                                 │
-│  • Q2: conversation_id generation ✅                     │
-│  • Q4: History loading ✅                                │
+│  USER ACCOUNT SERVICE (FastAPI + JWT)                   │
+│  Platform: FastAPI (FREE) + PostgreSQL + bcrypt         │
+│  • Register, Login, JWT token                           │
+│  • User profiles, roles                                 │
 └────────────────────┬────────────────────────────────────┘
-                     │ User query
+                     │ JWT token
                      ↓
 ┌─────────────────────────────────────────────────────────┐
-│  LAYER 2: LANGCHAIN PIPELINE (Orchestration)            │
-│  • Intent Classification                                │
-│  • Service Routing                                      │
-│  • Context Management                                   │
-│  • RAG Chain (LangChain)                                │
-│  • Response Formatting                                  │
-│                                                          │
-│  File: /app/backend/data/pipelines/                     │
-│        property_search_pipeline.py                      │
+│  ORCHESTRATOR (FastAPI + gRPC)                          │
+│  Platform: FastAPI (FREE) + grpcio                      │
+│  • Routing message: create RE / search RE / price       │
+│  • Generate conversation_id (UUID) ← Q2 ANSWER          │
+│  • Send to appropriate services                         │
 └────────────────────┬────────────────────────────────────┘
-                     │ Route to services
+                     │ Route to services (gRPC)
                      ↓
 ┌─────────────────────────────────────────────────────────┐
-│  LAYER 3: DOMAIN SERVICES (FastAPI)                     │
-│  ┌──────────────┬──────────────┬──────────────────┐    │
-│  │Query Service │Search Service│Reranking Service │    │
-│  │• Decompose   │• Hybrid      │• Cross-encoder   │    │
-│  │• Extract     │  search      │• Score normalize │    │
-│  └──────────────┴──────────────┴──────────────────┘    │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │Price Suggestion Service                          │  │
-│  │• Market analysis • GPT-4 reasoning               │  │
-│  └──────────────────────────────────────────────────┘  │
+│  10 SERVICES (Microservices - FastAPI)                  │
+│                                                          │
+│  1️⃣ HYBRID SEMANTIC CHUNKING SERVICE                    │
+│     Platform: Sentence-Transformers + NLTK (FREE)       │
+│     6 Steps CTO:                                         │
+│     - Segment sentences (NLTK)                          │
+│     - Embed each sentence (sentence-transformers)       │
+│     - Cosine similarity (NumPy)                         │
+│     - Combine sentences >0.75 threshold                 │
+│     - Overlap window                                    │
+│     - Generate final chunk embedding                    │
+│                                                          │
+│  2️⃣ ATTRIBUTE EXTRACTION SERVICE (LLM-driven)           │
+│     Platform: GPT-4 mini + Pydantic (FREE lib)          │
+│     Extract JSON: {price, location, bedrooms, area...}  │
+│                                                          │
+│  3️⃣ CLASSIFICATION SERVICE (3 modes CTO)                │
+│     Platform: FastAPI + GPT-4 mini                      │
+│     Classify query → filter / semantic / both           │
+│                                                          │
+│  4️⃣ COMPLETENESS FEEDBACK SERVICE                       │
+│     Platform: GPT-4 mini                                │
+│     Score response completeness (0-100)                 │
+│     If <70 → trigger re-generation                      │
+│                                                          │
+│  5️⃣ PRICE SUGGESTION SERVICE                            │
+│     Platform: GPT-4 mini                                │
+│     Market analysis + similar properties                │
+│                                                          │
+│  6️⃣ RERANK SERVICE                                       │
+│     Platform: cross-encoder (HuggingFace FREE)          │
+│     Score normalization + Top-K selection               │
+│                                                          │
+│  7️⃣ ROUTING SERVICE                                      │
+│     Platform: Part of Orchestrator                      │
+│                                                          │
+│  8️⃣ CORE SERVICE (OpenAI Gateway) ← Q3 ANSWER           │
+│     Platform: LiteLLM (FREE) + Redis                    │
+│     • Rate limiting (protect API key)                   │
+│     • Cost tracking (per user/conversation)             │
+│     • Response caching (Redis)                          │
+│     • Centralized OpenAI requests                       │
 └────────────────────┬────────────────────────────────────┘
                      │ Query database
                      ↓
 ┌─────────────────────────────────────────────────────────┐
-│  LAYER 4: CRAWL4AI (Data Ingestion) ⭐ THAY SCRAPY     │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │ CRAWL4AI SERVICE                               │    │
-│  │ • JavaScript Rendering (Playwright)            │    │
-│  │ • Auto-Clean HTML (remove ads, scripts)        │    │
-│  │ • LLM-Friendly Markdown extraction             │    │
-│  │ • Built-in Chunking (512 tokens)               │    │
-│  │ • Async Performance (47% faster than Scrapy)   │    │
-│  └────────────────────────────────────────────────┘    │
-│                                                          │
-│  Data Sources:                                           │
-│  • nhatot.vn                                            │
-│  • batdongsan.vn                                        │
-│  • alonhadat.com.vn                                     │
-│                                                          │
-│  Scheduled: Every 6 hours (Celery Beat)                 │
-└────────────────────┬────────────────────────────────────┘
-                     │ Index with embeddings
-                     ↓
-┌─────────────────────────────────────────────────────────┐
-│  LAYER 5: STORAGE                                       │
+│  STORAGE LAYER                                          │
 │  ┌──────────────┬──────────────┬──────────────────┐    │
 │  │OpenSearch    │PostgreSQL    │Redis             │    │
-│  │• Vector DB   │• Users       │• Cache           │    │
-│  │• Keyword     │• Conversations│• Sessions       │    │
-│  │• Filters     │• Feedback    │• Rate limit      │    │
+│  │Vector DB     │Context Mem   │Cache/Queue       │    │
+│  │(FREE)        │(FREE)        │(FREE)            │    │
+│  │              │              │                  │    │
+│  │• Vector      │• Users ← Q1  │• Cache           │    │
+│  │  search      │• Conversations│• Rate limit     │    │
+│  │• BM25        │  ← Q4        │• Celery queue    │    │
+│  │• Hybrid      │• Messages    │                  │    │
 │  └──────────────┴──────────────┴──────────────────┘    │
-└────────────────────┬────────────────────────────────────┘
-                     │
+└────────────────────↑────────────────────────────────────┘
+                     │ Crawl & Index
 ┌─────────────────────────────────────────────────────────┐
-│  LAYER 6: EXTERNAL APIS                                 │
-│  ┌──────────────┬─────────────────────────────────┐    │
-│  │OpenAI API    │OpenAI Gateway (Q3 - MUST BUILD) │    │
-│  │• GPT-4 mini  │• Rate limiting                   │    │
-│  │• Embeddings  │• Cost tracking                   │    │
-│  │              │• Caching                         │    │
-│  │              │• Monitoring                      │    │
+│  REAL ESTATE CRAWLER (Crawl4AI + Playwright) ⭐         │
+│  Platform: Crawl4AI (FREE) + Playwright                 │
+│  • nhatot.vn, batdongsan.vn crawling                    │
+│  • JS rendering (Playwright)                            │
+│  • LLM-friendly markdown                                │
+│  • Scheduled: Celery Beat every 6h                      │
+└─────────────────────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────┐
+│  EXTERNAL APIs                                          │
+│  • OpenAI GPT-4 mini (via Core Gateway)                 │
+│  • text-embedding-3-small (via Core Gateway)            │
 │  └──────────────┴─────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────┘
 ```

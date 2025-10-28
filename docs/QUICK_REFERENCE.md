@@ -1,136 +1,260 @@
-# Quick Reference: LangChain Ecosystem
+# Quick Reference: PLATFORMS THEO SƠ ĐỒ CTO
 
-## 🎯 One-Page Cheat Sheet
+## 🎯 One-Page Cheat Sheet - FREE PLATFORMS
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                   LANGCHAIN ECOSYSTEM                        │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  🦜 LANGCHAIN         🦙 LLAMAINDEX        🔍 LANGSMITH      │
-│  Framework            RAG Specialist       Monitor Tool      │
-│  ──────────           ─────────────        ────────────      │
-│  • General LLM        • Data indexing      • Debugging       │
-│  • Chatbots           • Fast retrieval     • Tracing         │
-│  • Agents             • Large datasets     • A/B testing     │
-│  • Workflows          • Document-heavy     • Cost tracking   │
-│                                                              │
-│  ✅ FREE              ✅ FREE              ⚠️  FREEMIUM      │
-│  MIT License          MIT License          $0-$39/mo        │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  🕸️  LANGGRAPH                                              │
-│  Multi-Agent Builder                                         │
-│  ──────────────────                                          │
-│  • Stateful agents                                           │
-│  • Complex workflows                                         │
-│  • Human-in-loop                                             │
-│  • Time-travel debug                                         │
-│                                                              │
-│  ✅ FREE (core)                                              │
-│  MIT License                                                 │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📊 Decision Matrix
-
-### Bạn đang build gì?
-
-#### Simple RAG Chatbot (như hệ thống hiện tại)
-```
-→ LangChain ✅
-  + LangSmith (monitoring)
-  
-Lý do:
-- Đơn giản, dễ implement
-- Đủ cho 90% use cases
-- Free tier OK
-
-Cost: $0-$39/month
-```
-
-#### Document Search Engine (1M+ docs)
-```
-→ LlamaIndex 🦙
-  OR
-→ LangChain + LlamaIndex (hybrid)
-
-Lý do:
-- Optimized indexing
-- Fast retrieval
-- Better for large scale
-
-Cost: $0
-```
-
-#### Multi-Agent System (nhiều agents phối hợp)
-```
-→ LangChain + LangGraph 🕸️
-  + LangSmith (monitoring)
-
-Lý do:
-- Stateful workflows
-- Agent orchestration
-- Complex reasoning
-
-Cost: $0-$39/month (tools)
-```
-
-#### Production App (cần monitoring)
-```
-→ Your Framework (LangChain/LlamaIndex)
-  + LangSmith Plus ✅
-
-Lý do:
-- Production monitoring
-- Cost tracking
-- Performance optimization
-
-Cost: $39/month
+┌──────────────────────────────────────────────────────────────────┐
+│           PLATFORMS ĐỂ IMPLEMENT SƠ ĐỒ CTO                      │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  🚀 FASTAPI          📦 SENTENCE-TRANS    🔍 LITELLM            │
+│  Services Framework   Semantic Chunking    OpenAI Gateway       │
+│  ───────────────      ──────────────────   ─────────────        │
+│  • Orchestrator       • 6-step chunking    • Rate limit         │
+│  • 10 services CTO    • Cosine sim >0.75   • Cost tracking     │
+│  • gRPC support       • Overlap chunks     • Caching            │
+│  • Auto docs          • HuggingFace       • Multi-model        │
+│                                                                  │
+│  ✅ FREE              ✅ FREE               ✅ FREE              │
+│  72K⭐ GitHub         13K⭐ GitHub          10K⭐ GitHub          │
+│                                                                  │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  🕷️  CRAWL4AI          🔎 OPENSEARCH       🐘 POSTGRESQL       │
+│  Real Estate Crawler  Vector DB            Context Memory       │
+│  ────────────────     ─────────────        ──────────────       │
+│  • nhatot.vn          • Vector search      • Conversations     │
+│  • batdongsan.vn      • BM25 keyword       • Users/Auth        │
+│  • Playwright JS      • Hybrid retrieval   • SQLAlchemy ORM    │
+│  • LLM-friendly       • Docker             • UUID session      │
+│                                                                  │
+│  ✅ FREE              ✅ FREE               ✅ FREE              │
+│  4K⭐ (hot!)          8.5K⭐ GitHub         Millions users      │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🚦 Traffic Light Guide
+## 📊 Decision Matrix - THEO YÊU CẦU CTO
 
-### ✅ GREEN - Use Now
+### CTO cần gì? → Dùng Platform nào?
 
-| What | When | Cost |
-|------|------|------|
-| **LangChain** | Building any LLM app | FREE |
-| **LangSmith Free** | Development/testing | FREE |
+#### Orchestrator (Routing message: create RE / search RE / price)
+```
+→ FastAPI ✅
+  + gRPC (inter-service communication)
 
-### 🟡 YELLOW - Consider Later
+Lý do:
+- Async performance
+- Auto OpenAPI docs
+- gRPC support built-in
+- Python native (dễ team)
 
-| What | When | Cost |
-|------|------|------|
-| **LlamaIndex** | If retrieval is slow | FREE |
-| **LangSmith Plus** | Production monitoring | $39/mo |
+Platform: FastAPI (FREE)
+Code: orchestrator_service.py
+```
 
-### 🔴 RED - Only if Needed
+#### Hybrid Semantic Chunking (6 bước CTO)
+```
+→ Sentence-Transformers ✅
+  + NumPy (cosine similarity)
+  + NLTK (sentence segmentation)
 
-| What | When | Cost |
-|------|------|------|
-| **LangGraph** | Complex multi-agent | FREE (complex) |
-| **Hybrid Setup** | Performance issues | FREE (maintenance) |
+Lý do:
+- Đúng 6 bước CTO:
+  1. Segment sentences (NLTK)
+  2. Embed each (sentence-transformers)
+  3. Cosine similarity (NumPy)
+  4. Combine >0.75 threshold
+  5. Overlap window
+  6. Final chunk embedding
+- HuggingFace official, 13K stars
+
+Platform: Sentence-Transformers (FREE)
+Code: semantic_chunking_service.py
+```
+
+#### Completeness Feedback Service
+```
+→ GPT-4 mini ✅
+  + Custom prompt (đánh giá 0-100)
+
+Lý do:
+- LLM tốt nhất cho reasoning
+- Rẻ ($0.15 input / $0.60 output per 1M)
+- Nếu score <70 → re-generate
+
+Platform: OpenAI GPT-4 mini
+Code: completeness_service.py
+```
+
+#### Attribute Extraction (LLM-driven)
+```
+→ GPT-4 mini + Pydantic ✅
+
+Lý do:
+- Structured output (JSON schema)
+- Extract: price, location, bedrooms, area
+- Validation tự động (Pydantic)
+
+Platform: GPT-4 mini + Pydantic (FREE lib)
+Code: attribute_extraction_service.py
+```
+
+#### Classification Service (3 modes)
+```
+→ FastAPI + GPT-4 mini ✅
+
+3 modes:
+1. filter → structured filtering (SQL WHERE)
+2. semantic → vector search (OpenSearch)
+3. both → hybrid retrieval
+
+Platform: FastAPI service
+Code: classification_service.py
+```
+
+#### Context Memory (Q1, Q4 CTO)
+```
+→ PostgreSQL + SQLAlchemy ✅
+  + UUID conversation_id
+
+Q1: OpenAI không quản context → Tự lưu PostgreSQL
+Q4: Load history từ DB → Inject vào prompt
+
+Platform: PostgreSQL (FREE)
+Schema:
+- users (id, email, password_hash)
+- conversations (id, user_id, created_at)
+- messages (id, conversation_id, role, content)
+```
+
+#### Core Service/Gateway (Q3 CTO) + Model Routing
+```
+→ LiteLLM ✅
+  + Redis (cache)
+  + Ollama (self-hosted LLM)
+  + FastAPI wrapper
+
+Q3: CÓ cần gateway → CÓ!
+
+Features:
+- Rate limiting (protect API key)
+- Cost tracking (theo user/conversation)
+- Response caching (Redis)
+- Centralized monitoring
+- Model routing (Ollama vs OpenAI) ← NEW
+
+Model Routing Strategy:
+┌────────────────────────┬─────────┬─────────┐
+│ Task                   │ Model   │ Cost    │
+├────────────────────────┼─────────┼─────────┤
+│ Attribute Extraction   │ Ollama  │ $0      │
+│ Classification         │ Ollama  │ $0      │
+│ Completeness Feedback  │ OpenAI  │ $$      │
+│ Price Suggestion       │ OpenAI  │ $$      │
+└────────────────────────┴─────────┴─────────┘
+
+Savings: ~10% cost reduction ($25-430/month)
+
+Platform: LiteLLM (FREE) + Ollama (FREE) + Redis
+Code: core_gateway_service.py
+```
+
+#### Real Estate Crawler
+```
+→ Crawl4AI ✅
+  + Playwright (JS rendering)
+
+Lý do:
+- 73% ít code hơn Scrapy
+- 47% nhanh hơn
+- LLM-friendly markdown
+- Auto clean HTML
+
+Platform: Crawl4AI (FREE)
+Code: real_estate_crawler.py
+```
 
 ---
 
-## 💡 For Hệ Thống Open WebUI + RAG
+## 🚦 Traffic Light Guide - THEO SƠ ĐỒ CTO
 
-### Phase 1: NOW (Week 1) ✅
+### ✅ GREEN - BẮT BUỘC (Theo sơ đồ CTO)
+
+| Service | Platform | Cost | Stars |
+|---------|----------|------|-------|
+| **Orchestrator** | FastAPI + gRPC | FREE | 72K⭐ |
+| **Semantic Chunking** | Sentence-Transformers | FREE | 13K⭐ |
+| **Attribute Extraction** | GPT-4 mini + Pydantic | API only | GPT API |
+| **Classification (3 modes)** | FastAPI + GPT-4 mini | FREE+API | 72K⭐ |
+| **Completeness Feedback** | GPT-4 mini | API only | GPT API |
+| **Price Suggestion** | GPT-4 mini | API only | GPT API |
+| **Rerank Service** | cross-encoder (HF) | FREE | HuggingFace |
+| **User Account** | FastAPI + PostgreSQL | FREE | Millions |
+| **Core Gateway (Q3)** | LiteLLM + Redis + Ollama | FREE | 10K⭐ + Self-hosted |
+| **RE Crawler** | Crawl4AI + Playwright | FREE | 4K⭐ |
+| **Vector DB** | OpenSearch | FREE | 8.5K⭐ |
+| **Context Memory (Q1,Q4)** | PostgreSQL + SQLAlchemy | FREE | Millions |
+
+### 🟡 YELLOW - Optional Monitoring
+
+| Tool | When | Cost |
+|------|------|------|
+| **Prometheus + Grafana** | Production metrics | FREE |
+| **Sentry** | Error tracking | FREE tier |
+
+### 🔴 RED - KHÔNG CẦN (Theo CTO)
+
+| What | Why NOT | Alternative |
+|------|---------|-------------|
+| **LangChain** | CTO không dùng | FastAPI services |
+| **LlamaIndex** | CTO không dùng | OpenSearch |
+| **LangGraph** | CTO không dùng | Orchestrator |
+| **Open WebUI** | CTO không dùng | Custom UI hoặc không có UI |
+
+---
+
+## 💡 Implementation Timeline - THEO SƠ ĐỒ CTO
+
+### Week 1-2: Core Infrastructure
 ```bash
-# What to do:
-1. ✅ Keep LangChain in Layer 2 Pipeline
-2. 🆕 Add LangSmith tracing
-3. ❌ Don't add anything else
+1. Setup PostgreSQL + Users schema (Q1 answer)
+2. Build Orchestrator (FastAPI + gRPC)
+3. Setup conversation_id mapping (Q2 answer)
+4. Build Core Gateway Service (Q3 answer - LiteLLM)
 
-# How:
-export LANGCHAIN_TRACING_V2="true"
+Cost: $0 (all FREE tools)
+Time: 10-14 days
+```
+
+### Week 3-4: AI Services
+```bash
+5. Hybrid Semantic Chunking (Sentence-Transformers)
+6. Attribute Extraction (GPT-4 mini + Pydantic)
+7. Classification Service (3 modes)
+8. Completeness Feedback (GPT-4 mini)
+9. Price Suggestion Service (GPT-4 mini)
+10. Rerank Service (cross-encoder)
+
+Cost: $100-200 (OpenAI API testing)
+Time: 14 days
+```
+
+### Week 5: Data & Deployment
+```bash
+11. Real Estate Crawler (Crawl4AI)
+12. OpenSearch setup (Vector + BM25)
+13. Conversation history implementation (Q4 answer)
+14. Docker Compose deployment
+15. Integration testing
+
+Cost: $0 (self-hosted)
+Time: 7 days
+```
+
+### TOTAL: 5 weeks, $100-200 dev cost
 export LANGCHAIN_API_KEY="your-key"  # Free tier
 
 # Cost: $0

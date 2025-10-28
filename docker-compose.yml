@@ -1,0 +1,194 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: ree-ai-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ree_ai}
+      POSTGRES_USER: ${POSTGRES_USER:-ree_ai_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ree_ai_pass_2025}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ree_ai_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ree-ai-network
+
+  # Redis Cache
+  redis:
+    image: redis:alpine
+    container_name: ree-ai-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ree-ai-network
+
+  # OpenSearch (Vector DB + BM25)
+  opensearch:
+    image: opensearchproject/opensearch:2.11.0
+    container_name: ree-ai-opensearch
+    environment:
+      - discovery.type=single-node
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ree-ai-network
+
+  # Ollama (Local LLM)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ree-ai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - ree-ai-network
+
+  # ============================================================
+  # MOCK SERVICES (Week 1 Development)
+  # ============================================================
+
+  mock-core-gateway:
+    image: mockserver/mockserver:latest
+    container_name: ree-ai-mock-core-gateway
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/expectations.json
+    ports:
+      - "8000:1080"
+    volumes:
+      - ./mocks/core_gateway_mock.json:/config/expectations.json
+    networks:
+      - ree-ai-network
+    profiles:
+      - mock
+
+  mock-db-gateway:
+    image: mockserver/mockserver:latest
+    container_name: ree-ai-mock-db-gateway
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/expectations.json
+    ports:
+      - "8001:1080"
+    volumes:
+      - ./mocks/db_gateway_mock.json:/config/expectations.json
+    networks:
+      - ree-ai-network
+    profiles:
+      - mock
+
+  # ============================================================
+  # REAL SERVICES (Week 2+ Integration)
+  # ============================================================
+
+  # Core Gateway (Layer 5)
+  core-gateway:
+    build:
+      context: .
+      dockerfile: services/core_gateway/Dockerfile
+    container_name: ree-ai-core-gateway
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - ollama
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # DB Gateway (Layer 4)
+  db-gateway:
+    build:
+      context: .
+      dockerfile: services/db_gateway/Dockerfile
+    container_name: ree-ai-db-gateway
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ree_ai_pass_2025}
+      - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
+      - OPENSEARCH_PORT=${OPENSEARCH_PORT:-9200}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+      - opensearch
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Semantic Chunking Service (Layer 3 - Sample)
+  semantic-chunking:
+    build:
+      context: .
+      dockerfile: services/semantic_chunking/Dockerfile
+    container_name: ree-ai-semantic-chunking
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8082:8080"
+    depends_on:
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+# ============================================================
+# VOLUMES
+# ============================================================
+volumes:
+  postgres_data:
+    driver: local
+  opensearch_data:
+    driver: local
+  ollama_data:
+    driver: local
+
+# ============================================================
+# NETWORKS
+# ============================================================
+networks:
+  ree-ai-network:
+    driver: bridge

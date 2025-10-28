@@ -1,0 +1,40 @@
+{
+  "httpRequest": {
+    "method": "POST",
+    "path": "/search"
+  },
+  "httpResponse": {
+    "statusCode": 200,
+    "headers": {
+      "Content-Type": ["application/json"]
+    },
+    "body": {
+      "results": [
+        {
+          "id": "mock_prop_001",
+          "title": "Căn hộ 2 phòng ngủ Quận 1 (MOCK)",
+          "price": 8000000000,
+          "location": "Quận 1, TP.HCM",
+          "bedrooms": 2,
+          "area": 75.5,
+          "description": "Mock data - Căn hộ đẹp, view tốt",
+          "property_type": "apartment",
+          "score": 0.95
+        },
+        {
+          "id": "mock_prop_002",
+          "title": "Nhà phố 3 tầng Quận 3 (MOCK)",
+          "price": 12000000000,
+          "location": "Quận 3, TP.HCM",
+          "bedrooms": 3,
+          "area": 120.0,
+          "description": "Mock data - Nhà mới xây",
+          "property_type": "house",
+          "score": 0.88
+        }
+      ],
+      "total": 2,
+      "took_ms": 150
+    }
+  }
+}

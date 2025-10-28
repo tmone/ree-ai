@@ -2,17 +2,71 @@
 
 ## Bạn vừa nhận được gì?
 
-Package hoàn chỉnh về **Real Estate RAG System** với:
-- ✅ Open WebUI (Browser UI)  
-- ✅ LangChain (RAG Pipeline)
-- ✅ Crawl4AI (Data Ingestion)
-- ✅ Kiến trúc 6 layers
+Package hoàn chỉnh về **Real Estate RAG System** dựa trên **SƠ ĐỒ GỐC CTO** với:
+- ✅ Orchestrator (Message Routing) - Thay bằng FastAPI + gRPC
+- ✅ Hybrid Semantic Chunking Service - Thay bằng Sentence-Transformers (FREE)
+- ✅ Completeness Feedback Service - Thay bằng GPT-4 mini
+- ✅ Attribute Extraction Service (LLM-driven) - Thay bằng GPT-4 mini + Pydantic
+- ✅ Classification Service (3 modes) - Thay bằng FastAPI + GPT-4 mini
+- ✅ User Account Service - Thay bằng FastAPI + PostgreSQL + JWT
+- ✅ Price Suggestion Service - Thay bằng GPT-4 mini
+- ✅ Rerank Service - Thay bằng cross-encoder (FREE)
+- ✅ Real Estate Crawler - Thay bằng Crawl4AI + Playwright (FREE)
+- ✅ OpenSearch Vector DB (FREE)
+- ✅ PostgreSQL (FREE)
+
+**🎯 MỤC ĐÍCH: Tìm platform MIỄN PHÍ, PHỔ BIẾN để triển khai ĐÚNG yêu cầu CTO**
 
 ---
 
-## 📄 6 Files - Đọc theo thứ tự này
+## 📄 9 Files - Đọc theo thứ tự này
 
-### 1. **README_OPENWEBUI.md** ⭐ BẮT ĐẦU TỪ ĐÂY
+### 0. **CTO_EXECUTIVE_SUMMARY.md** 🎯 ĐỌC ĐẦU TIÊN CHO CTO
+**5 phút đọc**
+
+Executive Summary:
+- ✅ Quick Summary (10s nhìn thấy kết quả)
+- ✅ 10 Services mapping table
+- ✅ 4 Câu hỏi CTO (detailed answers)
+- ✅ Cost analysis ($0 platform + API cost)
+- ✅ Timeline (25 days breakdown)
+- ✅ Recommendation: READY FOR APPROVAL
+
+**Tại sao đọc đầu tiên:**
+- Format cho C-level: High-level → Details
+- Visual architecture (ASCII)
+- Q&A section (giải đáp CTO concerns)
+
+### 0.1. **COMPLETED_CTO_DIAGRAM.md** ✅ STATUS REPORT
+**3 phút đọc**
+
+Status Report:
+- ✅ 10/10 Services completed
+- ✅ 4/4 Questions answered
+- ✅ Diagram structure (6 layers)
+- ✅ Checklist format
+- ✅ Implementation roadmap
+
+**Tại sao đọc:**
+- Xác nhận completion status
+- Checklist để verify
+
+### 0.2. **CTO_PLATFORM_SOLUTIONS.md** 📚 TECHNICAL DEEP DIVE
+**20 phút đọc**
+
+Technical Details:
+- ✅ 10 Services CTO → Platform FREE
+- ✅ TRẢ LỜI đầy đủ 4 câu hỏi CTO (Q1, Q2, Q3, Q4)
+- ✅ Code examples cho mỗi service
+- ✅ Model Routing Strategy (Ollama/OpenAI)
+- ✅ Docker Compose đầy đủ
+
+**Tại sao đọc:**
+- Trả lời TẤT CẢ câu hỏi technical
+- So sánh rõ ràng: yêu cầu vs giải pháp
+- Code examples để implement
+
+### 1. **README_OPENWEBUI.md** ⭐ OVERVIEW
 **15 phút đọc**
 
 Kiến trúc tổng quan:
@@ -57,38 +111,74 @@ Technical details:
 - RAG pipeline
 - Deployment guide
 
-### 6. **REE_AI-OpenWebUI-Complete-Architecture.drawio.xml** 🎨
+### 6. **REE_AI-OpenWebUI-Complete-Architecture.drawio.xml** 🎨 ⭐ DIAGRAM CHÍNH THỨC
 **Mở bằng draw.io**
 
-Visual diagram:
-- 6 layers với colors
-- Data flows
-- Tech stack
+Visual diagram TRIỂN KHAI SƠ ĐỒ CTO:
+- Title: "SƠ ĐỒ CTO - TRIỂN KHAI BẰNG OPEN WEBUI + LANGCHAIN"
+- 6 Layers architecture:
+  - Layer 1: Open WebUI (CTO #1, Q1, Q4)
+  - Layer 2: LangChain Pipeline (CTO #2-9, Q2, Q3)
+  - Layer 3: Storage (OpenSearch, PostgreSQL, Redis)
+  - Layer 4: Crawler (Crawl4AI)
+  - Layer 5: LLM Providers (Ollama, OpenAI)
+  - Layer 6: Monitoring (LangSmith)
+- 10 Services với platform mapping chi tiết
+- Core Gateway với Model Routing (Ollama/OpenAI)
+- TRẢ LỜI ĐẦY ĐỦ 4 CÂU HỎI CTO (Q1, Q2, Q3, Q4)
+- Data flows với colors + arrows
+- Summary section: Cost, Timeline, Stack
+
+### 7. **VIEW_DIAGRAM.md** 📖 HƯỚNG DẪN XEM DIAGRAM
+**2 phút đọc**
+
+Instructions:
+- Cách mở file .drawio.xml
+- 3 options: Online (draw.io), VS Code, Desktop App
+- Export to PNG/PDF/SVG
 
 ---
 
-## 🎯 Quick Answers
+## 🎯 Quick Answers - TRẢ LỜI CÂU HỎI CTO
 
-### Dùng framework nào?
-→ **LangChain** ✅ (Layer 2 Pipeline)
+### Q1: Context Memory - OpenAI API có quản lý không?
+→ **KHÔNG** ❌ - Phải tự quản bằng **PostgreSQL** + **conversation_id**
+→ Platform: **PostgreSQL** (FREE) + **SQLAlchemy ORM**
 
-### Dùng Scrapy hay Crawl4AI?
-→ **Crawl4AI** ✅ (73% ít code, 47% nhanh hơn)
+### Q2: Cách mapping để OpenAI hiểu request của user nào?
+→ **Orchestrator gen conversation_id** → Gửi cùng mọi request
+→ Platform: **FastAPI** (FREE) + **UUID**
 
-### Cần LlamaIndex không?
-→ **Không ngay** ⏸️ (chỉ nếu retrieval chậm)
+### Q3: Có cần Core Service tập trung request lên OpenAI?
+→ **CÓ** ✅ - **OpenAI Gateway Service** để rate limit + cost tracking + **model routing**
+→ Platform: **LiteLLM** (FREE) + **Redis** + **Ollama** (self-hosted LLM)
+→ **Model Routing:** Ollama (FREE) cho simple tasks, OpenAI cho complex reasoning
 
-### Cần LangGraph không?
-→ **Không ngay** ⏸️ (chỉ nếu multi-agent)
+### Q4: Conversation history khi user mở lại?
+→ Load từ **PostgreSQL** → Inject vào prompt OpenAI
+→ Platform: **PostgreSQL** + **LangChain Memory**
 
-### Cần LangSmith không?
-→ **CÓ** ✅ (monitoring, free tier OK)
+### Hybrid Semantic Chunking - Dùng gì?
+→ **Sentence-Transformers** (FREE) + **Cosine Similarity** (NumPy)
+→ 6 bước: Segment → Embed → Cosine → Combine (>0.75) → Overlap → Final Embed
+
+### Completeness Feedback - Dùng gì?
+→ **GPT-4 mini** với prompt đánh giá completeness (0-100 score)
+→ Nếu <70 → Trigger re-generation
+
+### Attribute Extraction - Dùng gì?
+→ **GPT-4 mini** + **Pydantic** (structured output)
+→ Extract: price, location, bedrooms, area → JSON schema
+
+### Classification Service (3 modes) - Dùng gì?
+→ **GPT-4 mini** phân loại query → filter / semantic / both
+→ Platform: **FastAPI** service
 
 ### Chi phí?
-→ **$0** tools (free) + **$50-200/month** OpenAI API
+→ **$0** tools (free) + **$100-300/month** OpenAI API (nhiều services hơn)
 
 ### Bao lâu implement?
-→ **7-10 ngày** Crawl4AI + **1 ngày** LangSmith
+→ **4-5 tuần** (10 services theo sơ đồ CTO)
 
 ---
 
@@ -129,22 +219,46 @@ Time: 2-3 days
 
 ---
 
-## 🏗️ Architecture (Simplified)
+## 🏗️ Architecture - THEO SƠ ĐỒ CTO
 
 ```
 USER
  ↓
-Layer 1: OPEN WEBUI (Browser)
- ↓
-Layer 2: LANGCHAIN (Pipeline) ⭐
- ↓
-Layer 3: FASTAPI SERVICES
- ↓
-Layer 5: OPENSEARCH + POSTGRESQL
- ↑
-Layer 4: CRAWL4AI (Background) ⭐
- ↑
-External Sites (nhatot.vn, etc)
+┌──────────────────────────────────────┐
+│ User Account Service (FastAPI+JWT)   │  ← Platform: FastAPI (FREE)
+└──────────────────┬───────────────────┘
+                   ↓
+┌──────────────────────────────────────┐
+│ ORCHESTRATOR (Routing Service)       │  ← Platform: FastAPI + gRPC
+│ - create RE                          │
+│ - search RE                          │
+│ - price suggestion                   │
+└──────────────────┬───────────────────┘
+                   ↓
+┌─────────────────────────────────────────────────────────┐
+│ SERVICES LAYER (10 services theo CTO)                   │
+│                                                          │
+│ 1. Hybrid Semantic Chunking Service (Sentence-Trans)    │
+│ 2. Attribute Extraction Service (GPT-4 mini + Pydantic) │
+│ 3. Classification Service (3 modes: filter/semantic/both)│
+│ 4. Completeness Feedback Service (GPT-4 completeness)   │
+│ 5. Price Suggestion Service (GPT-4 + market data)       │
+│ 6. Rerank Service (cross-encoder)                       │
+│ 7. Routing Service (part of Orchestrator)               │
+│ 8. Core Service (OpenAI Gateway - LiteLLM)              │
+└─────────────────┬─────────────┬─────────────────────────┘
+                  ↓             ↓
+       ┌──────────────┐   ┌──────────────┐
+       │ OpenSearch   │   │ PostgreSQL   │  ← Platform: Docker (FREE)
+       │ Vector DB    │   │ (Users, Conv)│
+       └──────────────┘   └──────────────┘
+                  ↑
+       ┌──────────────────────┐
+       │ Real Estate Crawler  │  ← Platform: Crawl4AI (FREE)
+       │ (Crawl4AI+Playwright)│
+       └──────────────────────┘
+                  ↑
+         (nhatot.vn, batdongsan.vn)
 ```
 
 ---
@@ -168,41 +282,73 @@ External Sites (nhatot.vn, etc)
 
 ---
 
-## 💰 Cost Summary
+## 💰 Cost Summary - THEO SƠ ĐỒ CTO
 
 ```
-FREE TIER (Development):
-- LangChain: $0
-- Crawl4AI: $0
-- LangSmith: $0 (5K traces)
-- OpenAI API: ~$50-100/month
+ALL PLATFORMS: FREE
 ────────────────────────
-TOTAL: $50-100/month
-```
+✅ FastAPI: $0 (Python framework)
+✅ Sentence-Transformers: $0 (HuggingFace)
+✅ Crawl4AI: $0 (open-source)
+✅ OpenSearch: $0 (Docker self-hosted)
+✅ PostgreSQL: $0 (Docker self-hosted)
+✅ Redis: $0 (Docker self-hosted)
+✅ LiteLLM (Gateway): $0 (open-source)
+✅ Pydantic: $0 (validation library)
+✅ cross-encoder: $0 (HuggingFace)
 
-```
-PRODUCTION:
-- Tools: $39/month (LangSmith Plus)
-- OpenAI API: ~$200-1000/month
+ONLY COST: OpenAI API
 ────────────────────────
-TOTAL: $239-1039/month
+- GPT-4 mini: $0.15/$0.60 per 1M tokens
+- text-embedding-3-small: $0.02 per 1M tokens
+
+Ước tính:
+- Development: ~$100-200/month
+- Production: ~$300-1000/month (tuỳ traffic)
+────────────────────────
+TOTAL TOOL COST: $0
+TOTAL API COST: $100-1000/month
 ```
 
 ---
 
-## 🎓 Key Concepts
+## 🎓 Key Platforms - GIẢI PHÁP CHO CTO
 
-### Open WebUI
-Browser-based UI cho LLM apps. Thay thế 70% custom frontend code.
+### FastAPI (Orchestrator + Services)
+**Miễn phí:** ✅ MIT License
+**Cộng đồng:** ⭐ 72K stars GitHub
+**Mục đích:** Build 10 services theo sơ đồ CTO
+**Dễ triển khai:** ✅✅✅ Docker + async + auto docs
 
-### LangChain  
-Framework tổng quát để build LLM applications. Dùng cho Layer 2 Pipeline.
+### Sentence-Transformers (Semantic Chunking)
+**Miễn phí:** ✅ Apache 2.0
+**Cộng đồng:** ⭐ 13K stars, HuggingFace official
+**Mục đích:** 6-step semantic chunking của CTO (cosine similarity >0.75)
+**Dễ triển khai:** ✅✅✅ pip install + 10 lines code
 
-### Crawl4AI
-AI-optimized crawler. Thay thế Scrapy với 73% ít code hơn, 47% nhanh hơn.
+### Crawl4AI (Real Estate Crawler)
+**Miễn phí:** ✅ Apache 2.0
+**Cộng đồng:** ⭐ 4K stars (mới nhưng hot)
+**Mục đích:** Thay Scrapy - crawl nhatot.vn, batdongsan.vn
+**Dễ triển khai:** ✅✅✅ 73% ít code hơn Scrapy
 
-### LangSmith
-Monitoring tool cho LangChain. Track costs, latency, errors.
+### LiteLLM (Core Service/Gateway)
+**Miễn phí:** ✅ MIT License
+**Cộng đồng:** ⭐ 10K stars
+**Mục đích:** TRẢ LỜI Q3 CTO - Gateway tập trung OpenAI requests
+**Dễ triển khai:** ✅✅✅ Rate limit + cost tracking + caching built-in
+
+### OpenSearch (Vector DB)
+**Miễn phí:** ✅ Apache 2.0
+**Cộng đồng:** ⭐ 8.5K stars, fork của Elasticsearch
+**Mục đích:** Vector search + BM25 hybrid retrieval
+**Dễ triển khai:** ✅✅ Docker Compose
+
+### PostgreSQL + SQLAlchemy (Context Memory)
+**Miễn phí:** ✅ PostgreSQL License
+**Cộng đồng:** ⭐ Hàng triệu users
+**Mục đích:** TRẢ LỜI Q1, Q4 CTO - Lưu conversation history + users
+**Dễ triển khai:** ✅✅✅ Docker + ORM
 
 ---
 

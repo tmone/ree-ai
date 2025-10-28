@@ -1,0 +1,22 @@
+{
+  "httpRequest": {
+    "method": "POST",
+    "path": "/v1/chat/completions"
+  },
+  "httpResponse": {
+    "statusCode": 200,
+    "headers": {
+      "Content-Type": ["application/json"]
+    },
+    "body": {
+      "content": "Đây là mock response từ Core Gateway. Tôi tìm thấy 5 căn nhà phù hợp với yêu cầu của bạn.",
+      "model": "gpt-4o-mini",
+      "usage": {
+        "prompt_tokens": 50,
+        "completion_tokens": 30,
+        "total_tokens": 80
+      },
+      "finish_reason": "stop"
+    }
+  }
+}

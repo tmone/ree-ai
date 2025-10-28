@@ -71,6 +71,25 @@ services:
     networks:
       - ree-ai-network
 
+  # Open WebUI (Layer 1 - Frontend)
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: ree-ai-open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-secret-key-change-me}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ree_ai_user}:${POSTGRES_PASSWORD:-ree_ai_pass_2025}@postgres:5432/${POSTGRES_DB:-ree_ai}
+    volumes:
+      - open_webui_data:/app/backend/data
+    depends_on:
+      - postgres
+      - ollama
+    networks:
+      - ree-ai-network
+    restart: unless-stopped
+
   # ============================================================
   # MOCK SERVICES (Week 1 Development)
   # ============================================================
@@ -106,6 +125,28 @@ services:
   # ============================================================
   # REAL SERVICES (Week 2+ Integration)
   # ============================================================
+
+  # Service Registry (MUST START FIRST)
+  service-registry:
+    build:
+      context: .
+      dockerfile: services/service_registry/Dockerfile
+    container_name: ree-ai-service-registry
+    environment:
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # Core Gateway (Layer 5)
   core-gateway:
@@ -155,7 +196,29 @@ services:
       - real
       - all
 
-  # Semantic Chunking Service (Layer 3 - Sample)
+  # Orchestrator (Layer 2 - LangChain Router)
+  orchestrator:
+    build:
+      context: .
+      dockerfile: services/orchestrator/Dockerfile
+    container_name: ree-ai-orchestrator
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8090:8080"
+    depends_on:
+      - core-gateway
+      - db-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Semantic Chunking Service (Layer 3 - Sample 1)
   semantic-chunking:
     build:
       context: .
@@ -175,6 +238,48 @@ services:
       - real
       - all
 
+  # Classification Service (Layer 3 - Sample 2)
+  classification:
+    build:
+      context: .
+      dockerfile: services/classification/Dockerfile
+    container_name: ree-ai-classification
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8083:8080"
+    depends_on:
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # RAG Service (Layer 6)
+  rag-service:
+    build:
+      context: .
+      dockerfile: services/rag_service/Dockerfile
+    container_name: ree-ai-rag-service
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8091:8080"
+    depends_on:
+      - core-gateway
+      - db-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
 # ============================================================
 # VOLUMES
 # ============================================================
@@ -184,6 +289,8 @@ volumes:
   opensearch_data:
     driver: local
   ollama_data:
+    driver: local
+  open_webui_data:
     driver: local
 
 # ============================================================

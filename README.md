@@ -112,17 +112,28 @@ open http://localhost:3000  # Open WebUI
 
 | Service | Port | Tech | Description |
 |---------|------|------|-------------|
-| **Open WebUI** | 3000 | React + Python | Chat interface |
-| **Orchestrator** | 8090 | FastAPI + LangChain | Request routing |
-| **Semantic Chunking** | 8082 | FastAPI + LLM | Text chunking |
-| **Classification** | 8083 | FastAPI + LangChain | Property classifier |
-| **RAG Service** | 8091 | FastAPI + LangChain | Full RAG pipeline |
-| **Core Gateway** | 8080 | FastAPI + LiteLLM | LLM routing |
-| **DB Gateway** | 8081 | FastAPI | Database ops |
-| **PostgreSQL** | 5432 | PostgreSQL 15 | Relational DB |
-| **Redis** | 6379 | Redis Alpine | Cache |
-| **OpenSearch** | 9200 | OpenSearch 2.11 | Vector search |
-| **Ollama** | 11434 | Ollama | Local LLM |
+| **🌐 Frontend & Gateway** | | | |
+| Open WebUI | 3000 | React + Python | Chat interface |
+| API Gateway | 8888 | FastAPI | Rate limiting, auth, routing |
+| **🔐 Authentication** | | | |
+| Auth Service | 8085 | FastAPI + JWT | User auth & tokens |
+| **🤖 AI Services** | | | |
+| Orchestrator | 8090 | FastAPI + LangChain | Request routing |
+| RAG Service | 8091 | FastAPI + LangChain | Full RAG pipeline |
+| Classification | 8083 | FastAPI + LangChain | Property classifier |
+| Semantic Chunking | 8082 | FastAPI + LLM | Text chunking |
+| **🚀 Core Services** | | | |
+| Core Gateway | 8080 | FastAPI + LiteLLM | LLM routing |
+| DB Gateway | 8081 | FastAPI | Database ops |
+| Service Registry | 8000 | FastAPI | Service discovery |
+| **🗄️ Infrastructure** | | | |
+| PostgreSQL | 5432 | PostgreSQL 15 | Relational DB |
+| Redis | 6379 | Redis Alpine | Cache |
+| OpenSearch | 9200 | OpenSearch 2.11 | Vector search |
+| Ollama | 11434 | Ollama | Local LLM |
+| **📊 Monitoring** | | | |
+| Prometheus | 9090 | Prometheus | Metrics collection |
+| Grafana | 3001 | Grafana | Dashboards |
 
 ---
 

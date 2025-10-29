@@ -280,6 +280,59 @@ services:
       - real
       - all
 
+  # Authentication Service (Layer 0)
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth_service/Dockerfile
+    container_name: ree-ai-auth-service
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ree_ai_pass_2025}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8085:8080"
+    depends_on:
+      - postgres
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # API Gateway (Layer 0)
+  api-gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    container_name: ree-ai-api-gateway
+    environment:
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8888:8080"
+    depends_on:
+      - auth-service
+      - orchestrator
+      - rag-service
+      - classification
+      - semantic-chunking
+      - db-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
 # ============================================================
 # VOLUMES
 # ============================================================

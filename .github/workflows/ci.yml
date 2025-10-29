@@ -174,7 +174,10 @@ jobs:
           db-gateway \
           semantic-chunking \
           classification \
-          orchestrator
+          orchestrator \
+          rag-service \
+          api-gateway \
+          auth-service
 
     - name: Show build summary
       run: |

@@ -1,0 +1,97 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'ree-ai'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Service Registry
+  - job_name: 'service-registry'
+    static_configs:
+      - targets: ['service-registry:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Core Gateway
+  - job_name: 'core-gateway'
+    static_configs:
+      - targets: ['core-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # DB Gateway
+  - job_name: 'db-gateway'
+    static_configs:
+      - targets: ['db-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Orchestrator
+  - job_name: 'orchestrator'
+    static_configs:
+      - targets: ['orchestrator:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Semantic Chunking
+  - job_name: 'semantic-chunking'
+    static_configs:
+      - targets: ['semantic-chunking:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Classification
+  - job_name: 'classification'
+    static_configs:
+      - targets: ['classification:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # RAG Service
+  - job_name: 'rag-service'
+    static_configs:
+      - targets: ['rag-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Auth Service
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['api-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

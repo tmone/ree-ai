@@ -15,17 +15,16 @@ psycopg2-binary==2.9.9
 alembic==1.13.1
 
 # Redis
-redis==5.0.1
-redis[hiredis]==5.0.1  # Async Redis with hiredis parser
+redis[hiredis]==5.0.1
 
 # LLM
 litellm==1.17.9
 openai==1.10.0
 
-# LangChain
-langchain==0.1.4
-langchain-openai==0.0.2
-langchain-community==0.0.13
+# LangChain (compatible versions)
+langchain==0.1.6
+langchain-openai==0.0.5
+langchain-community==0.0.20
 
 # Testing
 pytest==7.4.4

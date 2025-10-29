@@ -333,6 +333,107 @@ services:
       - real
       - all
 
+  # Attribute Extraction Service (Layer 3)
+  attribute-extraction:
+    build:
+      context: .
+      dockerfile: services/attribute_extraction/Dockerfile
+    container_name: ree-ai-attribute-extraction
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8084:8080"
+    depends_on:
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Completeness Check Service (Layer 3)
+  completeness-check:
+    build:
+      context: .
+      dockerfile: services/completeness_check/Dockerfile
+    container_name: ree-ai-completeness-check
+    environment:
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8086:8080"
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Price Suggestion Service (Layer 3)
+  price-suggestion:
+    build:
+      context: .
+      dockerfile: services/price_suggestion/Dockerfile
+    container_name: ree-ai-price-suggestion
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8087:8080"
+    depends_on:
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Reranking Service (Layer 3)
+  reranking:
+    build:
+      context: .
+      dockerfile: services/reranking/Dockerfile
+    container_name: ree-ai-reranking
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8088:8080"
+    depends_on:
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Admin Dashboard (Layer 0)
+  admin-dashboard:
+    build:
+      context: .
+      dockerfile: services/admin_dashboard/Dockerfile
+    container_name: ree-ai-admin-dashboard
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ree_ai_pass_2025}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "3002:8080"
+    depends_on:
+      - postgres
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
 # ============================================================
 # VOLUMES
 # ============================================================

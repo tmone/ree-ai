@@ -177,7 +177,11 @@ jobs:
           orchestrator \
           rag-service \
           api-gateway \
-          auth-service
+          auth-service \
+          attribute-extraction \
+          completeness-check \
+          price-suggestion \
+          reranking
 
     - name: Show build summary
       run: |

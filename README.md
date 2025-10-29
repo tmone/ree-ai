@@ -3,9 +3,12 @@
 **Complete MVP Framework with LangChain + Open WebUI + RAG**
 
 [![Status](https://img.shields.io/badge/status-production--ready-green)]()
-[![Services](https://img.shields.io/badge/services-10+-blue)]()
+[![Services](https://img.shields.io/badge/services-18-blue)]()
 [![LangChain](https://img.shields.io/badge/langchain-integrated-orange)]()
 [![Docker](https://img.shields.io/badge/docker-ready-blue)]()
+[![Security](https://img.shields.io/badge/security-JWT+Rate_Limiting-red)]()
+[![Monitoring](https://img.shields.io/badge/monitoring-Prometheus+Grafana-yellow)]()
+
 
 ---
 
@@ -15,10 +18,13 @@ A complete, production-ready framework for building AI-powered real estate platf
 
 - 🌐 **Open WebUI** - Modern chat interface
 - 🤖 **LangChain** - Advanced AI workflows (Orchestrator, RAG)
-- 🚀 **6-Layer Architecture** - From UI to LLM to Storage
-- 📦 **10+ Services** - Infrastructure + core services + samples
+- 🚀 **7-Layer Architecture** - From API Gateway to LLM to Storage
+- 📦 **18 Services** - Full production stack
+- 🔐 **Enterprise Security** - JWT auth, rate limiting, Sentry
+- 📊 **Complete Monitoring** - Prometheus + Grafana + Metrics
+- ⚙️ **Admin Dashboard** - System management UI
 - 🔧 **Zero Configuration** - Works out of the box
-- 🎓 **3 Sample Services** - Copy & customize templates
+- 🎓 **8 AI Services** - Ready-to-use templates
 
 ---
 

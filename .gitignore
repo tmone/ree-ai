@@ -45,3 +45,39 @@ logs/
 postgres_data/
 opensearch_data/
 redis_data/
+
+# Backup and temporary files
+*BACKUP*.md
+*backup*.md
+*_old.py
+*_v2.py
+*_backup.py
+*.bak
+*.tmp
+*~
+.backup/
+backup/
+backups/
+docs/backup/
+
+# Summary and documentation duplicates
+*SUMMARY*.md
+*COMPLETE*.md
+IMPLEMENTATION_SUMMARY.md
+TEST_SUMMARY.md
+BACKUP_IMPLEMENTATION_COMPLETE.md
+PROJECT_COMPLETION.md
+
+# Test results
+test-results/
+junit.xml
+coverage.xml
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Monitoring data
+monitoring/data/
+grafana/data/
+prometheus/data/

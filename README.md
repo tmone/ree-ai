@@ -28,6 +28,17 @@ A complete, production-ready framework for building AI-powered real estate platf
 
 ---
 
+## 📋 Important - Read This First
+
+**⚠️ Project Structure Rules:** Before creating any files, read [`docs/guides/PROJECT_RULES.md`](docs/guides/PROJECT_RULES.md) to understand strict file organization rules.
+
+**Key Rules:**
+- Root directory: ONLY `README.md`, `docker-compose.yml`, `requirements.txt`, `Makefile`
+- All documentation: Must go in `docs/` subdirectories
+- No versioned files: Use Git branches, NOT `_v2.py` or `_old.py`
+
+---
+
 ## ⚡ Quick Start (3 Commands)
 
 ```bash

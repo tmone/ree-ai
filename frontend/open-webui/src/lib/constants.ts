@@ -13,6 +13,13 @@ export const AUDIO_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1/audio`;
 export const IMAGES_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1/images`;
 export const RETRIEVAL_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1/retrieval`;
 
+// REE AI API endpoints
+export const REE_AI_API_BASE_URL = `${WEBUI_BASE_URL}/api/ree-ai`;
+export const REE_AI_ORCHESTRATOR_URL = `${REE_AI_API_BASE_URL}/orchestrator`;
+export const REE_AI_STORAGE_URL = `${REE_AI_API_BASE_URL}/storage`;
+export const REE_AI_CLASSIFICATION_URL = `${REE_AI_API_BASE_URL}/classification`;
+export const REE_AI_RAG_URL = `${REE_AI_API_BASE_URL}/rag`;
+
 export const WEBUI_VERSION = APP_VERSION;
 export const WEBUI_BUILD_HASH = APP_BUILD_HASH;
 export const REQUIRED_OLLAMA_VERSION = '0.1.16';

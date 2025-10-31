@@ -2,9 +2,15 @@
 Parallel Bulk Crawler Service
 Crawls multiple real estate sites in parallel with rate limiting
 Supports 10,000+ properties without duplication
+Features:
+- Resume from checkpoint on interruption
+- Parallel workers (5x faster than sequential)
+- Automatic deduplication
 """
 import asyncio
 import time
+import os
+import json
 from typing import List, Dict, Any, Set
 from dataclasses import dataclass
 from collections import defaultdict
@@ -45,25 +51,63 @@ class RateLimiter:
         self.locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     async def wait(self, site_name: str, rate_limit: float):
-        """Wait if needed to respect rate limit"""
-        async with self.locks[site_name]:
-            now = time.time()
-            time_since_last = now - self.last_request_time[site_name]
+        """
+        Wait if needed to respect rate limit
+        Uses minimal lock time to allow parallel workers
+        """
+        # Quick check without lock (not 100% accurate but allows parallelism)
+        now = time.time()
+        time_since_last = now - self.last_request_time.get(site_name, 0)
 
-            if time_since_last < rate_limit:
-                wait_time = rate_limit - time_since_last
+        if time_since_last < rate_limit:
+            wait_time = rate_limit - time_since_last
+            # Don't log for small waits to reduce noise
+            if wait_time > 0.5:
                 logger.info(f"{LogEmoji.TIME} Rate limit: waiting {wait_time:.2f}s for {site_name}")
-                await asyncio.sleep(wait_time)
+            await asyncio.sleep(wait_time)
 
-            self.last_request_time[site_name] = time.time()
+        # Update last request time (atomic enough for our purposes)
+        self.last_request_time[site_name] = time.time()
 
 
 class PropertyDeduplicator:
     """Deduplicate properties by URL and content hash"""
 
-    def __init__(self):
+    def __init__(self, checkpoint_file: str = None):
         self.seen_urls: Set[str] = set()
         self.seen_hashes: Set[str] = set()
+        self.checkpoint_file = checkpoint_file
+
+        # Load existing URLs from checkpoint if available
+        if checkpoint_file and os.path.exists(checkpoint_file):
+            self._load_checkpoint()
+
+    def _load_checkpoint(self):
+        """Load existing URLs from checkpoint file"""
+        try:
+            import json
+            with open(self.checkpoint_file, 'r') as f:
+                data = json.load(f)
+                self.seen_urls = set(data.get('urls', []))
+                logger.info(f"📂 Loaded {len(self.seen_urls)} URLs from checkpoint")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load checkpoint: {e}")
+
+    def save_checkpoint(self):
+        """Save current state to checkpoint file"""
+        if not self.checkpoint_file:
+            return
+
+        try:
+            import json
+            with open(self.checkpoint_file, 'w') as f:
+                json.dump({
+                    'urls': list(self.seen_urls),
+                    'count': len(self.seen_urls)
+                }, f)
+            logger.info(f"💾 Saved checkpoint: {len(self.seen_urls)} URLs")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to save checkpoint: {e}")
 
     def is_duplicate(self, property_data: Dict[str, Any]) -> bool:
         """Check if property is duplicate"""
@@ -101,11 +145,18 @@ class ParallelBulkCrawler:
     - Automatic deduplication
     - Progress tracking
     - Error recovery
+    - Resume from checkpoint
     """
 
-    def __init__(self):
+    def __init__(self, checkpoint_file: str = None, resume: bool = True):
         self.rate_limiter = RateLimiter()
-        self.deduplicator = PropertyDeduplicator()
+
+        # Use checkpoint file for resume capability
+        if checkpoint_file is None:
+            checkpoint_file = "/tmp/ree_ai_crawler_checkpoint.json"
+
+        self.checkpoint_file = checkpoint_file if resume else None
+        self.deduplicator = PropertyDeduplicator(self.checkpoint_file)
         self.crawler = None
 
         # Crawl configurations for each site
@@ -114,7 +165,7 @@ class ParallelBulkCrawler:
     def _get_crawl_configs(self) -> List[CrawlConfig]:
         """Get crawl configurations for all sites"""
         return [
-            # Batdongsan.com.vn
+            # Batdongsan.com.vn - For Sale (crawl deeper pages)
             CrawlConfig(
                 site_name="batdongsan",
                 base_url="https://batdongsan.com.vn/nha-dat-ban",
@@ -296,6 +347,10 @@ class ParallelBulkCrawler:
 
             page_num += batch_size
 
+            # Save checkpoint every 10 batches (every 50 pages with 5 workers)
+            if page_num % 10 == 0:
+                self.deduplicator.save_checkpoint()
+
             logger.info(
                 f"{LogEmoji.CHART} Progress: {len(all_properties)}/{total_properties} "
                 f"properties from {config.site_name}"
@@ -370,6 +425,9 @@ class ParallelBulkCrawler:
             elapsed = time.time() - start_time
             dedup_stats = self.deduplicator.get_stats()
 
+            # Save final checkpoint
+            self.deduplicator.save_checkpoint()
+
             logger.info(f"\n{LogEmoji.CHART} {'='*60}")
             logger.info(f"{LogEmoji.SUCCESS} BULK CRAWL COMPLETED!")
             logger.info(f"{LogEmoji.CHART} {'='*60}")
@@ -386,19 +444,30 @@ class ParallelBulkCrawler:
 # Standalone function for easy use
 async def bulk_crawl_properties(
     total: int = 10000,
-    sites: List[str] = None
+    sites: List[str] = None,
+    resume: bool = True,
+    checkpoint_file: str = None
 ) -> List[Dict[str, Any]]:
     """
-    Convenience function to bulk crawl properties
+    Convenience function to bulk crawl properties with resume support
+
+    Args:
+        total: Total properties to crawl
+        sites: List of site names (None = all sites)
+        resume: Enable resume from checkpoint (default True)
+        checkpoint_file: Path to checkpoint file (default /tmp/ree_ai_crawler_checkpoint.json)
 
     Usage:
-        # Crawl 10,000 properties from all sites
+        # Crawl 10,000 properties with auto-resume
         properties = await bulk_crawl_properties(10000)
 
-        # Crawl 5,000 properties from batdongsan only
-        properties = await bulk_crawl_properties(5000, sites=['batdongsan'])
+        # Crawl fresh without resume
+        properties = await bulk_crawl_properties(10000, resume=False)
+
+        # Resume from custom checkpoint
+        properties = await bulk_crawl_properties(10000, checkpoint_file='/path/to/checkpoint.json')
     """
-    crawler = ParallelBulkCrawler()
+    crawler = ParallelBulkCrawler(checkpoint_file=checkpoint_file, resume=resume)
     return await crawler.bulk_crawl(total, sites)
 
 

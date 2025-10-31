@@ -10,6 +10,7 @@ class ModelType(str, Enum):
     OLLAMA_LLAMA2 = "ollama/llama2"
     OLLAMA_MISTRAL = "ollama/mistral"
     OLLAMA_CODELLAMA = "ollama/codellama"
+    OLLAMA_QWEN25 = "ollama/qwen2.5:0.5b"  # Lightweight, fast model
 
     # OpenAI models
     GPT4 = "gpt-4"

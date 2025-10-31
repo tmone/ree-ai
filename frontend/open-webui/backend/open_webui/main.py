@@ -93,6 +93,7 @@ from open_webui.routers import (
     users,
     utils,
     scim,
+    ree_ai,
 )
 
 from open_webui.routers.retrieval import (
@@ -1320,6 +1321,9 @@ app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
 # SCIM 2.0 API for identity management
 if SCIM_ENABLED:
     app.include_router(scim.router, prefix="/api/v1/scim/v2", tags=["scim"])
+
+# REE AI Services Router
+app.include_router(ree_ai.router, prefix="/api/ree-ai", tags=["ree-ai"])
 
 
 try:

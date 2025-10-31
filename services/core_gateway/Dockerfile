@@ -2,19 +2,22 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies
+# Copy requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy shared models
-COPY shared /app/shared
+# Copy core and shared modules
+COPY core/ ./core/
+COPY shared/ ./shared/
 
 # Copy service code
-COPY services/core_gateway /app/services/core_gateway
+COPY services/core_gateway/ ./services/core_gateway/
 
 # Set Python path
 ENV PYTHONPATH=/app
 
-WORKDIR /app/services/core_gateway
+# Expose port
+EXPOSE 8080
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+# Run service
+CMD ["python", "services/core_gateway/main.py"]

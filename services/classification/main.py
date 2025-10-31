@@ -1,235 +1,231 @@
 """
-Classification Service (Layer 3 - Sample Service 2)
-Classifies property listings using LangChain
+Classification Service - CTO Service #5
+3 modes: filter / semantic / both
 """
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from pydantic import BaseModel, Field
-from typing import List
+from typing import Dict, Any, List
+from enum import Enum
+from pydantic import BaseModel
 import httpx
-import time
 
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-
-from shared.models.core_gateway import LLMRequest, LLMResponse, Message, ModelType
-from shared.config import feature_flags
-from shared.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
+from core.base_service import BaseService
+from shared.models.core_gateway import LLMRequest, Message, ModelType
+from shared.utils.logger import LogEmoji
 
 
-# Service-specific models
-class ClassifyRequest(BaseModel):
-    """Request for property classification"""
-    text: str = Field(..., description="Property description to classify", min_length=1)
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "text": "Căn hộ 2 phòng ngủ, diện tích 75m2, nội thất cao cấp, view sông"
-            }
-        }
+class ClassificationMode(str, Enum):
+    FILTER = "filter"
+    SEMANTIC = "semantic"
+    BOTH = "both"
 
 
-class ClassifyResponse(BaseModel):
-    """Response with classification result"""
-    property_type: str = Field(..., description="Classified property type")
-    confidence: float = Field(..., ge=0, le=1, description="Classification confidence")
-    reasoning: str = Field(..., description="Explanation of classification")
-    processing_time_ms: int
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "property_type": "apartment",
-                "confidence": 0.95,
-                "reasoning": "Mentioned '2 phòng ngủ' and 'căn hộ' which indicates an apartment",
-                "processing_time_ms": 450
-            }
-        }
+class PropertyType(str, Enum):
+    HOUSE = "house"
+    APARTMENT = "apartment"
+    VILLA = "villa"
+    LAND = "land"
+    COMMERCIAL = "commercial"
+    UNKNOWN = "unknown"
 
 
-# Core Gateway client
-class CoreGatewayClient:
-    """Client for calling Core Gateway"""
+class ClassificationRequest(BaseModel):
+    text: str
+    mode: ClassificationMode = ClassificationMode.BOTH
+
+
+class ClassificationResult(BaseModel):
+    property_type: PropertyType
+    confidence: float
+    mode_used: ClassificationMode
+    filter_result: PropertyType = None
+    semantic_result: PropertyType = None
+
+
+class ClassificationService(BaseService):
+    """
+    Classification Service - CTO Service #5
+
+    3 Modes:
+    - filter: Rule-based keyword matching
+    - semantic: LLM-based semantic understanding
+    - both: Combine filter + semantic
+    """
 
     def __init__(self):
-        if feature_flags.use_real_core_gateway():
-            self.base_url = "http://core-gateway:8080"
-            logger.info("Using REAL Core Gateway")
-        else:
-            self.base_url = "http://mock-core-gateway:1080"
-            logger.info("Using MOCK Core Gateway")
+        super().__init__(
+            name="classification",
+            version="1.0.0",
+            capabilities=["property_classification", "filter", "semantic"],
+            port=8102
+        )
 
-    async def call_llm(self, request: LLMRequest) -> LLMResponse:
-        """Call LLM via Core Gateway"""
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/chat/completions",
-                json=request.dict()
+        self.http_client = httpx.AsyncClient(timeout=30.0)
+
+        # Keyword filters for each property type
+        self.keywords = {
+            PropertyType.HOUSE: ["nhà", "nhà riêng", "nhà phố", "house"],
+            PropertyType.APARTMENT: ["căn hộ", "chung cư", "apartment", "condo"],
+            PropertyType.VILLA: ["biệt thự", "villa"],
+            PropertyType.LAND: ["đất", "land", "lô đất"],
+            PropertyType.COMMERCIAL: ["văn phòng", "office", "commercial", "mặt bằng kinh doanh"]
+        }
+
+    def setup_routes(self):
+        """Setup Classification API routes"""
+
+        @self.app.post("/classify", response_model=ClassificationResult)
+        async def classify(request: ClassificationRequest):
+            """
+            Classify property type using 3 modes
+
+            Modes:
+            - filter: Fast keyword-based classification
+            - semantic: LLM-based semantic classification
+            - both: Combine both methods (recommended)
+            """
+            result = await self.classify_property(request.text, request.mode)
+            return result
+
+    async def classify_property(
+        self,
+        text: str,
+        mode: ClassificationMode = ClassificationMode.BOTH
+    ) -> ClassificationResult:
+        """
+        Classify property type
+
+        Args:
+            text: Property description
+            mode: Classification mode (filter/semantic/both)
+
+        Returns:
+            ClassificationResult with property type and confidence
+        """
+
+        if mode == ClassificationMode.FILTER:
+            # Mode 1: Filter only
+            property_type = self._classify_by_filter(text)
+            return ClassificationResult(
+                property_type=property_type,
+                confidence=0.7 if property_type != PropertyType.UNKNOWN else 0.3,
+                mode_used=ClassificationMode.FILTER,
+                filter_result=property_type
             )
-            response.raise_for_status()
-            return LLMResponse(**response.json())
 
+        elif mode == ClassificationMode.SEMANTIC:
+            # Mode 2: Semantic only
+            property_type, confidence = await self._classify_by_semantic(text)
+            return ClassificationResult(
+                property_type=property_type,
+                confidence=confidence,
+                mode_used=ClassificationMode.SEMANTIC,
+                semantic_result=property_type
+            )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    logger.info("🚀 Classification Service starting up...")
-    logger.info(f"Core Gateway Mode: {'REAL' if feature_flags.use_real_core_gateway() else 'MOCK'}")
-    yield
-    logger.info("👋 Classification Service shutting down...")
+        else:  # Mode 3: BOTH
+            # Combine filter and semantic
+            filter_result = self._classify_by_filter(text)
+            semantic_result, semantic_confidence = await self._classify_by_semantic(text)
 
+            # Decision logic: Trust semantic if confidence high, else use filter
+            if semantic_confidence > 0.8:
+                final_type = semantic_result
+                final_confidence = semantic_confidence
+            elif filter_result != PropertyType.UNKNOWN:
+                final_type = filter_result
+                final_confidence = 0.75
+            else:
+                final_type = semantic_result
+                final_confidence = semantic_confidence
 
-app = FastAPI(
-    title="REE AI - Classification Service",
-    description="Layer 3 Service: Classify property listings using LangChain",
-    version="1.0.0",
-    lifespan=lifespan
-)
+            return ClassificationResult(
+                property_type=final_type,
+                confidence=final_confidence,
+                mode_used=ClassificationMode.BOTH,
+                filter_result=filter_result,
+                semantic_result=semantic_result
+            )
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    def _classify_by_filter(self, text: str) -> PropertyType:
+        """
+        Mode 1: Filter - Rule-based keyword matching
 
-# Initialize client
-core_gateway = CoreGatewayClient()
+        Fast but less accurate for ambiguous cases
+        """
+        text_lower = text.lower()
 
+        # Count keyword matches for each type
+        scores = {}
+        for prop_type, keywords in self.keywords.items():
+            score = sum(1 for keyword in keywords if keyword in text_lower)
+            scores[prop_type] = score
 
-@app.get("/")
-async def root():
-    """Health check"""
-    return {
-        "service": "classification",
-        "status": "healthy",
-        "version": "1.0.0",
-        "core_gateway_mode": "real" if feature_flags.use_real_core_gateway() else "mock",
-        "langchain": "enabled"
-    }
+        # Return type with highest score
+        if max(scores.values()) > 0:
+            return max(scores, key=scores.get)
+        else:
+            return PropertyType.UNKNOWN
 
+    async def _classify_by_semantic(self, text: str) -> tuple[PropertyType, float]:
+        """
+        Mode 2: Semantic - LLM-based semantic understanding
 
-@app.get("/health")
-async def health():
-    """Detailed health check"""
-    return {
-        "status": "healthy",
-        "core_gateway": {
-            "mode": "real" if feature_flags.use_real_core_gateway() else "mock",
-            "url": core_gateway.base_url
-        },
-        "langchain": "initialized"
-    }
+        More accurate but slower
+        """
+        try:
+            # Call Core Gateway for LLM classification
+            llm_request = LLMRequest(
+                model=ModelType.GPT4_MINI,
+                messages=[
+                    Message(
+                        role="system",
+                        content="""Bạn là chuyên gia phân loại bất động sản.
+Phân loại property vào 1 trong các loại sau:
+- house: Nhà riêng, nhà phố
+- apartment: Căn hộ, chung cư
+- villa: Biệt thự
+- land: Đất, lô đất
+- commercial: Văn phòng, mặt bằng kinh doanh
 
+Trả về JSON: {"type": "...", "confidence": 0.95}"""
+                    ),
+                    Message(role="user", content=f"Phân loại: {text}")
+                ],
+                max_tokens=50,
+                temperature=0.3
+            )
 
-@app.post("/classify", response_model=ClassifyResponse)
-async def classify_property(request: ClassifyRequest):
-    """
-    Classify property listing using LangChain
+            # Make request to Core Gateway
+            response = await self.http_client.post(
+                "http://localhost:8080/chat/completions",
+                json=llm_request.dict()
+            )
 
-    Example use case:
-    - Input: "Căn hộ 2 phòng ngủ view đẹp"
-    - Output: property_type="apartment", confidence=0.95
-    """
-    start_time = time.time()
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("content", "")
 
-    try:
-        logger.info(f"🏷️ Classification Request: {len(request.text)} chars")
-
-        # Use LangChain prompt template
-        prompt = f"""
-You are a real estate classification expert. Classify this property description into ONE of these types:
-- apartment (căn hộ)
-- house (nhà phố)
-- villa (biệt thự)
-- land (đất)
-- office (văn phòng)
-- shop (cửa hàng)
-
-Property description:
-{request.text}
-
-Respond in this EXACT format:
-Type: <type>
-Confidence: <0.0-1.0>
-Reasoning: <explanation>
-
-Example:
-Type: apartment
-Confidence: 0.95
-Reasoning: Mentioned 'căn hộ' and '2 phòng ngủ' which indicates an apartment
-"""
-
-        # Call Core Gateway
-        llm_request = LLMRequest(
-            model=ModelType.OLLAMA_LLAMA2,  # Use Ollama for classification (cheaper)
-            messages=[
-                Message(
-                    role="system",
-                    content="You are a property classification expert."
-                ),
-                Message(
-                    role="user",
-                    content=prompt
-                )
-            ],
-            max_tokens=500,
-            temperature=0.3  # Low temperature for consistent classification
-        )
-
-        llm_response = await core_gateway.call_llm(llm_request)
-
-        # Parse response
-        response_text = llm_response.content
-        lines = response_text.strip().split("\n")
-
-        property_type = "unknown"
-        confidence = 0.5
-        reasoning = "Unable to parse classification"
-
-        for line in lines:
-            if line.startswith("Type:"):
-                property_type = line.split(":", 1)[1].strip().lower()
-            elif line.startswith("Confidence:"):
+                # Parse JSON response
+                import json
                 try:
-                    confidence = float(line.split(":", 1)[1].strip())
-                except ValueError:
-                    confidence = 0.5
-            elif line.startswith("Reasoning:"):
-                reasoning = line.split(":", 1)[1].strip()
+                    result = json.loads(content)
+                    prop_type = PropertyType(result.get("type", "unknown"))
+                    confidence = float(result.get("confidence", 0.5))
+                    return prop_type, confidence
+                except:
+                    pass
 
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"✅ Classification: {property_type} (confidence={confidence:.2f}), {elapsed_ms}ms")
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Semantic classification error: {e}")
 
-        return ClassifyResponse(
-            property_type=property_type,
-            confidence=confidence,
-            reasoning=reasoning,
-            processing_time_ms=elapsed_ms
-        )
+        # Fallback
+        return PropertyType.UNKNOWN, 0.5
 
-    except httpx.HTTPStatusError as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Core Gateway Error: {e.response.status_code} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Core Gateway error: {e.response.status_code}"
-        )
-    except Exception as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Classification Error: {str(e)} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Classification failed: {str(e)}"
-        )
+    async def on_shutdown(self):
+        """Cleanup on shutdown"""
+        await self.http_client.aclose()
+        await super().on_shutdown()
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    service = ClassificationService()
+    service.run()

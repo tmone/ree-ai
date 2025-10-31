@@ -1,228 +1,233 @@
 """
-Semantic Chunking Service (Layer 3 - Sample Service)
-This is a sample implementation showing how to:
-1. Use shared models
-2. Call Core Gateway for LLM
-3. Implement service logic
-4. Handle errors and logging
+Semantic Chunking Service - 6 Steps theo CTO
+Uses Sentence-Transformers + NLTK for semantic text chunking
 """
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from pydantic import BaseModel, Field
-from typing import List
-import httpx
-import time
+from typing import List, Dict, Any
+import numpy as np
+from sentence_transformers import SentenceTransformer
+import nltk
 
-from shared.models.core_gateway import LLMRequest, LLMResponse, Message, ModelType
-from shared.config import settings, feature_flags
-from shared.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
+from core.base_service import BaseService
+from shared.utils.logger import LogEmoji
 
 
-# Service-specific models
-class ChunkRequest(BaseModel):
-    """Request for semantic chunking"""
-    text: str = Field(..., description="Text to chunk", min_length=1)
-    max_chunk_size: int = Field(default=500, ge=100, le=2000, description="Max chars per chunk")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "text": "Căn hộ 2 phòng ngủ ở Quận 1, diện tích 75m2, giá 8 tỷ. Nội thất cao cấp, view đẹp.",
-                "max_chunk_size": 500
-            }
-        }
+# Download NLTK data (run once)
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
 
-class Chunk(BaseModel):
-    """A semantic chunk"""
-    index: int
-    content: str
-    token_count: int
+class SemanticChunker(BaseService):
+    """
+    Semantic Chunking Service - CTO Service #3
 
-
-class ChunkResponse(BaseModel):
-    """Response with chunks"""
-    chunks: List[Chunk]
-    total_chunks: int
-    processing_time_ms: int
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "chunks": [
-                    {"index": 0, "content": "Căn hộ 2 phòng ngủ ở Quận 1", "token_count": 15},
-                    {"index": 1, "content": "diện tích 75m2, giá 8 tỷ", "token_count": 12}
-                ],
-                "total_chunks": 2,
-                "processing_time_ms": 350
-            }
-        }
-
-
-# Core Gateway client
-class CoreGatewayClient:
-    """Client for calling Core Gateway"""
+    6 Steps:
+    1. Sentence Segmentation
+    2. Generate Embedding cho từng câu
+    3. Cosine Similarity Calculation
+    4. Combine Sentences với threshold >0.75
+    5. Overlap window
+    6. Create Embedding for whole chunk
+    """
 
     def __init__(self):
-        # Get URL based on feature flag
-        if feature_flags.use_real_core_gateway():
-            self.base_url = "http://core-gateway:8080"
-            logger.info("Using REAL Core Gateway")
-        else:
-            self.base_url = "http://mock-core-gateway:1080"
-            logger.info("Using MOCK Core Gateway")
-
-    async def call_llm(self, request: LLMRequest) -> LLMResponse:
-        """Call LLM via Core Gateway"""
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{self.base_url}/v1/chat/completions",
-                json=request.dict()
-            )
-            response.raise_for_status()
-            return LLMResponse(**response.json())
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    logger.info("🚀 Semantic Chunking Service starting up...")
-    logger.info(f"Core Gateway Mode: {'REAL' if feature_flags.use_real_core_gateway() else 'MOCK'}")
-    yield
-    logger.info("👋 Semantic Chunking Service shutting down...")
-
-
-app = FastAPI(
-    title="REE AI - Semantic Chunking Service",
-    description="Layer 3 Service: Semantic text chunking using LLM",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize client
-core_gateway = CoreGatewayClient()
-
-
-@app.get("/")
-async def root():
-    """Health check"""
-    return {
-        "service": "semantic-chunking",
-        "status": "healthy",
-        "version": "1.0.0",
-        "core_gateway_mode": "real" if feature_flags.use_real_core_gateway() else "mock"
-    }
-
-
-@app.get("/health")
-async def health():
-    """Detailed health check"""
-    return {
-        "status": "healthy",
-        "core_gateway": {
-            "mode": "real" if feature_flags.use_real_core_gateway() else "mock",
-            "url": core_gateway.base_url
-        }
-    }
-
-
-@app.post("/chunk", response_model=ChunkResponse)
-async def chunk_text(request: ChunkRequest):
-    """
-    Semantic chunking: Break text into meaningful chunks using LLM
-
-    Example use case:
-    - Input: Long property description
-    - Output: Semantic chunks (location, price, features, etc.)
-    """
-    start_time = time.time()
-
-    try:
-        logger.info(f"📝 Chunk Request: {len(request.text)} chars, max_chunk_size={request.max_chunk_size}")
-
-        # Step 1: Use LLM to identify semantic boundaries
-        llm_request = LLMRequest(
-            model=ModelType.OLLAMA_LLAMA2,  # Use Ollama for simple task (cheaper)
-            messages=[
-                Message(
-                    role="system",
-                    content="You are a text chunking expert. Break text into semantic chunks based on topics."
-                ),
-                Message(
-                    role="user",
-                    content=f"""
-Please chunk this text into meaningful segments. Each chunk should be about {request.max_chunk_size} characters.
-Separate chunks with "---CHUNK---".
-
-Text:
-{request.text}
-
-Output format:
-Chunk 1 content
----CHUNK---
-Chunk 2 content
----CHUNK---
-Chunk 3 content
-"""
-                )
-            ],
-            max_tokens=1000,
-            temperature=0.3  # Low temperature for consistent chunking
+        super().__init__(
+            name="semantic_chunking",
+            version="1.0.0",
+            capabilities=["text_chunking", "semantic_analysis"],
+            port=8101
         )
 
-        # Step 2: Call Core Gateway
-        llm_response = await core_gateway.call_llm(llm_request)
+        # Load multilingual model (supports Vietnamese)
+        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        self.logger.info(f"{LogEmoji.SUCCESS} Loaded SentenceTransformer model")
 
-        # Step 3: Parse chunks
-        raw_chunks = llm_response.content.split("---CHUNK---")
+    def setup_routes(self):
+        """Setup Semantic Chunking API routes"""
+
+        @self.app.post("/chunk")
+        async def chunk_text(request: Dict[str, Any]):
+            """
+            Chunk text using 6-step semantic chunking
+
+            Request: {"text": "..."}
+            Response: {"chunks": [...], "count": 5}
+            """
+            text = request.get("text", "")
+
+            if not text:
+                return {"error": "No text provided"}
+
+            chunks = self.chunk(text)
+
+            return {
+                "success": True,
+                "count": len(chunks),
+                "chunks": chunks,
+                "method": "6-step semantic chunking"
+            }
+
+    def chunk(self, text: str, threshold: float = 0.75, overlap: int = 1) -> List[Dict[str, Any]]:
+        """
+        6-Step Semantic Chunking
+
+        Args:
+            text: Input text to chunk
+            threshold: Similarity threshold for combining sentences (default 0.75)
+            overlap: Number of sentences to overlap between chunks
+
+        Returns:
+            List of chunks with text and embeddings
+        """
+
+        # Step 1: Sentence Segmentation
+        sentences = self._step1_segment_sentences(text)
+
+        if len(sentences) == 0:
+            return []
+
+        # Step 2: Generate Embedding cho từng câu
+        sentence_embeddings = self._step2_generate_embeddings(sentences)
+
+        # Step 3: Cosine Similarity Calculation
+        similarities = self._step3_calculate_similarities(sentence_embeddings)
+
+        # Step 4: Combine Sentences với threshold
+        combined_chunks = self._step4_combine_sentences(sentences, similarities, threshold)
+
+        # Step 5: Overlap window
+        overlapped_chunks = self._step5_add_overlap(combined_chunks, overlap)
+
+        # Step 6: Create Embedding for whole chunk
+        final_chunks = self._step6_create_chunk_embeddings(overlapped_chunks)
+
+        self.logger.info(
+            f"{LogEmoji.SUCCESS} Chunked {len(sentences)} sentences into {len(final_chunks)} chunks"
+        )
+
+        return final_chunks
+
+    def _step1_segment_sentences(self, text: str) -> List[str]:
+        """
+        Step 1: Sentence Segmentation using NLTK
+
+        Example:
+            Input: "Nhà 3 phòng ngủ. Giá 5 tỷ. View đẹp."
+            Output: ["Nhà 3 phòng ngủ.", "Giá 5 tỷ.", "View đẹp."]
+        """
+        # Use NLTK's sentence tokenizer
+        sentences = nltk.sent_tokenize(text, language='english')  # Works for Vietnamese too
+
+        # Filter empty sentences
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        return sentences
+
+    def _step2_generate_embeddings(self, sentences: List[str]) -> np.ndarray:
+        """
+        Step 2: Generate Embedding cho từng câu
+
+        Uses: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+        Output dimension: 384
+        """
+        embeddings = self.model.encode(sentences, convert_to_numpy=True)
+        return embeddings
+
+    def _step3_calculate_similarities(self, embeddings: np.ndarray) -> np.ndarray:
+        """
+        Step 3: Cosine Similarity Calculation
+
+        Calculates similarity matrix between all sentence pairs
+        """
+        # Normalize embeddings
+        normalized = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
+
+        # Calculate cosine similarity matrix
+        similarity_matrix = np.dot(normalized, normalized.T)
+
+        return similarity_matrix
+
+    def _step4_combine_sentences(
+        self,
+        sentences: List[str],
+        similarities: np.ndarray,
+        threshold: float
+    ) -> List[str]:
+        """
+        Step 4: Combine Sentences với threshold >0.75
+
+        Groups consecutive sentences with similarity > threshold
+        """
+        if len(sentences) == 0:
+            return []
+
         chunks = []
+        current_chunk = [sentences[0]]
 
-        for idx, chunk_text in enumerate(raw_chunks):
-            chunk_text = chunk_text.strip()
-            if chunk_text:
-                chunks.append(Chunk(
-                    index=idx,
-                    content=chunk_text,
-                    token_count=len(chunk_text.split())  # Rough token count
-                ))
+        for i in range(1, len(sentences)):
+            # Check similarity with previous sentence
+            if similarities[i-1][i] > threshold:
+                # Similar -> add to current chunk
+                current_chunk.append(sentences[i])
+            else:
+                # Not similar -> start new chunk
+                chunks.append(" ".join(current_chunk))
+                current_chunk = [sentences[i]]
 
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.info(f"✅ Chunking Complete: {len(chunks)} chunks, {elapsed_ms}ms")
+        # Add last chunk
+        if current_chunk:
+            chunks.append(" ".join(current_chunk))
 
-        return ChunkResponse(
-            chunks=chunks,
-            total_chunks=len(chunks),
-            processing_time_ms=elapsed_ms
-        )
+        return chunks
 
-    except httpx.HTTPStatusError as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Core Gateway Error: {e.response.status_code} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Core Gateway error: {e.response.status_code}"
-        )
-    except Exception as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Chunking Error: {str(e)} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Chunking failed: {str(e)}"
-        )
+    def _step5_add_overlap(self, chunks: List[str], window: int) -> List[str]:
+        """
+        Step 5: Overlap window
+
+        Adds overlap between chunks for context continuity
+
+        Example with window=1:
+            Chunk 1: "Sentence 1. Sentence 2."
+            Chunk 2: "Sentence 2. Sentence 3."  (Sentence 2 overlaps)
+        """
+        if len(chunks) <= 1 or window == 0:
+            return chunks
+
+        overlapped = []
+
+        for i in range(len(chunks)):
+            chunk_sentences = nltk.sent_tokenize(chunks[i])
+
+            # Add sentences from previous chunk for overlap
+            if i > 0 and window > 0:
+                prev_sentences = nltk.sent_tokenize(chunks[i-1])
+                overlap_sentences = prev_sentences[-window:]
+                chunk_sentences = overlap_sentences + chunk_sentences
+
+            overlapped.append(" ".join(chunk_sentences))
+
+        return overlapped
+
+    def _step6_create_chunk_embeddings(self, chunks: List[str]) -> List[Dict[str, Any]]:
+        """
+        Step 6: Create Embedding for whole chunk
+
+        Generates final embeddings for each chunk
+        """
+        chunk_embeddings = self.model.encode(chunks, convert_to_numpy=True)
+
+        final_chunks = []
+        for chunk_text, embedding in zip(chunks, chunk_embeddings):
+            final_chunks.append({
+                "text": chunk_text,
+                "embedding": embedding.tolist(),
+                "embedding_dimension": len(embedding)
+            })
+
+        return final_chunks
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    service = SemanticChunker()
+    service.run()

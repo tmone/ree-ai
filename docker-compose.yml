@@ -71,24 +71,34 @@ services:
     networks:
       - ree-ai-network
 
-  # Open WebUI (Layer 1 - Frontend)
+  # Open WebUI (Layer 1 - Frontend) - Custom build from source
   open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    build:
+      context: ./frontend/open-webui
+      dockerfile: Dockerfile
     container_name: ree-ai-open-webui
     ports:
       - "3000:8080"
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      # Point to Orchestrator (our AI routing layer with /v1/chat/completions endpoint)
+      - OPENAI_API_BASE_URL=http://orchestrator:8080
+      - OPENAI_API_KEY=dummy-key-not-needed
+      - ENABLE_OLLAMA_API=false
+      - ENABLE_OPENAI_API=true
+      - WEBUI_NAME=REE AI - Real Estate Assistant
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-secret-key-change-me}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ree_ai_user}:${POSTGRES_PASSWORD:-ree_ai_pass_2025}@postgres:5432/${POSTGRES_DB:-ree_ai}
     volumes:
       - open_webui_data:/app/backend/data
     depends_on:
       - postgres
-      - ollama
+      - orchestrator
     networks:
       - ree-ai-network
     restart: unless-stopped
+    profiles:
+      - real
+      - all
 
   # ============================================================
   # MOCK SERVICES (Week 1 Development)
@@ -161,8 +171,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8080:8080"
-    depends_on:
-      - ollama
+    # depends_on:
+    #   - ollama  # Commented out - Ollama is optional, OpenAI is primary
     networks:
       - ree-ai-network
     profiles:

@@ -1,148 +1,101 @@
-"""
-Service Registry - Central service discovery for microservices
-All services register themselves here on startup
-"""
-from typing import Dict, List, Optional
-from pydantic import BaseModel
+"""Service Registry models and client for service discovery."""
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-import asyncio
+from pydantic import BaseModel, Field
 import httpx
 
 
 class ServiceInfo(BaseModel):
-    """Service registration information"""
-    name: str
-    host: str
-    port: int
-    version: str
-    health_endpoint: str = "/health"
-    capabilities: List[str] = []
-    metadata: Dict = {}
-    registered_at: datetime = datetime.now()
-    last_heartbeat: datetime = datetime.now()
-    status: str = "healthy"  # healthy, unhealthy, unknown
+    """Information about a registered service."""
+    name: str = Field(..., description="Service name")
+    version: str = Field(..., description="Service version")
+    host: str = Field(..., description="Service host")
+    port: int = Field(..., description="Service port")
+    capabilities: List[str] = Field(default_factory=list, description="Service capabilities")
+    health_endpoint: str = Field("/health", description="Health check endpoint")
+    registered_at: Optional[datetime] = None
+    last_heartbeat: Optional[datetime] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     @property
     def base_url(self) -> str:
+        """Get base URL for the service."""
         return f"http://{self.host}:{self.port}"
 
 
-class ServiceRegistry:
-    """
-    Service Registry for microservices discovery
+class ServiceRegistryClient:
+    """Client for interacting with Service Registry."""
 
-    Pattern: Service Registry Pattern
-    - Services register on startup
-    - Send heartbeats periodically
-    - Orchestrator queries available services
-    """
+    def __init__(self, registry_url: str = "http://service-registry:8000"):
+        self.registry_url = registry_url.rstrip("/")
+        self.client = httpx.AsyncClient(timeout=10.0)
 
-    def __init__(self):
-        self._services: Dict[str, ServiceInfo] = {}
-        self._health_check_interval = 30  # seconds
-        self._health_check_task = None
-
-    async def register(self, service: ServiceInfo) -> bool:
-        """
-        Register a new service
-
-        Example:
-            await registry.register(ServiceInfo(
-                name="semantic_chunking",
-                host="semantic-chunking",
-                port=8080,
-                version="1.0.0",
-                capabilities=["text_processing", "chunking"]
-            ))
-        """
-        self._services[service.name] = service
-        print(f"✅ Service registered: {service.name} at {service.base_url}")
-        return True
+    async def register(self, service_info: ServiceInfo) -> bool:
+        """Register a service with the registry."""
+        try:
+            response = await self.client.post(
+                f"{self.registry_url}/register",
+                json=service_info.dict()
+            )
+            response.raise_for_status()
+            return True
+        except Exception as e:
+            print(f"❌ Failed to register service: {e}")
+            return False
 
     async def deregister(self, service_name: str) -> bool:
-        """Deregister a service"""
-        if service_name in self._services:
-            del self._services[service_name]
-            print(f"❌ Service deregistered: {service_name}")
+        """Deregister a service from the registry."""
+        try:
+            response = await self.client.delete(
+                f"{self.registry_url}/services/{service_name}"
+            )
+            response.raise_for_status()
             return True
-        return False
+        except Exception:
+            return False
 
     async def get_service(self, service_name: str) -> Optional[ServiceInfo]:
-        """Get service info by name"""
-        return self._services.get(service_name)
+        """Get information about a specific service."""
+        try:
+            response = await self.client.get(
+                f"{self.registry_url}/services/{service_name}"
+            )
+            response.raise_for_status()
+            return ServiceInfo(**response.json())
+        except Exception:
+            return None
 
-    async def list_services(
-        self,
-        capability: Optional[str] = None,
-        status: Optional[str] = "healthy"
-    ) -> List[ServiceInfo]:
-        """
-        List all services, optionally filter by capability
+    async def get_all_services(self) -> List[ServiceInfo]:
+        """Get all registered services."""
+        try:
+            response = await self.client.get(f"{self.registry_url}/services")
+            response.raise_for_status()
+            return [ServiceInfo(**s) for s in response.json()]
+        except Exception:
+            return []
 
-        Example:
-            # Get all text processing services
-            services = await registry.list_services(capability="text_processing")
-        """
-        services = list(self._services.values())
-
-        if capability:
-            services = [s for s in services if capability in s.capabilities]
-
-        if status:
-            services = [s for s in services if s.status == status]
-
-        return services
+    async def find_by_capability(self, capability: str) -> List[ServiceInfo]:
+        """Find services by capability."""
+        try:
+            response = await self.client.get(
+                f"{self.registry_url}/services/capability/{capability}"
+            )
+            response.raise_for_status()
+            return [ServiceInfo(**s) for s in response.json()]
+        except Exception:
+            return []
 
     async def heartbeat(self, service_name: str) -> bool:
-        """Update service heartbeat"""
-        if service_name in self._services:
-            self._services[service_name].last_heartbeat = datetime.now()
-            return True
-        return False
-
-    async def check_health(self, service: ServiceInfo) -> bool:
-        """Check if service is healthy"""
+        """Send heartbeat for a service."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(
-                    f"{service.base_url}{service.health_endpoint}"
-                )
-                if response.status_code == 200:
-                    service.status = "healthy"
-                    return True
-        except Exception as e:
-            print(f"⚠️ Health check failed for {service.name}: {e}")
+            response = await self.client.post(
+                f"{self.registry_url}/heartbeat/{service_name}"
+            )
+            response.raise_for_status()
+            return True
+        except Exception:
+            return False
 
-        service.status = "unhealthy"
-        return False
-
-    async def start_health_checks(self):
-        """Start periodic health checks for all services"""
-        while True:
-            for service in self._services.values():
-                await self.check_health(service)
-            await asyncio.sleep(self._health_check_interval)
-
-    def get_stats(self) -> Dict:
-        """Get registry statistics"""
-        total = len(self._services)
-        healthy = len([s for s in self._services.values() if s.status == "healthy"])
-        unhealthy = len([s for s in self._services.values() if s.status == "unhealthy"])
-
-        return {
-            "total_services": total,
-            "healthy": healthy,
-            "unhealthy": unhealthy,
-            "services": {
-                name: {
-                    "status": service.status,
-                    "base_url": service.base_url,
-                    "capabilities": service.capabilities
-                }
-                for name, service in self._services.items()
-            }
-        }
-
-
-# Global registry instance
-registry = ServiceRegistry()
+    async def close(self):
+        """Close the HTTP client."""
+        await self.client.aclose()

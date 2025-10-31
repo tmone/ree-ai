@@ -1,105 +1,150 @@
-.PHONY: help setup test start-mock start-real stop clean
+# REE AI - Makefile for Development and Testing
 
+.PHONY: help install test test-ai test-failover test-critical test-quick test-all test-coverage clean
+
+# Default target
 help:
-	@echo "REE AI - Development Commands"
+	@echo "REE AI - Available Commands:"
 	@echo ""
-	@echo "Setup:"
-	@echo "  make setup          - Setup environment (.env file)"
+	@echo "  Setup:"
+	@echo "    make install          - Install all dependencies including test dependencies"
+	@echo "    make install-test     - Install only test dependencies"
 	@echo ""
-	@echo "Development (Week 1 - with mocks):"
-	@echo "  make start-mock     - Start infrastructure + mock services"
-	@echo "  make test-mock      - Test with mock services"
+	@echo "  Testing:"
+	@echo "    make test             - Run all tests"
+	@echo "    make test-quick       - Run quick tests only (no slow tests)"
+	@echo "    make test-critical    - Run critical tests only"
+	@echo "    make test-ai          - Run AI quality tests"
+	@echo "    make test-failover    - Run failover tests"
+	@echo "    make test-cto         - Run CTO business logic tests"
+	@echo "    make test-integration - Run integration tests"
+	@echo "    make test-coverage    - Run tests with coverage report"
 	@echo ""
-	@echo "Development (Week 2+ - real services):"
-	@echo "  make start-real     - Start infrastructure + real services"
-	@echo "  make test-real      - Test with real services"
+	@echo "  Development:"
+	@echo "    make build            - Build Docker images"
+	@echo "    make up               - Start all services"
+	@echo "    make down             - Stop all services"
+	@echo "    make logs             - View service logs"
+	@echo "    make clean            - Clean test artifacts and cache"
 	@echo ""
-	@echo "Testing:"
-	@echo "  make test           - Run all tests"
-	@echo "  make test-core      - Test Core Gateway only"
-	@echo "  make test-db        - Test DB Gateway only"
-	@echo "  make test-semantic  - Test Semantic Chunking only"
-	@echo ""
-	@echo "Utilities:"
-	@echo "  make logs           - View logs from all services"
-	@echo "  make stop           - Stop all services"
-	@echo "  make clean          - Clean all containers and volumes"
+	@echo "  Reports:"
+	@echo "    make report           - Generate and open test report"
+	@echo "    make coverage-report  - Generate and open coverage report"
 
-setup:
-	@echo "📋 Setting up environment..."
-	@if [ ! -f .env ]; then \
-		cp .env.example .env; \
-		echo "✅ Created .env file"; \
-		echo "⚠️  Please edit .env and add your OPENAI_API_KEY"; \
-	else \
-		echo "✅ .env file already exists"; \
-	fi
+# Installation
+install:
+	pip install -r requirements.txt
+	pip install -r tests/requirements-test.txt
 
-start-mock:
-	@echo "🚀 Starting infrastructure + mock services..."
-	@docker-compose --profile mock up -d postgres redis opensearch ollama mock-core-gateway mock-db-gateway
-	@echo ""
-	@echo "✅ Mock services started!"
-	@echo ""
-	@echo "📍 Endpoints:"
-	@echo "  Mock Core Gateway: http://localhost:8000"
-	@echo "  Mock DB Gateway:   http://localhost:8001"
-	@echo ""
-	@echo "🔧 Now you can develop your Layer 3 services!"
+install-test:
+	pip install -r tests/requirements-test.txt
 
-start-real:
-	@echo "🚀 Starting infrastructure + real services..."
-	@docker-compose --profile real up -d
-	@echo ""
-	@echo "✅ Real services started!"
-	@echo ""
-	@echo "📍 Endpoints:"
-	@echo "  Core Gateway:        http://localhost:8080"
-	@echo "  DB Gateway:          http://localhost:8081"
-	@echo "  Semantic Chunking:   http://localhost:8082"
-	@echo ""
-	@echo "📚 API Docs:"
-	@echo "  Core Gateway:        http://localhost:8080/docs"
-	@echo "  DB Gateway:          http://localhost:8081/docs"
-	@echo "  Semantic Chunking:   http://localhost:8082/docs"
-
-test-mock:
-	@echo "🧪 Testing with mock services..."
-	@export USE_REAL_CORE_GATEWAY=false && \
-	export USE_REAL_DB_GATEWAY=false && \
-	pytest tests/ -v
-
-test-real:
-	@echo "🧪 Testing with real services..."
-	@export USE_REAL_CORE_GATEWAY=true && \
-	export USE_REAL_DB_GATEWAY=true && \
-	pytest tests/ -v
-
+# Testing
 test:
-	@echo "🧪 Running all tests..."
-	@pytest tests/ -v
+	pytest tests/ -v
 
-test-core:
-	@echo "🧪 Testing Core Gateway..."
-	@pytest tests/test_core_gateway.py -v
+test-quick:
+	pytest tests/ -v -m "not slow"
 
-test-db:
-	@echo "🧪 Testing DB Gateway..."
-	@pytest tests/test_db_gateway.py -v
+test-critical:
+	pytest tests/ -v -m critical
 
-test-semantic:
-	@echo "🧪 Testing Semantic Chunking..."
-	@pytest tests/test_semantic_chunking.py -v
+test-ai:
+	pytest tests/test_ai_quality.py -v
+
+test-failover:
+	pytest tests/test_failover_mechanism.py -v
+
+test-cto:
+	pytest tests/test_cto_business_logic.py -v
+
+test-integration:
+	@echo "Running integration tests..."
+	@./tests/test_comprehensive.sh
+
+test-coverage:
+	pytest tests/ --cov=services --cov=shared \
+		--cov-report=html:tests/coverage \
+		--cov-report=term-missing
+
+test-all: test-quick test-integration
+
+# Docker operations
+build:
+	docker build -t ree-ai-service-registry -f services/service_registry/Dockerfile .
+	docker build -t ree-ai-core-gateway -f services/core_gateway/Dockerfile .
+	docker build -t ree-ai-orchestrator -f services/orchestrator/Dockerfile .
+
+up:
+	docker-compose -f docker-compose.test.yml up -d
+
+down:
+	docker-compose -f docker-compose.test.yml down
 
 logs:
-	@docker-compose logs -f
+	docker-compose -f docker-compose.test.yml logs -f
 
-stop:
-	@echo "🛑 Stopping all services..."
-	@docker-compose --profile mock --profile real down
-	@echo "✅ All services stopped"
+# Reports
+report:
+	pytest tests/ --html=tests/reports/report.html --self-contained-html
+	@echo "Opening test report..."
+	@open tests/reports/report.html || xdg-open tests/reports/report.html
 
+coverage-report: test-coverage
+	@echo "Opening coverage report..."
+	@open tests/coverage/index.html || xdg-open tests/coverage/index.html
+
+# Cleanup
 clean:
-	@echo "🧹 Cleaning all containers, volumes, and networks..."
-	@docker-compose --profile mock --profile real down -v
-	@echo "✅ Cleanup complete"
+	rm -rf tests/reports/*.html
+	rm -rf tests/coverage/
+	rm -rf tests/.pytest_cache/
+	rm -rf tests/__pycache__/
+	rm -rf .pytest_cache/
+	rm -rf .coverage
+	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.pyc" -delete
+	@echo "✅ Cleaned test artifacts"
+
+# Development helpers
+check-services:
+	@echo "Checking service health..."
+	@curl -sf http://localhost:8000/health && echo "✅ Service Registry: healthy" || echo "❌ Service Registry: down"
+	@curl -sf http://localhost:8080/health && echo "✅ Core Gateway: healthy" || echo "❌ Core Gateway: down"
+	@curl -sf http://localhost:8090/health && echo "✅ Orchestrator: healthy" || echo "❌ Orchestrator: down"
+
+restart-services:
+	docker-compose -f docker-compose.test.yml restart core-gateway orchestrator
+
+# CI/CD simulation
+ci:
+	@echo "🚀 Running CI/CD pipeline..."
+	@echo "Step 1: Critical tests"
+	pytest tests/ -m critical -v --tb=short
+	@echo "Step 2: AI quality tests"
+	pytest tests/test_ai_quality.py -v --tb=short
+	@echo "Step 3: Failover tests"
+	pytest tests/test_failover_mechanism.py -v --tb=short
+	@echo "Step 4: Integration tests"
+	./tests/test_comprehensive.sh
+	@echo "✅ CI/CD pipeline completed"
+
+# Quick smoke test
+smoke:
+	@echo "🔥 Running smoke tests..."
+	pytest tests/ -m smoke -v
+	@./tests/test_comprehensive.sh
+
+# Watch mode (requires pytest-watch)
+watch:
+	ptw tests/ -- -v
+
+# Format and lint
+format:
+	black tests/ services/ shared/
+	@echo "✅ Code formatted"
+
+lint:
+	flake8 tests/ services/ shared/ --max-line-length=100
+	mypy tests/ services/ shared/ --ignore-missing-imports
+	@echo "✅ Linting completed"

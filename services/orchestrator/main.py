@@ -1,227 +1,339 @@
-"""
-Orchestrator Service (Layer 2)
-Routes requests to appropriate AI services using LangChain
-"""
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-import httpx
+"""Orchestrator - LangChain-powered request routing with intent detection."""
 import time
-from typing import Optional
+from typing import Dict, Any, List
+import httpx
+from langchain.prompts import ChatPromptTemplate
+from langchain.schema import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
 
-from langchain.chains.router import MultiPromptChain
-from langchain.chains import LLMChain
-from langchain.prompts import PromptTemplate
-from langchain_community.llms import Ollama
-
+from core.base_service import BaseService
 from shared.models.orchestrator import (
-    OrchestrationRequest,
-    OrchestrationResponse,
-    ServiceType
+    OrchestrationRequest, OrchestrationResponse, IntentType,
+    IntentDetectionResult, RoutingDecision
 )
-from shared.config import settings, feature_flags
-from shared.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown events"""
-    logger.info("🚀 Orchestrator Service starting up...")
-    logger.info(f"Core Gateway Mode: {'REAL' if feature_flags.use_real_core_gateway() else 'MOCK'}")
-    logger.info(f"DB Gateway Mode: {'REAL' if feature_flags.use_real_db_gateway() else 'MOCK'}")
-    yield
-    logger.info("👋 Orchestrator shutting down...")
+from shared.models.core_gateway import LLMRequest, Message, ModelType
+from shared.utils.logger import LogEmoji
+from shared.config import settings
 
 
-app = FastAPI(
-    title="REE AI - Orchestrator",
-    description="Layer 2: Routes requests to appropriate AI services using LangChain",
-    version="1.0.0",
-    lifespan=lifespan
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# Service URLs based on feature flags
-def get_service_url(service_name: str) -> str:
-    """Get service URL based on feature flags"""
-    base_urls = {
-        ServiceType.SEMANTIC_CHUNKING: "http://semantic-chunking:8080",
-        ServiceType.CLASSIFICATION: "http://classification:8080",
-        ServiceType.ATTRIBUTE_EXTRACTION: "http://attribute-extraction:8080",
-        ServiceType.COMPLETENESS: "http://completeness:8080",
-        ServiceType.PRICE_SUGGESTION: "http://price-suggestion:8080",
-        ServiceType.RERANK: "http://rerank:8080",
-        ServiceType.RAG: "http://rag-service:8080",
-        ServiceType.SEARCH: "http://db-gateway:8080"
-    }
-    return base_urls.get(service_name, "http://localhost:8080")
-
-
-def detect_intent(query: str) -> ServiceType:
+class Orchestrator(BaseService):
     """
-    Detect user intent from query
-    Simple keyword-based routing for MVP
+    Orchestrator Service - Layer 2
+    Uses LangChain for intelligent request routing and intent detection.
     """
-    query_lower = query.lower()
 
-    # Search patterns
-    if any(kw in query_lower for kw in ["tìm", "search", "có", "list", "xem"]):
-        return ServiceType.SEARCH
+    def __init__(self):
+        super().__init__(
+            name="orchestrator",
+            version="1.0.0",
+            capabilities=["orchestration", "routing", "intent_detection"],
+            port=8080
+        )
 
-    # Price patterns
-    if any(kw in query_lower for kw in ["giá", "price", "bao nhiêu", "cost"]):
-        return ServiceType.PRICE_SUGGESTION
+        # HTTP client for service calls
+        self.http_client = httpx.AsyncClient(timeout=60.0)
 
-    # Classification patterns
-    if any(kw in query_lower for kw in ["loại", "classify", "phân loại", "type"]):
-        return ServiceType.CLASSIFICATION
-
-    # Default: Use RAG for complex queries
-    return ServiceType.RAG
-
-
-@app.get("/")
-async def root():
-    """Health check"""
-    return {
-        "service": "orchestrator",
-        "status": "healthy",
-        "version": "1.0.0",
-        "langchain": "enabled"
-    }
-
-
-@app.get("/health")
-async def health():
-    """Detailed health check"""
-    return {
-        "status": "healthy",
-        "core_gateway": {
-            "mode": "real" if feature_flags.use_real_core_gateway() else "mock"
-        },
-        "db_gateway": {
-            "mode": "real" if feature_flags.use_real_db_gateway() else "mock"
-        },
-        "langchain": "initialized"
-    }
-
-
-@app.post("/orchestrate", response_model=OrchestrationResponse)
-async def orchestrate(request: OrchestrationRequest):
-    """
-    Orchestrate request to appropriate service
-    Uses LangChain for intelligent routing
-    """
-    start_time = time.time()
-
-    try:
-        logger.info(f"🎯 Orchestration Request: user={request.user_id}, query='{request.query}'")
-
-        # Detect intent if not specified
-        if request.service_type is None:
-            service_type = detect_intent(request.query)
-            logger.info(f"🤖 Detected intent: {service_type}")
+        # LangChain LLM for intent detection
+        if settings.OPENAI_API_KEY:
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                temperature=0.3,
+                openai_api_key=settings.OPENAI_API_KEY
+            )
         else:
-            service_type = request.service_type
-            logger.info(f"📌 Explicit service: {service_type}")
+            self.llm = None
+            self.logger.warning(f"{LogEmoji.WARNING} OpenAI API key not set, using fallback intent detection")
 
-        # Route to appropriate service
-        service_url = get_service_url(service_type)
+        # Intent detection prompt
+        self.intent_prompt = ChatPromptTemplate.from_messages([
+            SystemMessage(content="""You are an intent classifier for a real estate AI assistant.
+Classify the user's query into one of these intents:
+- SEARCH: User wants to search for properties (e.g., "Tìm nhà 2 phòng ngủ", "Find apartments")
+- CHAT: General conversation or questions (e.g., "Hello", "How are you?")
+- CLASSIFY: User wants to classify a property type (e.g., "This is a villa")
+- EXTRACT: User wants to extract property attributes
+- PRICE_SUGGEST: User wants price suggestion
+- COMPARE: User wants to compare properties
+- RECOMMEND: User wants property recommendations
+- UNKNOWN: Cannot determine intent
 
-        # For MVP: Direct routing
-        if service_type == ServiceType.SEARCH:
-            # Call DB Gateway directly
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{service_url}/search",
-                    json={
-                        "query": request.query,
-                        "filters": {},
-                        "limit": 10
-                    }
+Extract any relevant entities like:
+- bedrooms: number of bedrooms
+- price_range: price range
+- location: district or city
+- property_type: apartment, house, villa, etc.
+
+Respond with JSON format:
+{{
+  "intent": "INTENT_NAME",
+  "confidence": 0.95,
+  "entities": {{}}
+}}"""),
+            HumanMessage(content="{query}")
+        ])
+
+    def setup_routes(self):
+        """Setup Orchestrator API routes."""
+
+        @self.app.post("/orchestrate", response_model=OrchestrationResponse)
+        async def orchestrate(request: OrchestrationRequest):
+            """
+            Main orchestration endpoint.
+            Detects intent and routes to appropriate service.
+            """
+            try:
+                start_time = time.time()
+
+                self.logger.info(
+                    f"{LogEmoji.TARGET} Orchestration request: "
+                    f"user={request.user_id}, query='{request.query}'"
                 )
-                response.raise_for_status()
-                data = response.json()
 
-                # Format response
-                properties = data.get("results", [])
-                response_text = f"Tìm thấy {len(properties)} bất động sản:\n\n"
-                for i, prop in enumerate(properties[:5], 1):
-                    response_text += f"{i}. {prop['title']} - {prop['price']:,.0f} VNĐ\n"
+                # Step 1: Detect intent
+                intent_result = await self._detect_intent(request.query)
 
-                elapsed_ms = int((time.time() - start_time) * 1000)
-                logger.info(f"✅ Search completed: {elapsed_ms}ms")
+                self.logger.info(
+                    f"{LogEmoji.AI} Intent detected: {intent_result.intent.value} "
+                    f"(confidence: {intent_result.confidence:.2f})"
+                )
+
+                # Step 2: Route to appropriate service
+                routing_decision = self._decide_routing(intent_result)
+
+                # Step 3: Execute routing
+                response_text = await self._execute_routing(
+                    routing_decision,
+                    request,
+                    intent_result
+                )
+
+                execution_time = (time.time() - start_time) * 1000
+
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Orchestration completed: "
+                    f"intent={intent_result.intent.value}, time={execution_time:.2f}ms"
+                )
 
                 return OrchestrationResponse(
+                    intent=intent_result.intent,
+                    confidence=intent_result.confidence,
                     response=response_text,
-                    service_used=service_type,
-                    metadata={"properties_count": len(properties)},
-                    took_ms=elapsed_ms
+                    service_used=routing_decision.target_service,
+                    execution_time_ms=execution_time,
+                    metadata={
+                        "entities": intent_result.extracted_entities,
+                        "routing": routing_decision.dict()
+                    }
                 )
 
-        elif service_type == ServiceType.RAG:
-            # Call RAG service
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    f"{service_url}/rag",
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Orchestration failed: {e}")
+                # Return fallback response
+                return OrchestrationResponse(
+                    intent=IntentType.UNKNOWN,
+                    confidence=0.0,
+                    response=f"Xin lỗi, tôi gặp lỗi khi xử lý yêu cầu của bạn: {str(e)}",
+                    service_used="none",
+                    execution_time_ms=0.0
+                )
+
+        @self.app.post("/v1/chat/completions")
+        async def openai_compatible_chat(request: Dict[str, Any]):
+            """
+            OpenAI-compatible endpoint for Open WebUI integration.
+            This allows Open WebUI to communicate with Orchestrator.
+            """
+            try:
+                # Extract messages from request
+                messages = request.get("messages", [])
+                if not messages:
+                    return {"error": "No messages provided"}
+
+                # Get last user message
+                user_message = ""
+                for msg in reversed(messages):
+                    if msg.get("role") == "user":
+                        user_message = msg.get("content", "")
+                        break
+
+                if not user_message:
+                    return {"error": "No user message found"}
+
+                # Create orchestration request
+                orch_request = OrchestrationRequest(
+                    user_id=request.get("user", "anonymous"),
+                    query=user_message,
+                    conversation_id=None,
+                    metadata={"messages": messages}
+                )
+
+                # Orchestrate
+                orch_response = await orchestrate(orch_request)
+
+                # Return OpenAI-compatible response
+                return {
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": "ree-ai-orchestrator",
+                    "choices": [{
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": orch_response.response
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {
+                        "prompt_tokens": len(user_message) // 4,
+                        "completion_tokens": len(orch_response.response) // 4,
+                        "total_tokens": (len(user_message) + len(orch_response.response)) // 4
+                    }
+                }
+
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} OpenAI-compatible chat failed: {e}")
+                return {
+                    "error": str(e),
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": f"Xin lỗi, tôi gặp lỗi: {str(e)}"
+                        }
+                    }]
+                }
+
+    async def _detect_intent(self, query: str) -> IntentDetectionResult:
+        """Detect user intent using LangChain."""
+        if self.llm:
+            try:
+                # Use LangChain for intent detection
+                prompt = self.intent_prompt.format(query=query)
+                response = await self.llm.ainvoke(prompt)
+
+                # Parse response
+                import json
+                result = json.loads(response.content)
+
+                return IntentDetectionResult(
+                    intent=IntentType(result["intent"].lower()),
+                    confidence=result.get("confidence", 0.9),
+                    extracted_entities=result.get("entities", {})
+                )
+
+            except Exception as e:
+                self.logger.warning(f"{LogEmoji.WARNING} LangChain intent detection failed: {e}")
+
+        # Fallback: Simple keyword-based intent detection
+        query_lower = query.lower()
+
+        if any(keyword in query_lower for keyword in ["tìm", "find", "search", "tìm kiếm"]):
+            return IntentDetectionResult(
+                intent=IntentType.SEARCH,
+                confidence=0.8,
+                extracted_entities={}
+            )
+        elif any(keyword in query_lower for keyword in ["giá", "price", "bao nhiêu", "how much"]):
+            return IntentDetectionResult(
+                intent=IntentType.PRICE_SUGGEST,
+                confidence=0.7,
+                extracted_entities={}
+            )
+        else:
+            return IntentDetectionResult(
+                intent=IntentType.CHAT,
+                confidence=0.6,
+                extracted_entities={}
+            )
+
+    def _decide_routing(self, intent_result: IntentDetectionResult) -> RoutingDecision:
+        """Decide which service to route to based on intent."""
+        if intent_result.intent == IntentType.SEARCH:
+            return RoutingDecision(
+                intent=intent_result.intent,
+                target_service="rag_service",
+                endpoint="/rag",
+                should_use_rag=True,
+                extracted_params=intent_result.extracted_entities
+            )
+        elif intent_result.intent == IntentType.CLASSIFY:
+            return RoutingDecision(
+                intent=intent_result.intent,
+                target_service="classification",
+                endpoint="/classify",
+                should_use_rag=False,
+                extracted_params=intent_result.extracted_entities
+            )
+        else:
+            # Default: use Core Gateway for chat
+            return RoutingDecision(
+                intent=intent_result.intent,
+                target_service="core_gateway",
+                endpoint="/chat/completions",
+                should_use_rag=False,
+                extracted_params=intent_result.extracted_entities
+            )
+
+    async def _execute_routing(
+        self,
+        routing: RoutingDecision,
+        request: OrchestrationRequest,
+        intent_result: IntentDetectionResult
+    ) -> str:
+        """Execute the routing decision."""
+        if routing.should_use_rag:
+            # Route to RAG service
+            try:
+                rag_url = f"{settings.get_db_gateway_url().replace('db-gateway', 'rag-service')}/rag"
+                response = await self.http_client.post(
+                    rag_url,
                     json={
                         "query": request.query,
                         "user_id": request.user_id,
-                        "conversation_id": request.conversation_id or "default"
-                    }
+                        "conversation_id": request.conversation_id
+                    },
+                    timeout=60.0
                 )
-                response.raise_for_status()
-                data = response.json()
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get("response", "")
+            except Exception as e:
+                self.logger.warning(f"{LogEmoji.WARNING} RAG service unavailable: {e}")
 
-                elapsed_ms = int((time.time() - start_time) * 1000)
-                logger.info(f"✅ RAG completed: {elapsed_ms}ms")
-
-                return OrchestrationResponse(
-                    response=data.get("answer", ""),
-                    service_used=service_type,
-                    metadata=data.get("metadata", {}),
-                    took_ms=elapsed_ms
-                )
-
-        else:
-            # For other services: Return placeholder
-            elapsed_ms = int((time.time() - start_time) * 1000)
-            logger.info(f"⚠️ Service not yet implemented: {service_type}")
-
-            return OrchestrationResponse(
-                response=f"Service {service_type} chưa được triển khai. Đây là response placeholder.",
-                service_used=service_type,
-                metadata={"status": "not_implemented"},
-                took_ms=elapsed_ms
+        # Fallback: Use Core Gateway for simple chat
+        try:
+            core_gateway_url = settings.get_core_gateway_url()
+            llm_request = LLMRequest(
+                model=ModelType.GPT4_MINI,
+                messages=[
+                    Message(role="system", content="Bạn là trợ lý AI cho bất động sản REE AI. Hãy trả lời một cách thân thiện và hữu ích."),
+                    Message(role="user", content=request.query)
+                ],
+                max_tokens=500,
+                temperature=0.7
             )
 
-    except httpx.HTTPStatusError as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Service Error: {e.response.status_code} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=502,
-            detail=f"Service error: {e.response.status_code}"
-        )
-    except Exception as e:
-        elapsed_ms = int((time.time() - start_time) * 1000)
-        logger.error(f"❌ Orchestration Error: {str(e)} ({elapsed_ms}ms)")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Orchestration failed: {str(e)}"
-        )
+            response = await self.http_client.post(
+                f"{core_gateway_url}/chat/completions",
+                json=llm_request.dict(),
+                timeout=60.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("content", "Xin lỗi, tôi không thể trả lời câu hỏi này.")
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Core Gateway call failed: {e}")
+
+        return "Xin lỗi, hệ thống đang gặp sự cố. Vui lòng thử lại sau."
+
+    async def on_shutdown(self):
+        """Cleanup on shutdown."""
+        await self.http_client.aclose()
+        await super().on_shutdown()
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080)
+    service = Orchestrator()
+    service.run()

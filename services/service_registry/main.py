@@ -1,209 +1,129 @@
-"""
-Service Registry - Central service discovery
-This is the FIRST service that must start
-All other services register themselves here
-"""
+"""Service Registry - Central service discovery and registration."""
+from typing import Dict, List
+from datetime import datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from typing import List, Optional
-from pydantic import BaseModel
-import asyncio
+import uvicorn
 
-import sys
-sys.path.insert(0, '/app')
-
-from core.service_registry import ServiceRegistry, ServiceInfo
-from shared.utils.logger import setup_logger
-
-logger = setup_logger(__name__)
-
-# Global registry
-registry = ServiceRegistry()
+from core.service_registry import ServiceInfo
+from shared.utils.logger import setup_logger, LogEmoji
+from shared.config import settings
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Startup and shutdown"""
-    logger.info("🚀 Service Registry starting up...")
-    logger.info("This is the central service discovery system")
+class ServiceRegistry:
+    """Service Registry for dynamic service discovery."""
 
-    # Start health check background task
-    health_task = asyncio.create_task(registry.start_health_checks())
+    def __init__(self):
+        self.name = "service_registry"
+        self.version = "1.0.0"
+        self.logger = setup_logger(self.name, level=settings.LOG_LEVEL)
 
-    yield
+        # In-memory service storage (use Redis in production)
+        self.services: Dict[str, ServiceInfo] = {}
 
-    logger.info("👋 Service Registry shutting down...")
-    health_task.cancel()
+        # FastAPI app
+        self.app = FastAPI(
+            title="Service Registry",
+            version=self.version,
+            description="Central service discovery and registration"
+        )
 
+        # Add CORS
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
-app = FastAPI(
-    title="REE AI - Service Registry",
-    description="Central service discovery and registration",
-    version="1.0.0",
-    lifespan=lifespan
-)
+        self.setup_routes()
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    def setup_routes(self):
+        """Setup API routes."""
 
-
-class RegisterRequest(BaseModel):
-    name: str
-    host: str
-    port: int
-    version: str
-    capabilities: List[str] = []
-    metadata: dict = {}
-
-
-class DeregisterRequest(BaseModel):
-    service_name: str
-
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    stats = registry.get_stats()
-    return {
-        "service": "service-registry",
-        "status": "healthy",
-        "version": "1.0.0",
-        "stats": stats
-    }
-
-
-@app.get("/health")
-async def health():
-    """Health check"""
-    return {"status": "healthy"}
-
-
-@app.post("/register")
-async def register_service(request: RegisterRequest):
-    """
-    Register a new service
-
-    Called by services on startup
-    """
-    logger.info(f"📝 Registration request from: {request.name}")
-
-    service = ServiceInfo(
-        name=request.name,
-        host=request.host,
-        port=request.port,
-        version=request.version,
-        capabilities=request.capabilities,
-        metadata=request.metadata
-    )
-
-    success = await registry.register(service)
-
-    if success:
-        logger.info(f"✅ Service registered: {request.name} at http://{request.host}:{request.port}")
-        return {
-            "status": "registered",
-            "service": request.name,
-            "url": f"http://{request.host}:{request.port}"
-        }
-    else:
-        raise HTTPException(status_code=500, detail="Registration failed")
-
-
-@app.post("/deregister")
-async def deregister_service(request: DeregisterRequest):
-    """
-    Deregister a service
-
-    Called by services on shutdown
-    """
-    logger.info(f"📝 Deregistration request from: {request.service_name}")
-
-    success = await registry.deregister(request.service_name)
-
-    if success:
-        logger.info(f"✅ Service deregistered: {request.service_name}")
-        return {"status": "deregistered", "service": request.service_name}
-    else:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-
-@app.post("/heartbeat")
-async def heartbeat(service_name: str):
-    """
-    Receive heartbeat from service
-
-    Services should send heartbeats periodically
-    """
-    success = await registry.heartbeat(service_name)
-
-    if success:
-        return {"status": "ok", "service": service_name}
-    else:
-        raise HTTPException(status_code=404, detail="Service not found")
-
-
-@app.get("/services")
-async def list_services(
-    capability: Optional[str] = None,
-    status: Optional[str] = "healthy"
-):
-    """
-    List all registered services
-
-    Query params:
-    - capability: Filter by capability (e.g., "text_processing")
-    - status: Filter by status (e.g., "healthy", "unhealthy")
-    """
-    services = await registry.list_services(capability=capability, status=status)
-
-    return {
-        "count": len(services),
-        "services": [
-            {
-                "name": s.name,
-                "url": s.base_url,
-                "version": s.version,
-                "capabilities": s.capabilities,
-                "status": s.status,
-                "last_heartbeat": s.last_heartbeat.isoformat()
+        @self.app.get("/")
+        async def root():
+            return {
+                "service": self.name,
+                "version": self.version,
+                "registered_services": len(self.services)
             }
-            for s in services
-        ]
-    }
 
+        @self.app.get("/health")
+        async def health():
+            return {
+                "status": "healthy",
+                "service": self.name,
+                "version": self.version,
+                "registered_services": len(self.services)
+            }
 
-@app.get("/services/{service_name}")
-async def get_service(service_name: str):
-    """Get specific service info"""
-    service = await registry.get_service(service_name)
+        @self.app.post("/register")
+        async def register_service(service_info: ServiceInfo):
+            """Register a new service."""
+            service_info.registered_at = datetime.now()
+            service_info.last_heartbeat = datetime.now()
 
-    if not service:
-        raise HTTPException(status_code=404, detail="Service not found")
+            self.services[service_info.name] = service_info
+            self.logger.info(
+                f"{LogEmoji.SUCCESS} Registered service: {service_info.name} "
+                f"at {service_info.host}:{service_info.port}"
+            )
 
-    return {
-        "name": service.name,
-        "url": service.base_url,
-        "version": service.version,
-        "capabilities": service.capabilities,
-        "status": service.status,
-        "last_heartbeat": service.last_heartbeat.isoformat(),
-        "metadata": service.metadata
-    }
+            return {
+                "status": "registered",
+                "service": service_info.name,
+                "capabilities": service_info.capabilities
+            }
 
+        @self.app.delete("/services/{service_name}")
+        async def deregister_service(service_name: str):
+            """Deregister a service."""
+            if service_name in self.services:
+                del self.services[service_name]
+                self.logger.info(f"{LogEmoji.INFO} Deregistered service: {service_name}")
+                return {"status": "deregistered", "service": service_name}
 
-@app.get("/stats")
-async def get_stats():
-    """Get registry statistics"""
-    return registry.get_stats()
+            raise HTTPException(status_code=404, detail="Service not found")
+
+        @self.app.get("/services")
+        async def get_all_services():
+            """Get all registered services."""
+            return list(self.services.values())
+
+        @self.app.get("/services/{service_name}")
+        async def get_service(service_name: str):
+            """Get information about a specific service."""
+            if service_name in self.services:
+                return self.services[service_name]
+
+            raise HTTPException(status_code=404, detail="Service not found")
+
+        @self.app.get("/services/capability/{capability}")
+        async def find_by_capability(capability: str):
+            """Find services by capability."""
+            matching_services = [
+                service for service in self.services.values()
+                if capability in service.capabilities
+            ]
+            return matching_services
+
+        @self.app.post("/heartbeat/{service_name}")
+        async def heartbeat(service_name: str):
+            """Update service heartbeat."""
+            if service_name in self.services:
+                self.services[service_name].last_heartbeat = datetime.now()
+                return {"status": "ok", "service": service_name}
+
+            raise HTTPException(status_code=404, detail="Service not found")
+
+    def run(self):
+        """Run the service registry."""
+        self.logger.info(f"{LogEmoji.STARTUP} Starting Service Registry v{self.version}")
+        uvicorn.run(self.app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    registry = ServiceRegistry()
+    registry.run()

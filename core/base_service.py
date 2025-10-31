@@ -1,102 +1,88 @@
-"""
-Base Service Class - All microservices inherit from this
-Provides:
-- Service registration
-- Health checks
-- Logging
-- Graceful shutdown
-"""
-from fastapi import FastAPI
-from contextlib import asynccontextmanager
-from typing import Optional, List
-import httpx
-import os
+"""Base service class with auto-registration and standard endpoints."""
+import asyncio
 import signal
-import sys
+from typing import List, Optional, Dict, Any
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
 
-from core.service_registry import ServiceInfo
-from shared.utils.logger import setup_logger
+from core.service_registry import ServiceInfo, ServiceRegistryClient
+from shared.utils.logger import setup_logger, LogEmoji
+from shared.config import settings
 
 
 class BaseService:
     """
-    Base class for all microservices
+    Base class for all microservices in REE AI platform.
 
-    Usage:
-        class MyService(BaseService):
-            def __init__(self):
-                super().__init__(
-                    name="my_service",
-                    version="1.0.0",
-                    capabilities=["my_capability"]
-                )
-
-            def setup_routes(self):
-                @self.app.get("/my-endpoint")
-                async def my_endpoint():
-                    return {"message": "Hello"}
-
-        if __name__ == "__main__":
-            service = MyService()
-            service.run()
+    Features:
+    - Auto-registration with Service Registry
+    - Standard health check endpoints
+    - Graceful shutdown handling
+    - Structured logging
+    - CORS middleware
     """
 
     def __init__(
         self,
         name: str,
         version: str,
-        capabilities: List[str] = [],
+        capabilities: List[str],
         port: int = 8080,
-        registry_url: str = None
+        host: str = "0.0.0.0"
     ):
         self.name = name
         self.version = version
         self.capabilities = capabilities
         self.port = port
-        self.registry_url = registry_url or os.getenv(
-            "REGISTRY_URL",
-            "http://service-registry:8000"
-        )
+        self.host = host
 
-        self.logger = setup_logger(name)
+        # Setup logger
+        self.logger = setup_logger(name, level=settings.LOG_LEVEL)
 
-        # Create FastAPI app with lifespan
+        # Service registry client
+        self.registry_client = ServiceRegistryClient(settings.SERVICE_REGISTRY_URL)
+
+        # FastAPI app with lifespan
         @asynccontextmanager
         async def lifespan(app: FastAPI):
             # Startup
-            self.logger.info(f"🚀 {self.name} v{self.version} starting up...")
             await self.on_startup()
             yield
             # Shutdown
-            self.logger.info(f"👋 {self.name} shutting down...")
             await self.on_shutdown()
 
         self.app = FastAPI(
-            title=f"REE AI - {self.name}",
-            version=self.version,
+            title=name,
+            version=version,
             lifespan=lifespan
         )
 
-        # Setup default routes
-        self._setup_default_routes()
+        # Add CORS middleware
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
-        # Let subclass setup custom routes
+        # Setup standard routes
+        self._setup_standard_routes()
+
+        # Setup custom routes (to be implemented by subclasses)
         self.setup_routes()
 
-        # Handle shutdown signals
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-
-    def _setup_default_routes(self):
-        """Setup default routes all services have"""
+    def _setup_standard_routes(self):
+        """Setup standard health check and info endpoints."""
 
         @self.app.get("/")
         async def root():
             return {
                 "service": self.name,
                 "version": self.version,
-                "status": "healthy",
-                "capabilities": self.capabilities
+                "status": "running"
             }
 
         @self.app.get("/health")
@@ -110,102 +96,124 @@ class BaseService:
         @self.app.get("/info")
         async def info():
             return {
-                "service": self.name,
+                "name": self.name,
                 "version": self.version,
                 "capabilities": self.capabilities,
                 "port": self.port
             }
 
     def setup_routes(self):
-        """Override this to add custom routes"""
+        """
+        Setup custom routes for the service.
+        Override this method in subclasses.
+        """
         pass
 
     async def on_startup(self):
-        """
-        Called on service startup
-        Override to add custom startup logic
-        """
+        """Service startup logic."""
+        self.logger.info(f"{LogEmoji.STARTUP} Starting {self.name} v{self.version}")
+
         # Register with service registry
-        await self._register_service()
+        service_info = ServiceInfo(
+            name=self.name,
+            version=self.version,
+            host=self.name.replace("_", "-"),  # Docker service name
+            port=self.port,
+            capabilities=self.capabilities
+        )
+
+        success = await self.registry_client.register(service_info)
+        if success:
+            self.logger.info(f"{LogEmoji.SUCCESS} Registered with Service Registry")
+        else:
+            self.logger.warning(f"{LogEmoji.WARNING} Failed to register with Service Registry")
+
+        # Start heartbeat task
+        asyncio.create_task(self._heartbeat_loop())
+
+        self.logger.info(f"{LogEmoji.SUCCESS} {self.name} started successfully on port {self.port}")
 
     async def on_shutdown(self):
-        """
-        Called on service shutdown
-        Override to add custom shutdown logic
-        """
+        """Service shutdown logic."""
+        self.logger.info(f"{LogEmoji.WARNING} Shutting down {self.name}")
+
         # Deregister from service registry
-        await self._deregister_service()
+        await self.registry_client.deregister(self.name)
 
-    async def _register_service(self):
-        """Register this service with the registry"""
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                # Get service host from environment or use service name
-                host = os.getenv("SERVICE_HOST", self.name.replace("_", "-"))
+        # Close registry client
+        await self.registry_client.close()
 
-                service_info = ServiceInfo(
-                    name=self.name,
-                    host=host,
-                    port=self.port,
-                    version=self.version,
-                    capabilities=self.capabilities
-                )
+        self.logger.info(f"{LogEmoji.SUCCESS} {self.name} shutdown complete")
 
-                response = await client.post(
-                    f"{self.registry_url}/register",
-                    json=service_info.dict()
-                )
+    async def _heartbeat_loop(self):
+        """Send periodic heartbeat to service registry."""
+        while True:
+            try:
+                await asyncio.sleep(30)  # Heartbeat every 30 seconds
+                await self.registry_client.heartbeat(self.name)
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Heartbeat failed: {e}")
 
-                if response.status_code == 200:
-                    self.logger.info(f"✅ Registered with service registry at {self.registry_url}")
-                else:
-                    self.logger.warning(f"⚠️ Failed to register with service registry: {response.status_code}")
-
-        except Exception as e:
-            self.logger.warning(f"⚠️ Could not register with service registry: {e}")
-            self.logger.info("Service will run without registration (standalone mode)")
-
-    async def _deregister_service(self):
-        """Deregister this service from the registry"""
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
-                    f"{self.registry_url}/deregister",
-                    json={"service_name": self.name}
-                )
-                self.logger.info(f"✅ Deregistered from service registry")
-        except Exception as e:
-            self.logger.warning(f"⚠️ Could not deregister: {e}")
-
-    def _handle_shutdown(self, signum, frame):
-        """Handle shutdown signals"""
-        self.logger.info(f"Received signal {signum}, shutting down gracefully...")
-        sys.exit(0)
-
-    def run(self, host: str = "0.0.0.0"):
-        """Run the service"""
-        import uvicorn
-        self.logger.info(f"🌐 Starting {self.name} on {host}:{self.port}")
-        uvicorn.run(self.app, host=host, port=self.port)
+    def run(self):
+        """Run the service."""
+        uvicorn.run(
+            self.app,
+            host=self.host,
+            port=self.port,
+            log_level=settings.LOG_LEVEL.lower()
+        )
 
 
-# Example usage in documentation
-if __name__ == "__main__":
-    # This is just for documentation
-    # Real services should inherit from BaseService
+class SimpleService:
+    """
+    Simplified service without registry integration.
+    Use for standalone services or testing.
+    """
 
-    class ExampleService(BaseService):
-        def __init__(self):
-            super().__init__(
-                name="example_service",
-                version="1.0.0",
-                capabilities=["example"]
-            )
+    def __init__(
+        self,
+        name: str,
+        version: str,
+        port: int = 8080,
+        host: str = "0.0.0.0"
+    ):
+        self.name = name
+        self.version = version
+        self.port = port
+        self.host = host
 
-        def setup_routes(self):
-            @self.app.get("/example")
-            async def example_endpoint():
-                return {"message": "This is an example"}
+        # Setup logger
+        self.logger = setup_logger(name, level=settings.LOG_LEVEL)
 
-    service = ExampleService()
-    service.run()
+        # FastAPI app
+        self.app = FastAPI(title=name, version=version)
+
+        # Add CORS middleware
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+        # Standard routes
+        @self.app.get("/")
+        async def root():
+            return {"service": self.name, "version": self.version, "status": "running"}
+
+        @self.app.get("/health")
+        async def health():
+            return {"status": "healthy", "service": self.name, "version": self.version}
+
+        # Setup custom routes
+        self.setup_routes()
+
+    def setup_routes(self):
+        """Override this in subclasses."""
+        pass
+
+    def run(self):
+        """Run the service."""
+        self.logger.info(f"{LogEmoji.STARTUP} Starting {self.name} v{self.version} on port {self.port}")
+        uvicorn.run(self.app, host=self.host, port=self.port)

@@ -1,108 +1,109 @@
-"""
-DB Gateway models for database operations
-"""
-from pydantic import BaseModel, Field
-from typing import List, Optional
+"""Pydantic models for DB Gateway service communication."""
+from typing import List, Optional, Dict, Any
 from datetime import datetime
+from pydantic import BaseModel, Field
 
 
-class PropertyFilter(BaseModel):
-    """Filters for property search"""
-    region: Optional[str] = Field(None, description="Region/district name")
-    min_price: Optional[float] = Field(None, ge=0, description="Minimum price")
-    max_price: Optional[float] = Field(None, ge=0, description="Maximum price")
-    bedrooms: Optional[int] = Field(None, ge=0, description="Number of bedrooms")
-    property_type: Optional[str] = Field(None, description="Type: apartment, house, villa")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "region": "Quận 1",
-                "min_price": 5000000000,
-                "max_price": 10000000000,
-                "bedrooms": 2,
-                "property_type": "apartment"
-            }
-        }
-
-
-class Property(BaseModel):
-    """Property model"""
-    id: str = Field(..., description="Property ID")
-    title: str = Field(..., description="Property title")
-    price: float = Field(..., ge=0, description="Price in VND")
-    location: str = Field(..., description="Location")
-    bedrooms: int = Field(..., ge=0, description="Number of bedrooms")
-    area: float = Field(..., ge=0, description="Area in m²")
-    description: str = Field(..., description="Full description")
-    property_type: str = Field(..., description="Type of property")
-    created_at: Optional[datetime] = Field(None, description="Created timestamp")
-    score: Optional[float] = Field(None, ge=0, le=1, description="Relevance score")
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "id": "prop_123456",
-                "title": "Căn hộ 2 phòng ngủ Quận 1",
-                "price": 8000000000,
-                "location": "Quận 1, TP.HCM",
-                "bedrooms": 2,
-                "area": 75.5,
-                "description": "Căn hộ đẹp, view đẹp...",
-                "property_type": "apartment",
-                "score": 0.95
-            }
-        }
+class SearchFilters(BaseModel):
+    """Filters for property search."""
+    property_type: Optional[str] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_bedrooms: Optional[int] = None
+    max_bedrooms: Optional[int] = None
+    min_bathrooms: Optional[int] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
 
 
 class SearchRequest(BaseModel):
-    """Request to search properties"""
-    query: str = Field(..., description="Search query", min_length=1)
-    filters: PropertyFilter = Field(
-        default_factory=PropertyFilter,
-        description="Filter criteria"
-    )
-    limit: int = Field(default=10, ge=1, le=100, description="Max results")
-    offset: int = Field(default=0, ge=0, description="Offset for pagination")
+    """Request format for vector + BM25 search."""
+    query: str = Field(..., description="Search query text")
+    filters: Optional[SearchFilters] = Field(None, description="Optional filters")
+    limit: int = Field(10, description="Maximum number of results")
+    use_vector: bool = Field(True, description="Use vector similarity search")
+    use_bm25: bool = Field(True, description="Use BM25 keyword search")
+    alpha: float = Field(0.5, description="Weight for vector vs BM25 (0=BM25 only, 1=vector only)")
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "query": "Tìm nhà 2 phòng ngủ",
-                "filters": {
-                    "region": "Quận 1",
-                    "min_price": 5000000000,
-                    "max_price": 10000000000
-                },
-                "limit": 10,
-                "offset": 0
-            }
-        }
+
+class PropertyResult(BaseModel):
+    """Property search result."""
+    property_id: str
+    title: str
+    description: str
+    price: float
+    property_type: str
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    area: Optional[float] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
+    score: float = Field(..., description="Relevance score")
+    metadata: Optional[Dict[str, Any]] = None
 
 
 class SearchResponse(BaseModel):
-    """Response from property search"""
-    results: List[Property] = Field(..., description="List of properties")
-    total: int = Field(..., ge=0, description="Total matching results")
-    took_ms: int = Field(..., ge=0, description="Time taken in milliseconds")
+    """Response format for search operations."""
+    results: List[PropertyResult]
+    total_found: int
+    query_time_ms: float
 
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "results": [
-                    {
-                        "id": "prop_123",
-                        "title": "Căn hộ 2PN Quận 1",
-                        "price": 8000000000,
-                        "location": "Quận 1",
-                        "bedrooms": 2,
-                        "area": 75.5,
-                        "description": "...",
-                        "property_type": "apartment",
-                        "score": 0.95
-                    }
-                ],
-                "total": 5,
-                "took_ms": 245
-            }
-        }
+
+class ConversationMessage(BaseModel):
+    """Single message in a conversation."""
+    message_id: str
+    role: str  # 'user' or 'assistant'
+    content: str
+    timestamp: datetime
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class SaveConversationRequest(BaseModel):
+    """Request to save a conversation turn."""
+    conversation_id: str
+    user_id: str
+    user_message: str
+    assistant_message: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class GetConversationRequest(BaseModel):
+    """Request to retrieve conversation history."""
+    conversation_id: str
+    limit: Optional[int] = Field(50, description="Maximum number of messages to retrieve")
+
+
+class ConversationResponse(BaseModel):
+    """Response containing conversation history."""
+    conversation_id: str
+    messages: List[ConversationMessage]
+    total_messages: int
+
+
+class PropertyDocument(BaseModel):
+    """Property document for indexing."""
+    property_id: str
+    title: str
+    description: str
+    price: float
+    property_type: str
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    area: Optional[float] = None
+    district: Optional[str] = None
+    city: Optional[str] = None
+    amenities: Optional[List[str]] = None
+    images: Optional[List[str]] = None
+    embedding: Optional[List[float]] = None  # Pre-computed embedding
+
+
+class IndexDocumentRequest(BaseModel):
+    """Request to index a property document."""
+    documents: List[PropertyDocument]
+
+
+class IndexDocumentResponse(BaseModel):
+    """Response from document indexing."""
+    indexed_count: int
+    failed_count: int
+    errors: Optional[List[str]] = None

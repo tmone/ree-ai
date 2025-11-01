@@ -12,6 +12,9 @@ class SearchFilters(BaseModel):
     min_bedrooms: Optional[int] = None
     max_bedrooms: Optional[int] = None
     min_bathrooms: Optional[int] = None
+    min_area: Optional[float] = None
+    max_area: Optional[float] = None
+    region: Optional[str] = None  # For Vietnamese real estate (e.g., "Quận 7", "Hà Nội")
     district: Optional[str] = None
     city: Optional[str] = None
 
@@ -45,8 +48,18 @@ class PropertyResult(BaseModel):
 class SearchResponse(BaseModel):
     """Response format for search operations."""
     results: List[PropertyResult]
-    total_found: int
-    query_time_ms: float
+    total: int  # Backward compat
+    total_found: int = 0  # Will be populated from total
+    execution_time_ms: float = 0.0  # Backward compat
+    query_time_ms: float = 0.0  # Will be populated from execution_time_ms
+
+    def __init__(self, **data):
+        # Auto-populate for backward compatibility
+        if 'total' in data and 'total_found' not in data:
+            data['total_found'] = data['total']
+        if 'execution_time_ms' in data and 'query_time_ms' not in data:
+            data['query_time_ms'] = data['execution_time_ms']
+        super().__init__(**data)
 
 
 class ConversationMessage(BaseModel):

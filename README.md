@@ -28,6 +28,25 @@ A complete, production-ready framework for building AI-powered real estate platf
 
 ---
 
+## 💡 Core Innovation: Why REE AI Exists
+
+**THE PROBLEM:** Traditional real estate platforms fail because they use rigid database schemas. Real estate properties have **infinite, non-standardized attributes** that cannot be captured in fixed columns:
+
+- **Căn hộ** (Apartments): Pool, gym, view, balcony direction, security, etc.
+- **Biệt thự** (Villas): Private garden, wine cellar, garage, rooftop terrace, etc.
+- **Nhà phố** (Townhouses): Street frontage, alley width, number of floors, etc.
+
+**OUR SOLUTION:** REE AI uses **OpenSearch with flexible JSON documents** to store properties with unlimited attributes, combined with **vector embeddings + BM25 hybrid search** for AI-powered semantic understanding.
+
+**Data Architecture:**
+- 🔍 **OpenSearch** (PRIMARY): ALL property data - flexible JSON, vector search, full-text search
+- 📊 **PostgreSQL** (SECONDARY): ONLY users, conversations, chat history - structured relational data
+- ⚡ **Redis**: Caching layer for performance
+
+This flexible architecture enables AI to understand natural language queries like "tìm nhà gần trường quốc tế có sân vườn" without rigid attribute filtering.
+
+---
+
 ## 📋 Important - Read This First
 
 **⚠️ Project Structure Rules:** Before creating any files, read [`docs/guides/PROJECT_RULES.md`](docs/guides/PROJECT_RULES.md) to understand strict file organization rules.
@@ -71,10 +90,10 @@ open http://localhost:3000  # Open WebUI
 - ✅ **Classification** (Port 8083) - Property classification with LangChain
 
 ### 🗄️ Layer 4: Storage
-- ✅ **DB Gateway** (Port 8081) - Database operations with mock data
-- ✅ **PostgreSQL** (Port 5432) - User data, conversations
-- ✅ **OpenSearch** (Port 9200) - Vector + BM25 search
-- ✅ **Redis** (Port 6379) - Cache & queue
+- ✅ **DB Gateway** (Port 8081) - Abstracts database operations
+- ✅ **OpenSearch** (Port 9200) - PRIMARY: All property data (flexible JSON, vector + BM25 hybrid search)
+- ✅ **PostgreSQL** (Port 5432) - SECONDARY: Users, conversations, chat history ONLY
+- ✅ **Redis** (Port 6379) - Caching layer
 
 ### 🚀 Layer 5: LLM Gateway
 - ✅ **Core Gateway** (Port 8080) - LiteLLM routing (Ollama/OpenAI)

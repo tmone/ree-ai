@@ -38,9 +38,14 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "ree_ai_user")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "ree_ai_pass_2025")
 
-    # OpenSearch Settings
+    # OpenSearch Settings (PRIMARY for property data)
     OPENSEARCH_HOST: str = os.getenv("OPENSEARCH_HOST", "opensearch")
     OPENSEARCH_PORT: int = int(os.getenv("OPENSEARCH_PORT", "9200"))
+    OPENSEARCH_USER: Optional[str] = os.getenv("OPENSEARCH_USER", "admin")
+    OPENSEARCH_PASSWORD: Optional[str] = os.getenv("OPENSEARCH_PASSWORD", "admin")
+    OPENSEARCH_PROPERTIES_INDEX: str = os.getenv("OPENSEARCH_PROPERTIES_INDEX", "properties")
+    OPENSEARCH_USE_SSL: bool = os.getenv("OPENSEARCH_USE_SSL", "false").lower() == "true"
+    OPENSEARCH_VERIFY_CERTS: bool = os.getenv("OPENSEARCH_VERIFY_CERTS", "false").lower() == "true"
 
     # Redis Settings
     REDIS_HOST: str = os.getenv("REDIS_HOST", "redis")

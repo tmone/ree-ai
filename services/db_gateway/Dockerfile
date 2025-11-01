@@ -2,9 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy requirements
+# Copy service requirements first
+COPY services/db_gateway/requirements.txt ./service_requirements.txt
+
+# Copy root requirements
 COPY requirements.txt .
+
+# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r service_requirements.txt
 
 # Install asyncpg for Postgres async access
 RUN pip install --no-cache-dir asyncpg==0.29.0

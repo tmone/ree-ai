@@ -1,5 +1,5 @@
 """Pydantic models for DB Gateway service communication."""
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -30,15 +30,15 @@ class SearchRequest(BaseModel):
 
 
 class PropertyResult(BaseModel):
-    """Property search result."""
+    """Property search result with flexible OpenSearch types."""
     property_id: str
     title: str
     description: str
-    price: float
+    price: Union[str, float, int] = Field(..., description="Price (flexible: can be string '5,77 tỷ' or number)")
     property_type: str
     bedrooms: Optional[int] = None
     bathrooms: Optional[int] = None
-    area: Optional[float] = None
+    area: Union[str, float, int, None] = Field(None, description="Area (flexible: can be string '95m²' or number)")
     district: Optional[str] = None
     city: Optional[str] = None
     score: float = Field(..., description="Relevance score")

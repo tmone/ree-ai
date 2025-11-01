@@ -1,6 +1,10 @@
 """
 Attribute Extraction Service - CTO Service #4 (Layer 3)
-Extracts structured entities from raw user queries using LLM
+Extracts structured entities from raw user queries using enhanced 3-layer pipeline:
+1. NLP Pre-processing - Rule-based entity extraction
+2. RAG Context Retrieval - Get similar properties for context
+3. Enhanced LLM Extraction - LLM with NLP + RAG hints
+4. Post-Validation - Validate against DB distribution
 """
 import httpx
 import json
@@ -11,6 +15,9 @@ from pydantic import BaseModel
 
 from core.base_service import BaseService
 from services.attribute_extraction.prompts import AttributeExtractionPrompts, PropertyAttributes
+from services.attribute_extraction.nlp_processor import VietnameseNLPProcessor
+from services.attribute_extraction.rag_enhancer import RAGContextEnhancer
+from services.attribute_extraction.validator import AttributeValidator
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 
@@ -28,6 +35,17 @@ class QueryExtractionResponse(BaseModel):
     extracted_from: str  # "query"
 
 
+class EnhancedExtractionResponse(BaseModel):
+    """Response with enhanced extraction using NLP + RAG + LLM pipeline"""
+    entities: Dict[str, Any]
+    confidence: float
+    extracted_from: str
+    nlp_entities: Dict[str, Any]  # Entities from NLP layer
+    rag_retrieved_count: int  # Number of similar properties used for context
+    warnings: list[str]  # Validation warnings
+    validation_details: Dict[str, Any]  # Detailed validation info
+
+
 class AttributeExtractionService(BaseService):
     """
     Attribute Extraction Service - Layer 3
@@ -37,17 +55,98 @@ class AttributeExtractionService(BaseService):
     def __init__(self):
         super().__init__(
             name="attribute_extraction",
-            version="1.0.0",
-            capabilities=["entity_extraction", "attribute_extraction", "query_parsing"],
+            version="2.0.0",  # Enhanced with NLP + RAG
+            capabilities=["entity_extraction", "attribute_extraction", "query_parsing", "nlp_preprocessing", "rag_enhanced"],
             port=8080
         )
 
         self.http_client = httpx.AsyncClient(timeout=60.0)
         self.core_gateway_url = settings.get_core_gateway_url()
+        self.db_gateway_url = settings.get_db_gateway_url()
+
+        # Initialize enhanced components
+        self.nlp_processor = VietnameseNLPProcessor()
+        self.rag_enhancer = RAGContextEnhancer(self.db_gateway_url)
+        self.validator = AttributeValidator()
+
         self.logger.info(f"{LogEmoji.INFO} Using Core Gateway at: {self.core_gateway_url}")
+        self.logger.info(f"{LogEmoji.INFO} Using DB Gateway at: {self.db_gateway_url}")
+        self.logger.info(f"{LogEmoji.SUCCESS} Enhanced NLP + RAG pipeline initialized")
 
     def setup_routes(self):
         """Setup API routes"""
+
+        @self.app.post("/extract-query-enhanced", response_model=EnhancedExtractionResponse)
+        async def extract_from_query_enhanced(request: QueryExtractionRequest):
+            """
+            **NEW ENHANCED ENDPOINT** - Extract entities using 3-layer pipeline:
+            1. NLP Pre-processing (rule-based)
+            2. RAG Context Retrieval (similar properties)
+            3. Enhanced LLM Extraction (with NLP + RAG context)
+            4. Post-Validation (against DB distribution)
+
+            This is the RECOMMENDED endpoint for production use!
+            """
+            try:
+                self.logger.info(f"{LogEmoji.TARGET} Enhanced extraction for: '{request.query}'")
+
+                # LAYER 1: NLP Pre-processing
+                self.logger.info(f"{LogEmoji.AI} Layer 1: NLP Pre-processing...")
+                nlp_entities = self.nlp_processor.extract_entities(request.query)
+                nlp_confidence = self.nlp_processor.get_extraction_confidence(nlp_entities)
+                self.logger.info(f"{LogEmoji.SUCCESS} NLP extracted {len(nlp_entities)} entities (confidence: {nlp_confidence:.2f})")
+
+                # LAYER 2: RAG Context Retrieval
+                self.logger.info(f"{LogEmoji.AI} Layer 2: RAG Context Retrieval...")
+                rag_context = await self.rag_enhancer.get_context(
+                    query=request.query,
+                    nlp_entities=nlp_entities,
+                    limit=5
+                )
+                rag_count = rag_context.get("retrieved_count", 0)
+                self.logger.info(f"{LogEmoji.SUCCESS} RAG retrieved {rag_count} similar properties")
+
+                # LAYER 3: Enhanced LLM Extraction
+                self.logger.info(f"{LogEmoji.AI} Layer 3: Enhanced LLM Extraction...")
+                llm_entities = await self._enhanced_llm_extraction(
+                    query=request.query,
+                    nlp_entities=nlp_entities,
+                    rag_context=rag_context,
+                    intent=request.intent
+                )
+                self.logger.info(f"{LogEmoji.SUCCESS} LLM extracted {len(llm_entities)} entities")
+
+                # LAYER 4: Post-Validation
+                self.logger.info(f"{LogEmoji.AI} Layer 4: Post-Validation...")
+                validation_result = self.validator.validate(
+                    entities=llm_entities,
+                    nlp_entities=nlp_entities,
+                    rag_context=rag_context
+                )
+
+                validated_entities = validation_result["validated_entities"]
+                confidence = validation_result["confidence"]
+                warnings = validation_result["warnings"]
+                validation_details = validation_result["validation_details"]
+
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Extraction complete! "
+                    f"Confidence: {confidence:.2f}, Warnings: {len(warnings)}"
+                )
+
+                return EnhancedExtractionResponse(
+                    entities=validated_entities,
+                    confidence=confidence,
+                    extracted_from="enhanced_pipeline",
+                    nlp_entities=nlp_entities,
+                    rag_retrieved_count=rag_count,
+                    warnings=warnings,
+                    validation_details=validation_details
+                )
+
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Enhanced extraction failed: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.post("/extract-query", response_model=QueryExtractionResponse)
         async def extract_from_query(request: QueryExtractionRequest):
@@ -251,9 +350,139 @@ Intent: {intent or "SEARCH"}
         else:
             return 0.65
 
+    async def _enhanced_llm_extraction(
+        self,
+        query: str,
+        nlp_entities: Dict[str, Any],
+        rag_context: Dict[str, Any],
+        intent: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Enhanced LLM extraction with NLP hints and RAG context.
+
+        This builds a rich prompt that includes:
+        1. NLP pre-extracted entities (as hints)
+        2. Real property examples from RAG
+        3. Value ranges and patterns from DB
+        """
+        # Build enhanced prompt
+        prompt = self._build_enhanced_prompt(query, nlp_entities, rag_context, intent)
+
+        # Call LLM
+        entities = await self._call_llm_for_extraction(prompt)
+
+        return entities
+
+    def _build_enhanced_prompt(
+        self,
+        query: str,
+        nlp_entities: Dict[str, Any],
+        rag_context: Dict[str, Any],
+        intent: Optional[str] = None
+    ) -> str:
+        """
+        Build enhanced prompt with NLP hints and RAG context.
+        """
+        # Get RAG components
+        examples = rag_context.get("examples", [])
+        patterns = rag_context.get("patterns", {})
+        value_ranges = rag_context.get("value_ranges", {})
+
+        # Format examples
+        examples_text = ""
+        if examples:
+            examples_text = "📚 REAL PROPERTY EXAMPLES FROM DATABASE (similar to this query):\n"
+            for i, ex in enumerate(examples[:3], 1):
+                examples_text += f"\nExample {i}:\n{json.dumps(ex, indent=2, ensure_ascii=False)}\n"
+
+        # Format patterns
+        patterns_text = ""
+        if patterns:
+            patterns_text = "📊 COMMON PATTERNS IN SIMILAR PROPERTIES:\n"
+            if "common_districts" in patterns:
+                districts = [d["value"] for d in patterns["common_districts"][:3]]
+                patterns_text += f"- Common districts: {', '.join(districts)}\n"
+            if "common_property_types" in patterns:
+                types = [t["value"] for t in patterns["common_property_types"][:3]]
+                patterns_text += f"- Common property types: {', '.join(types)}\n"
+
+        # Format value ranges
+        ranges_text = ""
+        if value_ranges:
+            ranges_text = "📈 VALUE RANGES FROM SIMILAR PROPERTIES:\n"
+            if "price" in value_ranges:
+                pr = value_ranges["price"]
+                ranges_text += f"- Price range: {pr['min']:,.0f} - {pr['max']:,.0f} VND (avg: {pr['avg']:,.0f})\n"
+            if "area" in value_ranges:
+                ar = value_ranges["area"]
+                ranges_text += f"- Area range: {ar['min']:.0f} - {ar['max']:.0f} m² (avg: {ar['avg']:.0f})\n"
+
+        # Format NLP hints
+        nlp_hints_text = ""
+        if nlp_entities:
+            nlp_hints_text = f"💡 NLP PRE-EXTRACTED HINTS:\n{json.dumps(nlp_entities, indent=2, ensure_ascii=False)}\n"
+
+        prompt = f"""Bạn là chuyên gia trích xuất thông tin bất động sản.
+
+🎯 NHIỆM VỤ: Trích xuất entities từ query, SỬ DỤNG HINTS từ NLP và EXAMPLES từ database.
+
+{nlp_hints_text}
+
+{examples_text}
+
+{patterns_text}
+
+{ranges_text}
+
+🔍 EXTRACTION RULES:
+1. **USE NLP hints as starting point** - Ưu tiên thông tin từ NLP layer
+2. **FOLLOW patterns from real examples** - Tham khảo format từ DB
+3. **STAY within typical value ranges** - Kiểm tra với ranges từ DB
+4. **DON'T hallucinate** - Chỉ trích xuất thông tin có trong query
+5. **Chuẩn hóa format** - Sử dụng format giống examples
+
+📊 ENTITIES CẦN TRÍCH XUẤT (chỉ trích xuất những gì có trong câu hỏi):
+
+**1. PROPERTY TYPE**
+- property_type: căn hộ | nhà phố | biệt thự | đất | chung cư | văn phòng
+
+**2. LOCATION**
+- district: Quận/Huyện (chuẩn hóa như examples)
+- ward: Phường (nếu có)
+- project_name: Tên dự án
+
+**3. PHYSICAL ATTRIBUTES**
+- bedrooms: Số phòng ngủ
+- bathrooms: Số phòng tắm
+- area: Diện tích (m²)
+- floors: Số tầng
+
+**4. PRICE**
+- price: Giá cụ thể (VND)
+- min_price: Giá tối thiểu (VND)
+- max_price: Giá tối đa (VND)
+
+**5. FEATURES & AMENITIES**
+- furniture: full | cơ bản | không
+- direction: Hướng nhà
+- parking: true/false
+- elevator: true/false
+- swimming_pool: true/false
+- gym: true/false
+
+📥 USER QUERY:
+{query}
+
+Intent: {intent or "SEARCH"}
+
+📤 OUTPUT (chỉ JSON, không giải thích):
+"""
+        return prompt
+
     async def on_shutdown(self):
         """Cleanup on shutdown"""
         await self.http_client.aclose()
+        await self.rag_enhancer.close()
         await super().on_shutdown()
 
 

@@ -4,53 +4,76 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Language Policy
 
-**IMPORTANT: This project follows a bilingual approach:**
+**IMPORTANT: This project maintains strict language separation:**
 
-1. **Vietnamese (Tiếng Việt)**: Use for ALL conversational responses, explanations, discussions, and communication with the user
-   - Explain code changes in Vietnamese
-   - Discuss architecture decisions in Vietnamese
-   - Answer questions in Vietnamese
-   - Write commit messages body/description in Vietnamese (after English title)
+### English for ALL Project Files
+Use English for **EVERYTHING** in the project codebase:
+- ✅ All code (variables, functions, classes, docstrings, comments)
+- ✅ All documentation files (README.md, docs/*.md, CLAUDE.md, etc.)
+- ✅ **ALL parts of Git commit messages** (title AND body/description)
+- ✅ API responses, error messages, log messages
+- ✅ Configuration files, environment variable names
+- ✅ Test descriptions, assertions, test output
 
-2. **English**: Use ONLY for code, documentation, and technical artifacts
-   - All code (variables, functions, classes, comments)
-   - All documentation files (README.md, docs/*.md)
-   - Git commit titles (first line)
-   - API responses, error messages
-   - Log messages
+### Vietnamese for Claude Code Conversations ONLY
+Use Vietnamese **ONLY** when responding to the user in Claude Code interactive sessions:
+- ✅ Explain code changes to the user in Vietnamese
+- ✅ Discuss architecture decisions with the user in Vietnamese
+- ✅ Answer the user's questions in Vietnamese
+- ✅ Conversational responses when user asks in Vietnamese
 
 **Examples:**
 
-✅ **Correct:**
+✅ **Correct - Conversational Response:**
 ```
 User: "Làm sao để thêm field mới vào OpenSearch?"
-Assistant: "Để thêm field mới vào OpenSearch, bạn chỉ cần thêm vào document JSON khi insert.
+Claude: "Để thêm field mới vào OpenSearch, bạn chỉ cần thêm vào document JSON khi insert.
 OpenSearch có dynamic mapping nên sẽ tự động tạo field. Ví dụ:
 
 ```python
+# Add new field to property document
 doc = {
     "title": "Property title",
-    "new_field": "New value"  # Automatically added
+    "new_field": "New value"  # Automatically indexed by OpenSearch
 }
 ```
 
 Không cần ALTER TABLE như PostgreSQL."
 ```
 
-❌ **Incorrect:**
-```
-Assistant: "To add a new field to OpenSearch, you just need to add it to the JSON document..."
-(Using English for explanation)
+✅ **Correct - Git Commit Message (ALL English):**
+```bash
+git commit -m "feat: Add dynamic field support to OpenSearch mapping
+
+This commit adds dynamic mapping configuration to the properties index,
+allowing unlimited fields without schema changes. Updated index creation
+to enable dynamic field detection and automatic type inference."
 ```
 
-❌ **Incorrect:**
+❌ **Incorrect - Vietnamese in Code:**
 ```python
-# Thêm property mới vào database
-def them_property(data):  # Using Vietnamese for code
+# Thêm property mới vào database  ❌ WRONG
+def them_property(data):  # ❌ WRONG - Vietnamese function name
     ...
 ```
 
-**Summary**: Think and speak in Vietnamese, but write code and docs in English.
+❌ **Incorrect - English in Conversation:**
+```
+User: "Làm sao để thêm field mới?"
+Claude: "To add a new field to OpenSearch..."  ❌ WRONG - Should respond in Vietnamese
+```
+
+❌ **Incorrect - Vietnamese in Git Commit:**
+```bash
+git commit -m "feat: Thêm hỗ trợ dynamic mapping
+
+Commit này thêm cấu hình dynamic mapping..."  ❌ WRONG - Git messages must be ALL English
+```
+
+**Rationale**:
+- **Professional codebase**: English is the international standard for software development
+- **Better communication**: User gives commands in Vietnamese, Claude responds in Vietnamese for clarity
+- **Team collaboration**: English code/docs ensure global developer accessibility
 
 ## Project Overview
 

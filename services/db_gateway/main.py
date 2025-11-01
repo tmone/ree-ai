@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
+from datetime import datetime
 from typing import List, Optional, Dict, Any
 from opensearchpy import AsyncOpenSearch
 from sentence_transformers import SentenceTransformer
@@ -200,19 +201,18 @@ async def search_properties(request: SearchRequest):
                     }
                 })
 
-            # Price range filter - COMMENTED OUT (price is text "5,77 tỷ", not number)
-            # Let RAG Service + LLM understand price from text description instead
-            # if request.filters.min_price or request.filters.max_price:
-            #     price_range = {}
-            #     if request.filters.min_price:
-            #         price_range["gte"] = request.filters.min_price
-            #     if request.filters.max_price:
-            #         price_range["lte"] = request.filters.max_price
-            #     filter_clauses.append({
-            #         "range": {
-            #             "price": price_range
-            #         }
-            #     })
+            # Price range filter - NOW ENABLED (price is numeric after normalization!)
+            if request.filters.min_price or request.filters.max_price:
+                price_range = {}
+                if request.filters.min_price:
+                    price_range["gte"] = request.filters.min_price
+                if request.filters.max_price:
+                    price_range["lte"] = request.filters.max_price
+                filter_clauses.append({
+                    "range": {
+                        "price": price_range
+                    }
+                })
 
             # Bedrooms filter - SOFT FILTER (use "should" to boost, not require)
             if request.filters.min_bedrooms:
@@ -222,19 +222,18 @@ async def search_properties(request: SearchRequest):
                     }
                 })
 
-            # Area filter - COMMENTED OUT (area is text "60 m²", not number)
-            # Let RAG Service + LLM understand area from text description instead
-            # if request.filters.min_area or request.filters.max_area:
-            #     area_range = {}
-            #     if request.filters.min_area:
-            #         area_range["gte"] = request.filters.min_area
-            #     if request.filters.max_area:
-            #         area_range["lte"] = request.filters.max_area
-            #     filter_clauses.append({
-            #         "range": {
-            #             "area": area_range
-            #         }
-            #     })
+            # Area filter - NOW ENABLED (area is numeric after normalization!)
+            if request.filters.min_area or request.filters.max_area:
+                area_range = {}
+                if request.filters.min_area:
+                    area_range["gte"] = request.filters.min_area
+                if request.filters.max_area:
+                    area_range["lte"] = request.filters.max_area
+                filter_clauses.append({
+                    "range": {
+                        "area": area_range
+                    }
+                })
 
         # Build the complete query
         search_body = {
@@ -495,6 +494,142 @@ async def get_property(property_id: str):
     except Exception as e:
         logger.error(f"❌ Get property failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/bulk-insert")
+async def bulk_insert_properties(properties: List[Dict[str, Any]]):
+    """
+    Bulk insert normalized properties into OpenSearch
+
+    Expects properties with NUMERIC price and area:
+    {
+        "property_id": "unique-id",
+        "title": "...",
+        "price": 5770000000,          # NUMERIC (VND)
+        "price_display": "5.77 tỷ",   # For display
+        "area": 95.0,                  # NUMERIC (m²)
+        "area_display": "95 m²",       # For display
+        "bedrooms": 3,                 # INT
+        "bathrooms": 2,                # INT
+        "district": "Quận 7",
+        "city": "Hồ Chí Minh",
+        ...
+    }
+    """
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    if not properties:
+        return {"indexed_count": 0, "failed_count": 0}
+
+    try:
+        logger.info(f"📥 Bulk insert request: {len(properties)} properties")
+
+        # Prepare bulk data for OpenSearch
+        bulk_data = []
+
+        for prop in properties:
+            # Generate property_id if not provided
+            property_id = prop.get('property_id')
+            if not property_id:
+                # Use URL or fallback to hash
+                url = prop.get('url', '')
+                if url:
+                    property_id = url.split('/')[-1] or f"prop_{hash(url)}"
+                else:
+                    property_id = f"prop_{hash(str(prop))}"
+
+            # Ensure price and area are numeric
+            price = prop.get('price', 0)
+            if isinstance(price, str):
+                # Shouldn't happen if normalized, but fallback
+                try:
+                    price = float(price.replace(',', '').replace(' ', ''))
+                except:
+                    price = 0
+
+            area = prop.get('area', 0)
+            if isinstance(area, str):
+                try:
+                    area = float(area.replace('m²', '').replace('m2', '').replace(' ', ''))
+                except:
+                    area = 0
+
+            # Prepare document with NUMERIC types
+            doc = {
+                "property_id": property_id,
+                "title": prop.get('title', ''),
+                "description": prop.get('description', ''),
+
+                # NUMERIC fields for filtering/sorting
+                "price": float(price) if price else 0,
+                "area": float(area) if area else 0,
+                "bedrooms": int(prop.get('bedrooms', 0)),
+                "bathrooms": int(prop.get('bathrooms', 0)),
+
+                # Display fields (formatted text)
+                "price_display": prop.get('price_display', ''),
+                "area_display": prop.get('area_display', ''),
+
+                # Location fields
+                "location": prop.get('location', ''),
+                "district": prop.get('district', ''),
+                "city": prop.get('city', ''),
+
+                # Other fields
+                "property_type": prop.get('property_type', ''),
+                "url": prop.get('url', ''),
+                "source": prop.get('source', ''),
+
+                # Metadata
+                "created_at": prop.get('created_at', datetime.utcnow().isoformat()),
+                "indexed_at": datetime.utcnow().isoformat()
+            }
+
+            # Add any additional fields from the property (flexible schema)
+            for key, value in prop.items():
+                if key not in doc:
+                    doc[key] = value
+
+            # Add to bulk request (index action + document)
+            bulk_data.append({"index": {"_index": settings.OPENSEARCH_PROPERTIES_INDEX, "_id": property_id}})
+            bulk_data.append(doc)
+
+        logger.info(f"📤 Sending bulk insert: {len(bulk_data) // 2} documents")
+
+        # Execute bulk insert
+        response = await opensearch_client.bulk(body=bulk_data, refresh=True)
+
+        # Count successes and failures
+        indexed_count = 0
+        failed_count = 0
+        errors = []
+
+        if response.get('errors'):
+            for item in response['items']:
+                index_result = item.get('index', {})
+                if 'error' in index_result:
+                    failed_count += 1
+                    errors.append(f"{index_result.get('_id')}: {index_result['error'].get('reason', 'Unknown error')}")
+                else:
+                    indexed_count += 1
+        else:
+            indexed_count = len(bulk_data) // 2
+
+        logger.info(f"✅ Bulk insert complete: {indexed_count} indexed, {failed_count} failed")
+
+        if errors and len(errors) <= 5:
+            logger.warning(f"⚠️  Errors: {errors}")
+
+        return {
+            "indexed_count": indexed_count,
+            "failed_count": failed_count,
+            "errors": errors[:10] if errors else None  # Return first 10 errors
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Bulk insert failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Bulk insert failed: {str(e)}")
 
 
 @app.get("/stats")

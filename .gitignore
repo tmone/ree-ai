@@ -60,6 +60,11 @@ backup/
 backups/
 docs/backup/
 
+# Temporary directory for local testing and verification
+# Scripts here are for development only, NOT committed to repo
+temp/
+tmp/
+
 # Summary and documentation duplicates
 *SUMMARY*.md
 *COMPLETE*.md

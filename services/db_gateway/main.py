@@ -1,14 +1,13 @@
 """
-DB Gateway Service - NOW WITH REAL POSTGRES INTEGRATION
-Central gateway for all database operations
+DB Gateway Service - OpenSearch Integration
+Central gateway for all database operations using OpenSearch for flexible property data
 """
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
-import re
-from typing import List, Optional
-import asyncpg
+from typing import List, Optional, Dict, Any
+from opensearchpy import AsyncOpenSearch
 
 from shared.models.db_gateway import SearchRequest, SearchResponse, PropertyResult, SearchFilters
 from shared.config import settings
@@ -16,108 +15,63 @@ from shared.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
-# Global database connection pool
-db_pool: Optional[asyncpg.Pool] = None
-
-
-def parse_vietnamese_price(price_str: str) -> float:
-    """
-    Parse Vietnamese price format to numeric value
-    Examples: "5 tỷ" -> 5000000000, "3,5 tỷ" -> 3500000000, "Giá thỏa thuận" -> 0
-    """
-    if not price_str or price_str == "Giá thỏa thuận":
-        return 0.0
-
-    # Remove all whitespace
-    price_str = price_str.strip()
-
-    # Extract number and unit
-    # Match patterns like "5 tỷ", "3,5 tỷ", "500 triệu", "18 tỷ"
-    match = re.search(r'([\d,\.]+)\s*(tỷ|triệu|trieu|ty)?', price_str, re.IGNORECASE)
-    if not match:
-        return 0.0
-
-    number_str = match.group(1).replace(',', '.')
-    unit = match.group(2).lower() if match.group(2) else ''
-
-    try:
-        number = float(number_str)
-    except:
-        return 0.0
-
-    # Convert to VND
-    if 'tỷ' in unit or 'ty' in unit:
-        return number * 1_000_000_000  # billion
-    elif 'triệu' in unit or 'trieu' in unit:
-        return number * 1_000_000  # million
-    else:
-        return number
-
-
-def parse_area(area_str: str) -> float:
-    """
-    Parse area format to numeric value
-    Examples: "62,5 m²" -> 62.5, "120 m²" -> 120.0
-    """
-    if not area_str:
-        return 0.0
-
-    # Extract number from string like "62,5 m²" or "120 m²"
-    match = re.search(r'([\d,\.]+)', area_str)
-    if not match:
-        return 0.0
-
-    number_str = match.group(1).replace(',', '.')
-    try:
-        return float(number_str)
-    except:
-        return 0.0
+# Global OpenSearch client
+opensearch_client: Optional[AsyncOpenSearch] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    global db_pool
+    global opensearch_client
 
-    logger.info("🚀 DB Gateway starting up (REAL POSTGRES MODE)...")
-    logger.info(f"PostgreSQL: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
-    logger.info(f"Database: {settings.POSTGRES_DB}")
+    logger.info("🚀 DB Gateway starting up (OpenSearch Mode)...")
+    logger.info(f"OpenSearch: {settings.OPENSEARCH_HOST}:{settings.OPENSEARCH_PORT}")
+    logger.info(f"Properties Index: {settings.OPENSEARCH_PROPERTIES_INDEX}")
 
-    # Initialize Postgres connection pool
+    # Initialize OpenSearch client
     try:
-        db_pool = await asyncpg.create_pool(
-            host=settings.POSTGRES_HOST,
-            port=settings.POSTGRES_PORT,
-            database=settings.POSTGRES_DB,
-            user=settings.POSTGRES_USER,
-            password=settings.POSTGRES_PASSWORD,
-            min_size=2,
-            max_size=10,
-            command_timeout=30
+        opensearch_client = AsyncOpenSearch(
+            hosts=[{
+                'host': settings.OPENSEARCH_HOST,
+                'port': settings.OPENSEARCH_PORT
+            }],
+            http_auth=(settings.OPENSEARCH_USER, settings.OPENSEARCH_PASSWORD) if settings.OPENSEARCH_USER else None,
+            use_ssl=settings.OPENSEARCH_USE_SSL,
+            verify_certs=settings.OPENSEARCH_VERIFY_CERTS,
+            ssl_show_warn=False
         )
 
-        # Test connection
-        async with db_pool.acquire() as conn:
-            count = await conn.fetchval("SELECT COUNT(*) FROM properties")
-            logger.info(f"✅ Connected to Postgres! Found {count} properties in database")
+        # Test connection and check if index exists
+        cluster_info = await opensearch_client.info()
+        logger.info(f"✅ Connected to OpenSearch cluster: {cluster_info['cluster_name']}")
+
+        # Check if properties index exists
+        index_exists = await opensearch_client.indices.exists(index=settings.OPENSEARCH_PROPERTIES_INDEX)
+        if index_exists:
+            count_response = await opensearch_client.count(index=settings.OPENSEARCH_PROPERTIES_INDEX)
+            property_count = count_response['count']
+            logger.info(f"✅ Properties index exists! Found {property_count} properties")
+        else:
+            logger.warning(f"⚠️  Properties index '{settings.OPENSEARCH_PROPERTIES_INDEX}' does not exist yet")
+            logger.info("   Index will be created when first property is added")
 
     except Exception as e:
-        logger.error(f"❌ Failed to connect to Postgres: {e}")
+        logger.error(f"❌ Failed to connect to OpenSearch: {e}")
         logger.warning("⚠️  Continuing with limited functionality")
 
     yield
 
     # Cleanup
     logger.info("👋 DB Gateway shutting down...")
-    if db_pool:
-        await db_pool.close()
-        logger.info("Closed database connection pool")
+    if opensearch_client:
+        await opensearch_client.close()
+        logger.info("Closed OpenSearch connection")
 
 
 app = FastAPI(
     title="REE AI - DB Gateway",
-    description="Central gateway for database operations (REAL DATA)",
-    version="2.0.0",
+    description="Central gateway for database operations using OpenSearch for flexible property data",
+    version="3.0.0",
     lifespan=lifespan
 )
 
@@ -137,8 +91,9 @@ async def root():
     return {
         "service": "db-gateway",
         "status": "healthy",
-        "version": "2.0.0",
-        "mode": "REAL_DATA"
+        "version": "3.0.0",
+        "mode": "OPENSEARCH",
+        "storage": "flexible_json"
     }
 
 
@@ -146,126 +101,162 @@ async def root():
 async def health():
     """Detailed health check"""
     property_count = 0
-    postgres_healthy = False
+    opensearch_healthy = False
+    index_exists = False
 
-    if db_pool:
+    if opensearch_client:
         try:
-            async with db_pool.acquire() as conn:
-                property_count = await conn.fetchval("SELECT COUNT(*) FROM properties")
-                postgres_healthy = True
+            # Check cluster health
+            await opensearch_client.info()
+            opensearch_healthy = True
+
+            # Check if index exists and get count
+            index_exists = await opensearch_client.indices.exists(index=settings.OPENSEARCH_PROPERTIES_INDEX)
+            if index_exists:
+                count_response = await opensearch_client.count(index=settings.OPENSEARCH_PROPERTIES_INDEX)
+                property_count = count_response['count']
         except Exception as e:
             logger.error(f"Health check error: {e}")
 
     return {
-        "status": "healthy" if postgres_healthy else "degraded",
-        "postgres_connected": postgres_healthy,
-        "opensearch_configured": bool(settings.OPENSEARCH_HOST),
-        "real_data_count": property_count,
-        "mode": "REAL_DATA"
+        "status": "healthy" if opensearch_healthy else "degraded",
+        "opensearch_connected": opensearch_healthy,
+        "properties_index_exists": index_exists,
+        "property_count": property_count,
+        "index_name": settings.OPENSEARCH_PROPERTIES_INDEX,
+        "mode": "OPENSEARCH_FLEXIBLE_JSON"
     }
 
 
 @app.post("/search", response_model=SearchResponse)
 async def search_properties(request: SearchRequest):
     """
-    Search properties using Postgres full-text search
-    Returns REAL property data from crawled database
+    Search properties using OpenSearch BM25 full-text search
+    Returns flexible JSON property documents with unlimited attributes
     """
     start_time = time.time()
 
-    if not db_pool:
-        raise HTTPException(status_code=503, detail="Database not available")
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
 
     try:
         logger.info(f"🔍 Search Request: query='{request.query}', filters={request.filters}")
 
-        # Build SQL query
-        conditions = []
-        params = []
-        param_count = 1
+        # Build OpenSearch query using BM25
+        must_clauses = []
+        filter_clauses = []
 
-        # Simple text search across title, location, description
+        # BM25 full-text search across title and description
         if request.query:
-            conditions.append(f"""
-                (title ILIKE ${param_count} OR
-                 location ILIKE ${param_count} OR
-                 description ILIKE ${param_count})
-            """)
-            params.append(f"%{request.query}%")
-            param_count += 1
+            must_clauses.append({
+                "multi_match": {
+                    "query": request.query,
+                    "fields": ["title^3", "description", "location^2"],  # Boost title and location
+                    "type": "best_fields",
+                    "operator": "or"
+                }
+            })
 
-        # Filter by region/location
-        if request.filters and request.filters.region:
-            conditions.append(f"location ILIKE ${param_count}")
-            params.append(f"%{request.filters.region}%")
-            param_count += 1
+        # Apply filters
+        if request.filters:
+            # Region/location filter
+            if request.filters.region:
+                filter_clauses.append({
+                    "match": {
+                        "district": request.filters.region
+                    }
+                })
 
-        # Filter by property type
-        if request.filters and request.filters.property_type:
-            conditions.append(f"property_type = ${param_count}")
-            params.append(request.filters.property_type)
-            param_count += 1
+            # Property type filter
+            if request.filters.property_type:
+                filter_clauses.append({
+                    "term": {
+                        "property_type": request.filters.property_type
+                    }
+                })
 
-        # Build WHERE clause
-        where_clause = " AND ".join(conditions) if conditions else "TRUE"
+            # Price range filter
+            if request.filters.min_price or request.filters.max_price:
+                price_range = {}
+                if request.filters.min_price:
+                    price_range["gte"] = request.filters.min_price
+                if request.filters.max_price:
+                    price_range["lte"] = request.filters.max_price
+                filter_clauses.append({
+                    "range": {
+                        "price": price_range
+                    }
+                })
 
-        # Execute query
-        query_sql = f"""
-            SELECT id, title, price, location, bedrooms, bathrooms, area,
-                   description, property_type, url
-            FROM properties
-            WHERE {where_clause}
-            ORDER BY created_at DESC
-            LIMIT {request.limit}
-        """
+            # Bedrooms filter
+            if request.filters.min_bedrooms:
+                filter_clauses.append({
+                    "range": {
+                        "bedrooms": {"gte": request.filters.min_bedrooms}
+                    }
+                })
 
-        async with db_pool.acquire() as conn:
-            rows = await conn.fetch(query_sql, *params)
+            # Area filter
+            if request.filters.min_area or request.filters.max_area:
+                area_range = {}
+                if request.filters.min_area:
+                    area_range["gte"] = request.filters.min_area
+                if request.filters.max_area:
+                    area_range["lte"] = request.filters.max_area
+                filter_clauses.append({
+                    "range": {
+                        "area": area_range
+                    }
+                })
 
-        # Convert to Property objects
+        # Build the complete query
+        search_body = {
+            "query": {
+                "bool": {
+                    "must": must_clauses if must_clauses else [{"match_all": {}}],
+                    "filter": filter_clauses
+                }
+            },
+            "size": request.limit,
+            "sort": [
+                {"_score": {"order": "desc"}},  # Sort by relevance score
+                {"created_at": {"order": "desc"}}  # Then by recency
+            ]
+        }
+
+        # Execute search
+        response = await opensearch_client.search(
+            index=settings.OPENSEARCH_PROPERTIES_INDEX,
+            body=search_body
+        )
+
+        # Convert results to PropertyResult objects
         results = []
-        for row in rows:
-            # Parse price and area
-            price = parse_vietnamese_price(row['price']) if row['price'] else 0.0
-            area = parse_area(row['area']) if row['area'] else 0.0
-
-            # Apply filters (if filters provided)
-            if request.filters:
-                if request.filters.min_price and price < request.filters.min_price:
-                    continue
-                if request.filters.max_price and price > request.filters.max_price:
-                    continue
-                if request.filters.min_bedrooms and row['bedrooms'] < request.filters.min_bedrooms:
-                    continue
-                if request.filters.min_area and area < request.filters.min_area:
-                    continue
-                if request.filters.max_area and area > request.filters.max_area:
-                    continue
+        for hit in response['hits']['hits']:
+            source = hit['_source']
 
             results.append(PropertyResult(
-                property_id=str(row['id']),
-                title=row['title'],
-                price=price,
-                description=row['description'] or "",
-                property_type=row['property_type'] or "",
-                bedrooms=row['bedrooms'] or 0,
-                bathrooms=row['bathrooms'] or 0,
-                area=area,
-                district=row['location'] or "",  # Using location as district for now
-                city="",  # TODO: Extract city from location
-                score=0.9  # Simple scoring for now
+                property_id=source.get('property_id', hit['_id']),
+                title=source.get('title', ''),
+                price=float(source.get('price', 0)),
+                description=source.get('description', ''),
+                property_type=source.get('property_type', ''),
+                bedrooms=int(source.get('bedrooms', 0)),
+                bathrooms=int(source.get('bathrooms', 0)),
+                area=float(source.get('area', 0)),
+                district=source.get('district', ''),
+                city=source.get('city', ''),
+                score=float(hit['_score'])
             ))
 
-        # Apply limit after filtering
-        results = results[:request.limit]
-
         execution_time = (time.time() - start_time) * 1000
+        total_hits = response['hits']['total']['value'] if isinstance(response['hits']['total'], dict) else response['hits']['total']
 
-        logger.info(f"✅ Search completed: {len(results)} results in {execution_time:.2f}ms")
+        logger.info(f"✅ Search completed: {len(results)} results (total: {total_hits}) in {execution_time:.2f}ms")
 
         return SearchResponse(
             results=results,
-            total=len(results),
+            total=total_hits,
             execution_time_ms=execution_time
         )
 
@@ -275,40 +266,58 @@ async def search_properties(request: SearchRequest):
 
 
 @app.get("/properties/{property_id}")
-async def get_property(property_id: int):
-    """Get a single property by ID"""
-    if not db_pool:
-        raise HTTPException(status_code=503, detail="Database not available")
+async def get_property(property_id: str):
+    """Get a single property by ID from OpenSearch"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
 
     try:
-        async with db_pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """SELECT id, title, price, location, bedrooms, bathrooms, area,
-                          description, property_type, url, source
-                   FROM properties WHERE id = $1""",
-                property_id
-            )
+        # Try to get document by property_id field first
+        search_result = await opensearch_client.search(
+            index=settings.OPENSEARCH_PROPERTIES_INDEX,
+            body={
+                "query": {
+                    "term": {
+                        "property_id": property_id
+                    }
+                },
+                "size": 1
+            }
+        )
 
-        if not row:
-            raise HTTPException(status_code=404, detail="Property not found")
+        if search_result['hits']['total']['value'] > 0:
+            source = search_result['hits']['hits'][0]['_source']
+        else:
+            # Fallback: try to get by document _id
+            try:
+                doc = await opensearch_client.get(
+                    index=settings.OPENSEARCH_PROPERTIES_INDEX,
+                    id=property_id
+                )
+                source = doc['_source']
+            except:
+                raise HTTPException(status_code=404, detail="Property not found")
 
-        price = parse_vietnamese_price(row['price']) if row['price'] else 0.0
-        area = parse_area(row['area']) if row['area'] else 0.0
-
+        # Return all fields from the flexible JSON document
+        # This allows unlimited attributes without schema changes
         return {
-            "id": row['id'],
-            "title": row['title'],
-            "price": price,
-            "price_formatted": row['price'],
-            "location": row['location'],
-            "bedrooms": row['bedrooms'],
-            "bathrooms": row['bathrooms'],
-            "area": area,
-            "area_formatted": row['area'],
-            "description": row['description'],
-            "property_type": row['property_type'],
-            "url": row['url'],
-            "source": row['source']
+            "property_id": source.get('property_id', property_id),
+            "title": source.get('title', ''),
+            "price": source.get('price', 0),
+            "description": source.get('description', ''),
+            "property_type": source.get('property_type', ''),
+            "bedrooms": source.get('bedrooms', 0),
+            "bathrooms": source.get('bathrooms', 0),
+            "area": source.get('area', 0),
+            "district": source.get('district', ''),
+            "city": source.get('city', ''),
+            "url": source.get('url', ''),
+            "source": source.get('source', ''),
+            # Include ALL other flexible attributes from OpenSearch
+            **{k: v for k, v in source.items() if k not in [
+                'property_id', 'title', 'price', 'description', 'property_type',
+                'bedrooms', 'bathrooms', 'area', 'district', 'city', 'url', 'source'
+            ]}
         }
 
     except HTTPException:
@@ -320,34 +329,60 @@ async def get_property(property_id: int):
 
 @app.get("/stats")
 async def get_stats():
-    """Get database statistics"""
-    if not db_pool:
-        raise HTTPException(status_code=503, detail="Database not available")
+    """Get database statistics using OpenSearch aggregations"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
 
     try:
-        async with db_pool.acquire() as conn:
-            total = await conn.fetchval("SELECT COUNT(*) FROM properties")
-            by_type = await conn.fetch(
-                "SELECT property_type, COUNT(*) as count FROM properties GROUP BY property_type"
-            )
-            by_location = await conn.fetch(
-                """SELECT
-                    CASE
-                        WHEN location LIKE '%Hồ Chí Minh%' THEN 'Hồ Chí Minh'
-                        WHEN location LIKE '%Hà Nội%' THEN 'Hà Nội'
-                        WHEN location LIKE '%Đà Nẵng%' THEN 'Đà Nẵng'
-                        ELSE 'Khác'
-                    END as region,
-                    COUNT(*) as count
-                FROM properties
-                GROUP BY region
-                ORDER BY count DESC"""
-            )
+        # Check if index exists
+        index_exists = await opensearch_client.indices.exists(index=settings.OPENSEARCH_PROPERTIES_INDEX)
+        if not index_exists:
+            return {
+                "total_properties": 0,
+                "by_type": {},
+                "by_district": {},
+                "by_city": {}
+            }
+
+        # Use OpenSearch aggregations to get statistics
+        response = await opensearch_client.search(
+            index=settings.OPENSEARCH_PROPERTIES_INDEX,
+            body={
+                "size": 0,  # We only want aggregations, not documents
+                "aggs": {
+                    "by_type": {
+                        "terms": {
+                            "field": "property_type.keyword",
+                            "size": 50
+                        }
+                    },
+                    "by_district": {
+                        "terms": {
+                            "field": "district.keyword",
+                            "size": 50
+                        }
+                    },
+                    "by_city": {
+                        "terms": {
+                            "field": "city.keyword",
+                            "size": 50
+                        }
+                    }
+                }
+            }
+        )
+
+        # Extract aggregation results
+        total = response['hits']['total']['value'] if isinstance(response['hits']['total'], dict) else response['hits']['total']
+        by_type = {bucket['key']: bucket['doc_count'] for bucket in response['aggregations']['by_type']['buckets']}
+        by_district = {bucket['key']: bucket['doc_count'] for bucket in response['aggregations']['by_district']['buckets']}
+        by_city = {bucket['key']: bucket['doc_count'] for bucket in response['aggregations']['by_city']['buckets']}
 
         return {
             "total_properties": total,
-            "by_type": {row['property_type']: row['count'] for row in by_type},
-            "by_region": {row['region']: row['count'] for row in by_location}
+            "by_type": by_type,
+            "by_district": by_district,
+            "by_city": by_city
         }
 
     except Exception as e:

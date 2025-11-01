@@ -2,6 +2,56 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Language Policy
+
+**IMPORTANT: This project follows a bilingual approach:**
+
+1. **Vietnamese (Tiếng Việt)**: Use for ALL conversational responses, explanations, discussions, and communication with the user
+   - Explain code changes in Vietnamese
+   - Discuss architecture decisions in Vietnamese
+   - Answer questions in Vietnamese
+   - Write commit messages body/description in Vietnamese (after English title)
+
+2. **English**: Use ONLY for code, documentation, and technical artifacts
+   - All code (variables, functions, classes, comments)
+   - All documentation files (README.md, docs/*.md)
+   - Git commit titles (first line)
+   - API responses, error messages
+   - Log messages
+
+**Examples:**
+
+✅ **Correct:**
+```
+User: "Làm sao để thêm field mới vào OpenSearch?"
+Assistant: "Để thêm field mới vào OpenSearch, bạn chỉ cần thêm vào document JSON khi insert.
+OpenSearch có dynamic mapping nên sẽ tự động tạo field. Ví dụ:
+
+```python
+doc = {
+    "title": "Property title",
+    "new_field": "New value"  # Automatically added
+}
+```
+
+Không cần ALTER TABLE như PostgreSQL."
+```
+
+❌ **Incorrect:**
+```
+Assistant: "To add a new field to OpenSearch, you just need to add it to the JSON document..."
+(Using English for explanation)
+```
+
+❌ **Incorrect:**
+```python
+# Thêm property mới vào database
+def them_property(data):  # Using Vietnamese for code
+    ...
+```
+
+**Summary**: Think and speak in Vietnamese, but write code and docs in English.
+
 ## Project Overview
 
 REE AI is a **production-ready microservices platform** for AI-powered real estate applications. The platform features a 7-layer architecture with 18+ services, integrating LangChain, Open WebUI, RAG pipelines, and multiple LLM providers (OpenAI, Ollama).

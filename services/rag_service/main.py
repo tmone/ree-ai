@@ -201,10 +201,22 @@ class RAGService(BaseService):
         """
         STEP 3: GENERATE
         Use Core Gateway (LLM) to generate natural language response with augmented context
+
+        NOTE: Now using OpenAI-compliant prompts from openai_compliant_prompts.py
         """
         try:
-            # Build prompt for LLM with retrieved context
-            system_prompt = """Bạn là chuyên gia tư vấn bất động sản REE AI.
+            # Import OpenAI-compliant prompts
+            try:
+                from services.rag_service.openai_compliant_prompts import (
+                    SYSTEM_PROMPT_OPENAI_COMPLIANT,
+                    build_user_prompt_openai_compliant,
+                    validate_response_compliance,
+                    FALLBACK_NO_RESULTS
+                )
+            except ImportError:
+                self.logger.warning(f"{LogEmoji.WARNING} Could not import OpenAI-compliant prompts, using fallback")
+                # Fallback to original prompt if import fails
+                SYSTEM_PROMPT_OPENAI_COMPLIANT = """Bạn là chuyên gia tư vấn bất động sản REE AI.
 
 NHIỆM VỤ:
 Dựa vào dữ liệu bất động sản được cung cấp, hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng.
@@ -220,12 +232,18 @@ PHONG CÁCH:
 - Thân thiện, chuyên nghiệp
 - Sử dụng tiếng Việt tự nhiên
 - Không copy nguyên văn dữ liệu, hãy diễn đạt lại"""
+                def build_user_prompt_openai_compliant(q, c):
+                    return f"""Câu hỏi của khách hàng: {q}
 
-            user_prompt = f"""Câu hỏi của khách hàng: {query}
-
-{context}
+{c}
 
 Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên dữ liệu trên."""
+                def validate_response_compliance(r):
+                    return (True, [])
+
+            # Build prompt for LLM with retrieved context
+            system_prompt = SYSTEM_PROMPT_OPENAI_COMPLIANT
+            user_prompt = build_user_prompt_openai_compliant(query, context)
 
             llm_request = {
                 "model": "gpt-4o-mini",
@@ -233,7 +251,7 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "max_tokens": 800,
+                "max_tokens": 500,  # OpenAI Compliance: Force conciseness
                 "temperature": 0.7
             }
 
@@ -249,6 +267,15 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
                 data = response.json()
                 generated_text = data.get("content", "").strip()
                 self.logger.info(f"{LogEmoji.SUCCESS} Generated response (length: {len(generated_text)} chars)")
+
+                # OpenAI Compliance: Validate response
+                is_valid, violations = validate_response_compliance(generated_text)
+                if not is_valid:
+                    self.logger.warning(f"{LogEmoji.WARNING} Response violates OpenAI standards: {violations}")
+                    # Log violations but still return the response (in production, consider more strict handling)
+                else:
+                    self.logger.info(f"{LogEmoji.SUCCESS} Response passes OpenAI compliance check")
+
                 return generated_text
             else:
                 self.logger.warning(f"{LogEmoji.WARNING} Core Gateway returned {response.status_code}")

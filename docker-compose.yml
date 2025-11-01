@@ -213,8 +213,9 @@ services:
       dockerfile: services/orchestrator/Dockerfile
     container_name: ree-ai-orchestrator
     environment:
-      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
-      - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-false}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-true}
+      - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-true}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:

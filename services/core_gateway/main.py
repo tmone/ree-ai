@@ -188,12 +188,16 @@ class CoreGateway(BaseService):
     async def _call_ollama(self, request: LLMRequest) -> LLMResponse:
         """Call Ollama API."""
         # Extract model name (remove "ollama/" prefix)
-        # If failover from OpenAI, use default fast model
+        # If failover from OpenAI, use thinking-capable model for better intent detection
         if request.model.value.startswith("ollama/"):
             model_name = request.model.value.replace("ollama/", "")
         else:
-            # Failover case - use a default small fast model
-            model_name = "qwen2.5:0.5b"
+            # Failover case - use deepseek-v3.1:671b-cloud for better performance
+            # Cloud model provides better Vietnamese understanding and response quality
+            model_name = "deepseek-v3.1:671b-cloud"
+
+        # Thinking mode DISABLED - best results achieved without it (Iteration 3: 71.4%)
+        # enable_think = "deepseek" in model_name.lower()
 
         payload = {
             "model": model_name,
@@ -207,6 +211,10 @@ class CoreGateway(BaseService):
                 "top_p": request.top_p,
             }
         }
+
+        # Thinking mode disabled for intent detection
+        # if enable_think:
+        #     payload["think"] = True
 
         if request.max_tokens:
             payload["options"]["num_predict"] = request.max_tokens

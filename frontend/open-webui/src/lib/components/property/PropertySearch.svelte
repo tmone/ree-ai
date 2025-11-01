@@ -88,32 +88,43 @@
 	};
 </script>
 
-<div class="property-search">
+<div class="property-search" role="search" aria-label="Tìm kiếm bất động sản">
 	<div class="search-header">
-		<h2>Tìm kiếm bất động sản</h2>
+		<h2 id="search-heading">Tìm kiếm bất động sản</h2>
 		<p class="search-description">
 			Sử dụng AI để tìm kiếm bất động sản phù hợp với nhu cầu của bạn
 		</p>
 	</div>
 
-	<div class="search-form">
+	<form class="search-form" on:submit|preventDefault={handleSearch} aria-labelledby="search-heading">
 		<div class="search-input-group">
+			<label for="property-search-input" class="sr-only">Từ khóa tìm kiếm</label>
 			<input
+				id="property-search-input"
 				type="text"
 				placeholder="Nhập từ khóa tìm kiếm... (vd: căn hộ 2 phòng ngủ quận 1)"
 				bind:value={query}
 				on:keypress={(e) => e.key === 'Enter' && handleSearch()}
 				class="search-input"
+				aria-describedby="search-description"
+				aria-required="true"
 			/>
-			<button on:click={handleSearch} disabled={loading} class="search-button">
+			<button
+				on:click={handleSearch}
+				disabled={loading}
+				class="search-button"
+				type="submit"
+				aria-label={loading ? 'Đang tìm kiếm...' : 'Bắt đầu tìm kiếm'}
+			>
 				{#if loading}
-					<span class="spinner"></span>
+					<span class="spinner" aria-hidden="true"></span>
 				{:else}
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						fill="none"
 						viewBox="0 0 24 24"
 						stroke="currentColor"
+						aria-hidden="true"
 					>
 						<path
 							stroke-linecap="round"
@@ -127,12 +138,14 @@
 			</button>
 		</div>
 
-		<details class="filters-section">
+		<details class="filters-section" aria-label="Bộ lọc nâng cao">
 			<summary>Bộ lọc nâng cao</summary>
-			<div class="filters-grid">
+			<fieldset class="filters-grid" aria-label="Bộ lọc tìm kiếm">
+				<legend class="sr-only">Tiêu chí lọc bất động sản</legend>
+
 				<div class="filter-group">
-					<label>Loại hình</label>
-					<select bind:value={propertyType}>
+					<label for="filter-property-type">Loại hình</label>
+					<select id="filter-property-type" bind:value={propertyType} aria-label="Chọn loại hình bất động sản">
 						{#each propertyTypes as type}
 							<option value={type.value}>{type.label}</option>
 						{/each}
@@ -140,132 +153,176 @@
 				</div>
 
 				<div class="filter-group">
-					<label>Khu vực</label>
+					<label for="filter-location">Khu vực</label>
 					<input
+						id="filter-location"
 						type="text"
 						placeholder="vd: Quận 1, TP.HCM"
 						bind:value={location}
+						aria-label="Nhập khu vực tìm kiếm"
 					/>
 				</div>
 
 				<div class="filter-group">
-					<label>Giá tối thiểu (triệu)</label>
-					<input type="number" placeholder="0" bind:value={minPrice} />
+					<label for="filter-min-price">Giá tối thiểu (triệu)</label>
+					<input
+						id="filter-min-price"
+						type="number"
+						placeholder="0"
+						bind:value={minPrice}
+						aria-label="Giá tối thiểu tính bằng triệu đồng"
+						min="0"
+					/>
 				</div>
 
 				<div class="filter-group">
-					<label>Giá tối đa (triệu)</label>
-					<input type="number" placeholder="∞" bind:value={maxPrice} />
+					<label for="filter-max-price">Giá tối đa (triệu)</label>
+					<input
+						id="filter-max-price"
+						type="number"
+						placeholder="∞"
+						bind:value={maxPrice}
+						aria-label="Giá tối đa tính bằng triệu đồng"
+						min="0"
+					/>
 				</div>
 
 				<div class="filter-group">
-					<label>Diện tích tối thiểu (m²)</label>
-					<input type="number" placeholder="0" bind:value={minArea} />
+					<label for="filter-min-area">Diện tích tối thiểu (m²)</label>
+					<input
+						id="filter-min-area"
+						type="number"
+						placeholder="0"
+						bind:value={minArea}
+						aria-label="Diện tích tối thiểu tính bằng mét vuông"
+						min="0"
+					/>
 				</div>
 
 				<div class="filter-group">
-					<label>Diện tích tối đa (m²)</label>
-					<input type="number" placeholder="∞" bind:value={maxArea} />
+					<label for="filter-max-area">Diện tích tối đa (m²)</label>
+					<input
+						id="filter-max-area"
+						type="number"
+						placeholder="∞"
+						bind:value={maxArea}
+						aria-label="Diện tích tối đa tính bằng mét vuông"
+						min="0"
+					/>
 				</div>
-			</div>
+			</fieldset>
 
-			<button on:click={handleClearFilters} class="clear-filters-button">
+			<button
+				on:click={handleClearFilters}
+				class="clear-filters-button"
+				type="button"
+				aria-label="Xóa tất cả bộ lọc"
+			>
 				Xóa bộ lọc
 			</button>
 		</details>
-	</div>
+	</form>
 
 	{#if loading}
-		<div class="loading-state">
-			<div class="spinner-large"></div>
+		<div class="loading-state" role="status" aria-live="polite" aria-label="Đang tìm kiếm">
+			<div class="spinner-large" aria-hidden="true"></div>
 			<p>Đang tìm kiếm...</p>
 		</div>
 	{:else if results.length > 0}
-		<div class="results-section">
+		<section class="results-section" aria-labelledby="results-heading" role="region">
 			<div class="results-header">
-				<h3>Kết quả tìm kiếm</h3>
-				<span class="results-count">{totalResults} bất động sản</span>
+				<h3 id="results-heading">Kết quả tìm kiếm</h3>
+				<span class="results-count" aria-label="Tìm thấy {totalResults} bất động sản">
+					{totalResults} bất động sản
+				</span>
 			</div>
 
-			<div class="results-grid">
+			<div class="results-grid" role="list" aria-label="Danh sách bất động sản">
 				{#each results as property}
-					<PropertyCard {property} onClick={onPropertySelect} />
+					<div role="listitem">
+						<PropertyCard {property} onClick={onPropertySelect} />
+					</div>
 				{/each}
 			</div>
-		</div>
+		</section>
 	{/if}
 </div>
 
 <style>
+	/* OpenAI Design Standards Compliant Styles */
+
 	.property-search {
 		width: 100%;
 		max-width: 1200px;
 		margin: 0 auto;
-		padding: 24px;
+		padding: var(--space-6, 24px);
 	}
 
 	.search-header {
-		margin-bottom: 24px;
+		margin-bottom: var(--space-6, 24px);
 	}
 
 	.search-header h2 {
-		font-size: 28px;
-		font-weight: 700;
-		color: #111827;
-		margin: 0 0 8px 0;
+		font-size: var(--text-3xl, 28px);
+		font-weight: var(--font-bold, 700);
+		color: var(--text-primary, #111827);
+		margin: 0 0 var(--space-2, 8px) 0;
 	}
 
 	.search-description {
-		color: #6b7280;
-		font-size: 14px;
+		color: var(--text-secondary, #6b7280);
+		font-size: var(--text-sm, 14px);
 		margin: 0;
 	}
 
 	.search-form {
-		background: white;
-		padding: 24px;
-		border-radius: 12px;
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-		margin-bottom: 32px;
+		background: var(--bg-primary, white);
+		padding: var(--space-6, 24px);
+		border-radius: var(--radius-md, 12px);
+		box-shadow: var(--shadow-base, 0 2px 8px rgba(0, 0, 0, 0.1));
+		margin-bottom: var(--space-8, 32px);
 	}
 
 	.search-input-group {
 		display: flex;
-		gap: 12px;
-		margin-bottom: 16px;
+		gap: var(--space-3, 12px);
+		margin-bottom: var(--space-4, 16px);
 	}
 
 	.search-input {
 		flex: 1;
-		padding: 12px 16px;
-		border: 2px solid #e5e7eb;
-		border-radius: 8px;
-		font-size: 16px;
-		transition: border-color 0.2s;
+		padding: var(--space-3, 12px) var(--space-4, 16px);
+		border: 2px solid var(--border-color, #e5e7eb);
+		border-radius: var(--radius-base, 8px);
+		font-size: var(--text-base, 16px);
+		transition: border-color var(--transition-base, 0.2s);
+		color: var(--text-primary, #111827);
+		background: var(--bg-primary, white);
 	}
 
 	.search-input:focus {
 		outline: none;
-		border-color: #3b82f6;
+		border-color: var(--brand-primary, #3b82f6);
 	}
 
+	/* OpenAI Compliance: Brand color ONLY on primary CTA */
 	.search-button {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 12px 24px;
-		background: #3b82f6;
-		color: white;
+		gap: var(--space-2, 8px);
+		padding: var(--space-3, 12px) var(--space-6, 24px);
+		background: var(--brand-primary, #3b82f6);
+		color: var(--text-inverse, white);
 		border: none;
-		border-radius: 8px;
-		font-size: 16px;
-		font-weight: 600;
+		border-radius: var(--radius-base, 8px);
+		font-size: var(--text-base, 16px);
+		font-weight: var(--font-semibold, 600);
 		cursor: pointer;
-		transition: background 0.2s;
+		transition: background var(--transition-base, 0.2s);
 	}
 
 	.search-button:hover:not(:disabled) {
-		background: #2563eb;
+		background: var(--brand-primary-hover, #2563eb);
 	}
 
 	.search-button:disabled {
@@ -273,69 +330,97 @@
 		cursor: not-allowed;
 	}
 
+	.search-button:focus-visible {
+		outline: 2px solid var(--brand-primary, #3b82f6);
+		outline-offset: 2px;
+	}
+
 	.search-button svg {
 		width: 20px;
 		height: 20px;
 	}
 
+	/* Screen reader only text */
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border-width: 0;
+	}
+
 	.filters-section {
-		margin-top: 16px;
+		margin-top: var(--space-4, 16px);
 	}
 
 	.filters-section summary {
 		cursor: pointer;
-		font-weight: 600;
-		color: #3b82f6;
-		padding: 8px 0;
+		font-weight: var(--font-semibold, 600);
+		color: var(--brand-primary, #3b82f6);
+		padding: var(--space-2, 8px) 0;
 	}
 
 	.filters-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-		gap: 16px;
-		margin: 16px 0;
+		gap: var(--space-4, 16px);
+		margin: var(--space-4, 16px) 0;
+		border: none;
+		padding: 0;
 	}
 
 	.filter-group {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: var(--space-2, 6px);
 	}
 
 	.filter-group label {
-		font-size: 14px;
-		font-weight: 500;
-		color: #374151;
+		font-size: var(--text-sm, 14px);
+		font-weight: var(--font-medium, 500);
+		color: var(--text-primary, #374151);
 	}
 
 	.filter-group input,
 	.filter-group select {
-		padding: 8px 12px;
-		border: 1px solid #d1d5db;
-		border-radius: 6px;
-		font-size: 14px;
+		padding: var(--space-2, 8px) var(--space-3, 12px);
+		border: 1px solid var(--border-color, #d1d5db);
+		border-radius: var(--radius-base, 6px);
+		font-size: var(--text-sm, 14px);
+		color: var(--text-primary, #111827);
+		background: var(--bg-primary, white);
 	}
 
 	.filter-group input:focus,
 	.filter-group select:focus {
 		outline: none;
-		border-color: #3b82f6;
+		border-color: var(--brand-primary, #3b82f6);
 	}
 
+	/* OpenAI Compliance: Use system colors for secondary actions */
 	.clear-filters-button {
-		padding: 8px 16px;
-		background: #f3f4f6;
-		color: #374151;
+		padding: var(--space-2, 8px) var(--space-4, 16px);
+		background: var(--bg-secondary, #f3f4f6);
+		color: var(--text-primary, #374151);
 		border: none;
-		border-radius: 6px;
-		font-size: 14px;
-		font-weight: 500;
+		border-radius: var(--radius-base, 6px);
+		font-size: var(--text-sm, 14px);
+		font-weight: var(--font-medium, 500);
 		cursor: pointer;
-		transition: background 0.2s;
+		transition: background var(--transition-base, 0.2s);
 	}
 
 	.clear-filters-button:hover {
-		background: #e5e7eb;
+		background: var(--bg-tertiary, #e5e7eb);
+	}
+
+	.clear-filters-button:focus-visible {
+		outline: 2px solid var(--border-color-focus, #3b82f6);
+		outline-offset: 2px;
 	}
 
 	.loading-state {
@@ -343,14 +428,14 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		padding: 64px 24px;
-		gap: 16px;
+		padding: var(--space-16, 64px) var(--space-6, 24px);
+		gap: var(--space-4, 16px);
 	}
 
 	.spinner,
 	.spinner-large {
-		border: 3px solid #f3f4f6;
-		border-top-color: #3b82f6;
+		border: 3px solid var(--bg-secondary, #f3f4f6);
+		border-top-color: var(--brand-primary, #3b82f6);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 	}
@@ -372,34 +457,50 @@
 	}
 
 	.results-section {
-		margin-top: 32px;
+		margin-top: var(--space-8, 32px);
 	}
 
 	.results-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: 24px;
+		margin-bottom: var(--space-6, 24px);
 	}
 
 	.results-header h3 {
-		font-size: 24px;
-		font-weight: 700;
-		color: #111827;
+		font-size: var(--text-2xl, 24px);
+		font-weight: var(--font-bold, 700);
+		color: var(--text-primary, #111827);
 		margin: 0;
 	}
 
 	.results-count {
-		font-size: 14px;
-		color: #6b7280;
-		background: #f3f4f6;
-		padding: 6px 12px;
-		border-radius: 16px;
+		font-size: var(--text-sm, 14px);
+		color: var(--text-secondary, #6b7280);
+		background: var(--bg-secondary, #f3f4f6);
+		padding: var(--space-2, 6px) var(--space-3, 12px);
+		border-radius: var(--radius-full, 16px);
 	}
 
 	.results-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-		gap: 24px;
+		gap: var(--space-6, 24px);
+	}
+
+	/* Dark mode support */
+	@media (prefers-color-scheme: dark) {
+		.search-form {
+			background: var(--bg-primary-dark, #1f2937);
+			border-color: var(--border-color-dark, #374151);
+		}
+
+		.search-input,
+		.filter-group input,
+		.filter-group select {
+			background: var(--bg-primary-dark, #1f2937);
+			border-color: var(--border-color-dark, #374151);
+			color: var(--text-primary-dark, #f9fafb);
+		}
 	}
 </style>

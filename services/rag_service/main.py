@@ -164,9 +164,13 @@ class RAGService(BaseService):
             context_parts.append(f"## BẤT ĐỘNG SẢN #{i}\n")
             context_parts.append(f"- **Tiêu đề**: {prop.get('title', 'N/A')}\n")
 
-            # Price
+            # Price (handle both string and number formats from OpenSearch)
             price = prop.get('price', 0)
-            if price > 0:
+            if isinstance(price, str):
+                # Price is already formatted string from OpenSearch (e.g., "5,7 tỷ")
+                context_parts.append(f"- **Giá**: {price}\n")
+            elif isinstance(price, (int, float)) and price > 0:
+                # Price is a number, format it
                 price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
                 context_parts.append(f"- **Giá**: {price_str}\n")
 
@@ -265,7 +269,13 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
 
         for i, prop in enumerate(properties, 1):
             price = prop.get('price', 0)
-            price_str = f"{price/1_000_000_000:.1f} tỷ" if price > 0 else "Giá thỏa thuận"
+            # Handle both string and number formats from OpenSearch
+            if isinstance(price, str):
+                price_str = price  # Already formatted (e.g., "5,7 tỷ")
+            elif isinstance(price, (int, float)) and price > 0:
+                price_str = f"{price/1_000_000_000:.1f} tỷ"
+            else:
+                price_str = "Giá thỏa thuận"
 
             response_parts.append(f"{i}. **{prop.get('title', 'N/A')}**\n")
             response_parts.append(f"   - 💰 Giá: {price_str}\n")

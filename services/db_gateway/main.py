@@ -8,12 +8,16 @@ from contextlib import asynccontextmanager
 import time
 from typing import List, Optional, Dict, Any
 from opensearchpy import AsyncOpenSearch
+from sentence_transformers import SentenceTransformer
 
 from shared.models.db_gateway import SearchRequest, SearchResponse, PropertyResult, SearchFilters
 from shared.config import settings
 from shared.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
+
+# Global embedding model for semantic search
+embedding_model: Optional[SentenceTransformer] = None
 
 # Global OpenSearch client
 opensearch_client: Optional[AsyncOpenSearch] = None
@@ -27,6 +31,16 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 DB Gateway starting up (OpenSearch Mode)...")
     logger.info(f"OpenSearch: {settings.OPENSEARCH_HOST}:{settings.OPENSEARCH_PORT}")
     logger.info(f"Properties Index: {settings.OPENSEARCH_PROPERTIES_INDEX}")
+
+    # Load embedding model for semantic search
+    global embedding_model
+    try:
+        logger.info("📦 Loading sentence-transformers model for semantic search...")
+        embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+        logger.info("✅ Embedding model loaded successfully!")
+    except Exception as e:
+        logger.error(f"❌ Failed to load embedding model: {e}")
+        logger.warning("⚠️  Semantic search will not be available")
 
     # Initialize OpenSearch client
     try:
@@ -158,56 +172,69 @@ async def search_properties(request: SearchRequest):
             })
 
         # Apply filters
+        # MVP STRATEGY: Use "should" clauses instead of hard "filter" to boost relevance
+        # but not strictly require them (since property_type/price/area have data quality issues)
+        should_clauses = []
+
         if request.filters:
-            # Region/location filter
+            # Region/location filter - ADD TO QUERY TEXT for better BM25 matching
             if request.filters.region:
-                filter_clauses.append({
-                    "match": {
-                        "district": request.filters.region
+                # Enhance the query text with region info for better full-text matching
+                must_clauses.append({
+                    "multi_match": {
+                        "query": request.filters.region,
+                        "fields": ["district^2", "location", "title", "description"],
+                        "type": "best_fields",
+                        "operator": "or"
                     }
                 })
 
-            # Property type filter
+            # Property type filter - ADD TO QUERY TEXT (most property_type fields are empty)
             if request.filters.property_type:
-                filter_clauses.append({
-                    "term": {
-                        "property_type": request.filters.property_type
+                must_clauses.append({
+                    "multi_match": {
+                        "query": request.filters.property_type,
+                        "fields": ["title^3", "description"],  # Search in text, not empty field
+                        "type": "best_fields",
+                        "operator": "or"
                     }
                 })
 
-            # Price range filter
-            if request.filters.min_price or request.filters.max_price:
-                price_range = {}
-                if request.filters.min_price:
-                    price_range["gte"] = request.filters.min_price
-                if request.filters.max_price:
-                    price_range["lte"] = request.filters.max_price
-                filter_clauses.append({
-                    "range": {
-                        "price": price_range
-                    }
-                })
+            # Price range filter - COMMENTED OUT (price is text "5,77 tỷ", not number)
+            # Let RAG Service + LLM understand price from text description instead
+            # if request.filters.min_price or request.filters.max_price:
+            #     price_range = {}
+            #     if request.filters.min_price:
+            #         price_range["gte"] = request.filters.min_price
+            #     if request.filters.max_price:
+            #         price_range["lte"] = request.filters.max_price
+            #     filter_clauses.append({
+            #         "range": {
+            #             "price": price_range
+            #         }
+            #     })
 
-            # Bedrooms filter
+            # Bedrooms filter - SOFT FILTER (use "should" to boost, not require)
             if request.filters.min_bedrooms:
-                filter_clauses.append({
+                should_clauses.append({
                     "range": {
                         "bedrooms": {"gte": request.filters.min_bedrooms}
                     }
                 })
 
-            # Area filter
-            if request.filters.min_area or request.filters.max_area:
-                area_range = {}
-                if request.filters.min_area:
-                    area_range["gte"] = request.filters.min_area
-                if request.filters.max_area:
-                    area_range["lte"] = request.filters.max_area
-                filter_clauses.append({
-                    "range": {
-                        "area": area_range
-                    }
-                })
+            # Area filter - COMMENTED OUT (area is text "60 m²", not number)
+            # Let RAG Service + LLM understand area from text description instead
+            # if request.filters.min_area or request.filters.max_area:
+            #     area_range = {}
+            #     if request.filters.min_area:
+            #         area_range["gte"] = request.filters.min_area
+            #     if request.filters.max_area:
+            #         area_range["lte"] = request.filters.max_area
+            #     filter_clauses.append({
+            #         "range": {
+            #             "area": area_range
+            #         }
+            #     })
 
         # Build the complete query
         search_body = {
@@ -235,15 +262,30 @@ async def search_properties(request: SearchRequest):
         for hit in response['hits']['hits']:
             source = hit['_source']
 
+            # Extract values with flexible typing (keep strings as-is from OpenSearch)
+            bedrooms = source.get('bedrooms', 0)
+            if isinstance(bedrooms, str):
+                try:
+                    bedrooms = int(bedrooms)
+                except:
+                    bedrooms = 0
+
+            bathrooms = source.get('bathrooms', 0)
+            if isinstance(bathrooms, str):
+                try:
+                    bathrooms = int(bathrooms)
+                except:
+                    bathrooms = 0
+
             results.append(PropertyResult(
                 property_id=source.get('property_id', hit['_id']),
                 title=source.get('title', ''),
-                price=float(source.get('price', 0)),
+                price=source.get('price', 0),  # Keep as-is (string or number)
                 description=source.get('description', ''),
                 property_type=source.get('property_type', ''),
-                bedrooms=int(source.get('bedrooms', 0)),
-                bathrooms=int(source.get('bathrooms', 0)),
-                area=float(source.get('area', 0)),
+                bedrooms=bedrooms,
+                bathrooms=bathrooms,
+                area=source.get('area', 0),  # Keep as-is (string or number)
                 district=source.get('district', ''),
                 city=source.get('city', ''),
                 score=float(hit['_score'])
@@ -263,6 +305,134 @@ async def search_properties(request: SearchRequest):
     except Exception as e:
         logger.error(f"❌ Search failed: {e}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@app.post("/vector-search", response_model=SearchResponse)
+async def vector_search_properties(request: SearchRequest):
+    """
+    Semantic search using vector embeddings and k-NN similarity
+    Best for vague/descriptive queries like 'yên tĩnh', 'gần trường quốc tế', 'view đẹp'
+    """
+    start_time = time.time()
+
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    if not embedding_model:
+        raise HTTPException(status_code=503, detail="Embedding model not loaded. Semantic search unavailable.")
+
+    try:
+        logger.info(f"🔍 Vector Search Request: query='{request.query}'")
+
+        # Generate embedding for query
+        query_embedding = embedding_model.encode(request.query, convert_to_numpy=True)
+
+        # Build k-NN search query
+        search_body = {
+            "size": request.limit,
+            "query": {
+                "knn": {
+                    "embedding": {
+                        "vector": query_embedding.tolist(),
+                        "k": request.limit * 2  # Retrieve more candidates for better results
+                    }
+                }
+            }
+        }
+
+        # Add filters if provided (combine with k-NN using bool query)
+        if request.filters:
+            filter_clauses = []
+
+            # District filter
+            if request.filters.region:
+                filter_clauses.append({
+                    "multi_match": {
+                        "query": request.filters.region,
+                        "fields": ["district", "location"]
+                    }
+                })
+
+            # Property type filter
+            if request.filters.property_type:
+                filter_clauses.append({
+                    "multi_match": {
+                        "query": request.filters.property_type,
+                        "fields": ["title", "description"]
+                    }
+                })
+
+            # Bedrooms filter
+            if request.filters.min_bedrooms:
+                filter_clauses.append({
+                    "range": {
+                        "bedrooms": {"gte": request.filters.min_bedrooms}
+                    }
+                })
+
+            # If we have filters, combine with k-NN using bool query
+            if filter_clauses:
+                search_body["query"] = {
+                    "bool": {
+                        "must": [search_body["query"]],  # k-NN as must clause
+                        "filter": filter_clauses
+                    }
+                }
+
+        # Execute vector search on properties_vector index
+        response = await opensearch_client.search(
+            index="properties_vector",  # Use vector index with embeddings
+            body=search_body
+        )
+
+        # Convert results to PropertyResult objects
+        results = []
+        for hit in response['hits']['hits']:
+            source = hit['_source']
+
+            # Extract values with flexible typing
+            bedrooms = source.get('bedrooms', 0)
+            if isinstance(bedrooms, str):
+                try:
+                    bedrooms = int(bedrooms)
+                except:
+                    bedrooms = 0
+
+            bathrooms = source.get('bathrooms', 0)
+            if isinstance(bathrooms, str):
+                try:
+                    bathrooms = int(bathrooms)
+                except:
+                    bathrooms = 0
+
+            results.append(PropertyResult(
+                property_id=source.get('property_id', hit['_id']),
+                title=source.get('title', ''),
+                price=source.get('price', 0),
+                description=source.get('description', ''),
+                property_type=source.get('property_type', ''),
+                bedrooms=bedrooms,
+                bathrooms=bathrooms,
+                area=source.get('area', 0),
+                district=source.get('district', ''),
+                city=source.get('city', ''),
+                score=float(hit['_score'])
+            ))
+
+        execution_time = (time.time() - start_time) * 1000
+        total_hits = response['hits']['total']['value'] if isinstance(response['hits']['total'], dict) else response['hits']['total']
+
+        logger.info(f"✅ Vector search completed: {len(results)} results (total: {total_hits}) in {execution_time:.2f}ms")
+
+        return SearchResponse(
+            results=results,
+            total=total_hits,
+            execution_time_ms=execution_time
+        )
+
+    except Exception as e:
+        logger.error(f"❌ Vector search failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Vector search failed: {str(e)}")
 
 
 @app.get("/properties/{property_id}")

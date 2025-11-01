@@ -11,10 +11,10 @@ COPY core/ ./core/
 COPY shared/ ./shared/
 
 # Copy service code
-COPY services/attribute_extraction/ ./services/attribute_extraction/
+COPY services/classification/ ./services/classification/
 
 # Set Python path
 ENV PYTHONPATH=/app
 
 # Run service
-CMD ["python", "-m", "services.attribute_extraction.main"]
+CMD ["python", "-m", "services.classification.main"]

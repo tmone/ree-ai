@@ -1,224 +1,209 @@
 """
-Classification Service - CTO Service #5
-3 modes: filter / semantic / both
+Classification Service - Layer 3
+Classifies user queries into filter/semantic/both modes using LLM
 """
-from typing import Dict, Any, List
-from enum import Enum
-from pydantic import BaseModel
 import httpx
+from typing import List, Dict, Optional
+from pydantic import BaseModel
+from fastapi import HTTPException
 
 from core.base_service import BaseService
 from shared.models.core_gateway import LLMRequest, Message, ModelType
+from shared.config import settings
 from shared.utils.logger import LogEmoji
 
 
-class ClassificationMode(str, Enum):
-    FILTER = "filter"
-    SEMANTIC = "semantic"
-    BOTH = "both"
+class ClassifyRequest(BaseModel):
+    """Request to classify query"""
+    query: str
+    context: Optional[List[Dict]] = None  # Optional conversation history
 
 
-class PropertyType(str, Enum):
-    HOUSE = "house"
-    APARTMENT = "apartment"
-    VILLA = "villa"
-    LAND = "land"
-    COMMERCIAL = "commercial"
-    UNKNOWN = "unknown"
-
-
-class ClassificationRequest(BaseModel):
-    text: str
-    mode: ClassificationMode = ClassificationMode.BOTH
-
-
-class ClassificationResult(BaseModel):
-    property_type: PropertyType
-    confidence: float
-    mode_used: ClassificationMode
-    filter_result: PropertyType = None
-    semantic_result: PropertyType = None
+class ClassifyResponse(BaseModel):
+    """Response from classification"""
+    mode: str  # "filter" | "semantic" | "both"
+    confidence: float  # 0.0 - 1.0
+    reasoning: str  # Why this classification was chosen
 
 
 class ClassificationService(BaseService):
     """
-    Classification Service - CTO Service #5
+    Classification Service - Intelligent query type detection
 
-    3 Modes:
-    - filter: Rule-based keyword matching
-    - semantic: LLM-based semantic understanding
-    - both: Combine filter + semantic
+    Classifies real estate queries into:
+    - filter: Structured attributes (price, bedrooms, location)
+    - semantic: Vague/descriptive (beautiful, quiet, near school)
+    - both: Mix of structured + semantic
     """
 
     def __init__(self):
         super().__init__(
-            name="classification",
+            name="classification_service",
             version="1.0.0",
-            capabilities=["property_classification", "filter", "semantic"],
-            port=8102
+            capabilities=["query_classification", "intent_detection"],
+            port=8080
         )
 
         self.http_client = httpx.AsyncClient(timeout=30.0)
+        self.core_gateway_url = settings.get_core_gateway_url()
 
-        # Keyword filters for each property type
-        self.keywords = {
-            PropertyType.HOUSE: ["nhà", "nhà riêng", "nhà phố", "house"],
-            PropertyType.APARTMENT: ["căn hộ", "chung cư", "apartment", "condo"],
-            PropertyType.VILLA: ["biệt thự", "villa"],
-            PropertyType.LAND: ["đất", "land", "lô đất"],
-            PropertyType.COMMERCIAL: ["văn phòng", "office", "commercial", "mặt bằng kinh doanh"]
-        }
+        self.logger.info(f"{LogEmoji.INFO} Core Gateway: {self.core_gateway_url}")
 
     def setup_routes(self):
-        """Setup Classification API routes"""
+        """Setup classification API routes"""
 
-        @self.app.post("/classify", response_model=ClassificationResult)
-        async def classify(request: ClassificationRequest):
+        @self.app.post("/classify", response_model=ClassifyResponse)
+        async def classify_query(request: ClassifyRequest):
             """
-            Classify property type using 3 modes
+            Classify query type using LLM
 
-            Modes:
-            - filter: Fast keyword-based classification
-            - semantic: LLM-based semantic classification
-            - both: Combine both methods (recommended)
+            Returns:
+            - filter: Query has clear structured attributes
+            - semantic: Query is vague/descriptive
+            - both: Query has mix of both
             """
-            result = await self.classify_property(request.text, request.mode)
-            return result
+            try:
+                self.logger.info(f"{LogEmoji.TARGET} Classifying query: '{request.query}'")
 
-    async def classify_property(
-        self,
-        text: str,
-        mode: ClassificationMode = ClassificationMode.BOTH
-    ) -> ClassificationResult:
-        """
-        Classify property type
+                # Build smart prompt for LLM
+                system_prompt = """You are an expert at classifying real estate search queries.
 
-        Args:
-            text: Property description
-            mode: Classification mode (filter/semantic/both)
+Your task: Classify the query into ONE of these categories:
 
-        Returns:
-            ClassificationResult with property type and confidence
-        """
+1. **filter** - Query contains CLEAR structured attributes:
+   - Specific price ("3 tỷ", "5-7 tỷ", "dưới 10 tỷ")
+   - Number of bedrooms/bathrooms ("2PN", "3 phòng ngủ")
+   - Specific location ("quận 2", "Thảo Điền", "gần trung tâm")
+   - Property type ("căn hộ", "biệt thự", "nhà phố")
 
-        if mode == ClassificationMode.FILTER:
-            # Mode 1: Filter only
-            property_type = self._classify_by_filter(text)
-            return ClassificationResult(
-                property_type=property_type,
-                confidence=0.7 if property_type != PropertyType.UNKNOWN else 0.3,
-                mode_used=ClassificationMode.FILTER,
-                filter_result=property_type
-            )
+2. **semantic** - Query is VAGUE or DESCRIPTIVE:
+   - Aesthetic qualities ("đẹp", "sang trọng", "hiện đại")
+   - Feelings/atmosphere ("yên tĩnh", "sầm uất", "thoáng mát")
+   - Nearby amenities (vague: "gần trường học", "gần siêu thị")
+   - Lifestyle preferences ("phù hợp gia đình", "cho người trẻ")
 
-        elif mode == ClassificationMode.SEMANTIC:
-            # Mode 2: Semantic only
-            property_type, confidence = await self._classify_by_semantic(text)
-            return ClassificationResult(
-                property_type=property_type,
-                confidence=confidence,
-                mode_used=ClassificationMode.SEMANTIC,
-                semantic_result=property_type
-            )
+3. **both** - Query has BOTH structured AND semantic:
+   - "Căn hộ 2PN ở quận 2, view đẹp" (structured: 2PN, quận 2 | semantic: view đẹp)
+   - "Nhà giá 5 tỷ, yên tĩnh" (structured: price | semantic: quiet)
 
-        else:  # Mode 3: BOTH
-            # Combine filter and semantic
-            filter_result = self._classify_by_filter(text)
-            semantic_result, semantic_confidence = await self._classify_by_semantic(text)
+IMPORTANT:
+- Respond in JSON format ONLY
+- Be strict: if query has even ONE semantic element → classify as "both" (not "filter")
+- Default to "semantic" if unclear
 
-            # Decision logic: Trust semantic if confidence high, else use filter
-            if semantic_confidence > 0.8:
-                final_type = semantic_result
-                final_confidence = semantic_confidence
-            elif filter_result != PropertyType.UNKNOWN:
-                final_type = filter_result
-                final_confidence = 0.75
-            else:
-                final_type = semantic_result
-                final_confidence = semantic_confidence
+Response format:
+{
+  "mode": "filter" | "semantic" | "both",
+  "confidence": 0.9,
+  "reasoning": "Brief explanation in Vietnamese"
+}"""
 
-            return ClassificationResult(
-                property_type=final_type,
-                confidence=final_confidence,
-                mode_used=ClassificationMode.BOTH,
-                filter_result=filter_result,
-                semantic_result=semantic_result
-            )
+                user_prompt = f"""Classify this Vietnamese real estate query:
 
-    def _classify_by_filter(self, text: str) -> PropertyType:
-        """
-        Mode 1: Filter - Rule-based keyword matching
+Query: "{request.query}"
 
-        Fast but less accurate for ambiguous cases
-        """
-        text_lower = text.lower()
+Context: {request.context if request.context else "No previous context"}
 
-        # Count keyword matches for each type
-        scores = {}
-        for prop_type, keywords in self.keywords.items():
-            score = sum(1 for keyword in keywords if keyword in text_lower)
-            scores[prop_type] = score
+Respond with JSON only."""
 
-        # Return type with highest score
-        if max(scores.values()) > 0:
-            return max(scores, key=scores.get)
-        else:
-            return PropertyType.UNKNOWN
+                # Call Core Gateway (LLM)
+                llm_request = LLMRequest(
+                    model=ModelType.GPT4_MINI,
+                    messages=[
+                        Message(role="system", content=system_prompt),
+                        Message(role="user", content=user_prompt)
+                    ],
+                    temperature=0.1,  # Low temperature for consistent classification
+                    max_tokens=200
+                )
 
-    async def _classify_by_semantic(self, text: str) -> tuple[PropertyType, float]:
-        """
-        Mode 2: Semantic - LLM-based semantic understanding
+                response = await self.http_client.post(
+                    f"{self.core_gateway_url}/chat/completions",
+                    json=llm_request.dict()
+                )
 
-        More accurate but slower
-        """
-        try:
-            # Call Core Gateway for LLM classification
-            llm_request = LLMRequest(
-                model=ModelType.GPT4_MINI,
-                messages=[
-                    Message(
-                        role="system",
-                        content="""Bạn là chuyên gia phân loại bất động sản.
-Phân loại property vào 1 trong các loại sau:
-- house: Nhà riêng, nhà phố
-- apartment: Căn hộ, chung cư
-- villa: Biệt thự
-- land: Đất, lô đất
-- commercial: Văn phòng, mặt bằng kinh doanh
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=response.status_code,
+                        detail=f"Core Gateway error: {response.text}"
+                    )
 
-Trả về JSON: {"type": "...", "confidence": 0.95}"""
-                    ),
-                    Message(role="user", content=f"Phân loại: {text}")
-                ],
-                max_tokens=50,
-                temperature=0.3
-            )
-
-            # Make request to Core Gateway
-            response = await self.http_client.post(
-                "http://localhost:8080/chat/completions",
-                json=llm_request.dict()
-            )
-
-            if response.status_code == 200:
                 data = response.json()
-                content = data.get("content", "")
+                content = data.get("content", "").strip()
 
                 # Parse JSON response
                 import json
                 try:
+                    # Remove markdown code blocks if present
+                    if content.startswith("```"):
+                        content = content.split("```")[1]
+                        if content.startswith("json"):
+                            content = content[4:]
+                        content = content.strip()
+
                     result = json.loads(content)
-                    prop_type = PropertyType(result.get("type", "unknown"))
-                    confidence = float(result.get("confidence", 0.5))
-                    return prop_type, confidence
-                except:
-                    pass
 
-        except Exception as e:
-            self.logger.error(f"{LogEmoji.ERROR} Semantic classification error: {e}")
+                    mode = result.get("mode", "semantic")
+                    confidence = result.get("confidence", 0.7)
+                    reasoning = result.get("reasoning", "")
 
-        # Fallback
-        return PropertyType.UNKNOWN, 0.5
+                    # Validate mode
+                    if mode not in ["filter", "semantic", "both"]:
+                        self.logger.warning(f"{LogEmoji.WARNING} Invalid mode '{mode}', defaulting to 'semantic'")
+                        mode = "semantic"
+                        confidence = 0.5
+
+                    self.logger.info(f"{LogEmoji.SUCCESS} Classification: {mode} (confidence: {confidence:.2f})")
+                    self.logger.info(f"{LogEmoji.INFO} Reasoning: {reasoning}")
+
+                    return ClassifyResponse(
+                        mode=mode,
+                        confidence=confidence,
+                        reasoning=reasoning
+                    )
+
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"{LogEmoji.ERROR} Failed to parse LLM response: {content}")
+                    # Fallback: simple heuristic
+                    mode = self._fallback_classification(request.query)
+                    return ClassifyResponse(
+                        mode=mode,
+                        confidence=0.5,
+                        reasoning="Fallback classification (LLM parse error)"
+                    )
+
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Classification failed: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+    def _fallback_classification(self, query: str) -> str:
+        """Simple heuristic fallback if LLM fails"""
+        query_lower = query.lower()
+
+        # Check for structured keywords
+        structured_keywords = [
+            "pn", "phòng ngủ", "bedroom",
+            "tỷ", "triệu", "vnd",
+            "quận", "district", "phường",
+            "căn hộ", "nhà phố", "biệt thự"
+        ]
+
+        # Check for semantic keywords
+        semantic_keywords = [
+            "đẹp", "sang", "hiện đại", "cổ điển",
+            "yên tĩnh", "sầm uất", "thoáng",
+            "gần", "view", "tiện ích"
+        ]
+
+        has_structured = any(kw in query_lower for kw in structured_keywords)
+        has_semantic = any(kw in query_lower for kw in semantic_keywords)
+
+        if has_structured and has_semantic:
+            return "both"
+        elif has_structured:
+            return "filter"
+        else:
+            return "semantic"
 
     async def on_shutdown(self):
         """Cleanup on shutdown"""

@@ -39,7 +39,7 @@ class AttributeExtractionService(BaseService):
             name="attribute_extraction",
             version="1.0.0",
             capabilities=["entity_extraction", "attribute_extraction", "query_parsing"],
-            port=8084
+            port=8080
         )
 
         self.http_client = httpx.AsyncClient(timeout=60.0)

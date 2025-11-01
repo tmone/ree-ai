@@ -9,6 +9,7 @@ import json
 
 from core.base_service import BaseService
 from shared.utils.logger import LogEmoji
+from shared.utils.data_normalizer import normalize_property_data
 
 # Crawl4AI imports (0.3.x version)
 try:
@@ -233,9 +234,12 @@ class RealEstateCrawler(BaseService):
                             "source": "batdongsan.com.vn"
                         }
 
+                        # Normalize data for consistent format
+                        normalized_data = normalize_property_data(property_data)
+
                         count += 1
                         self.crawled_count += 1
-                        yield property_data
+                        yield normalized_data
 
                     except Exception as e:
                         self.logger.warning(f"{LogEmoji.WARNING} Error parsing property item: {e}")
@@ -289,7 +293,7 @@ class RealEstateCrawler(BaseService):
         properties = []
 
         for i in range(count):
-            properties.append({
+            raw_data = {
                 "title": f"Nhà mặt tiền Quận {(i % 12) + 1}, TP.HCM",
                 "price": f"{(i + 1) * 2} tỷ",
                 "location": f"Quận {(i % 12) + 1}, TP. Hồ Chí Minh",
@@ -301,7 +305,11 @@ class RealEstateCrawler(BaseService):
                               f"Gần trường học, chợ, bệnh viện. Nhà mới xây, nội thất đẹp.",
                 "url": f"https://batdongsan.com.vn/nha-{i}",
                 "source": "batdongsan.com.vn"
-            })
+            }
+
+            # Normalize data for consistent format
+            normalized = normalize_property_data(raw_data)
+            properties.append(normalized)
 
         return properties
 
@@ -310,7 +318,7 @@ class RealEstateCrawler(BaseService):
         properties = []
 
         for i in range(count):
-            properties.append({
+            raw_data = {
                 "title": f"Căn hộ chung cư {(i % 5) + 1} phòng ngủ",
                 "price": f"{(i + 1) * 1.5} tỷ",
                 "location": f"Quận {(i % 12) + 1}, TP. Hồ Chí Minh",
@@ -322,7 +330,11 @@ class RealEstateCrawler(BaseService):
                               f"Giá {(i + 1) * 1.5} tỷ VNĐ.",
                 "url": f"https://nhatot.com/property-{i}",
                 "source": "nhatot.com"
-            })
+            }
+
+            # Normalize data for consistent format
+            normalized = normalize_property_data(raw_data)
+            properties.append(normalized)
 
         return properties
 

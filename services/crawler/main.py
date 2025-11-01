@@ -6,9 +6,12 @@ import asyncio
 from typing import AsyncGenerator, Dict, Any, List
 from pydantic import BaseModel
 import json
+import httpx
 
 from core.base_service import BaseService
 from shared.utils.logger import LogEmoji
+from shared.utils.data_normalizer import normalize_property_data
+from shared.config import settings
 
 # Crawl4AI imports (0.3.x version)
 try:
@@ -48,6 +51,8 @@ class RealEstateCrawler(BaseService):
             port=8100
         )
         self.crawled_count = 0
+        self.http_client = httpx.AsyncClient(timeout=60.0)
+        self.db_gateway_url = settings.get_db_gateway_url()
 
     def setup_routes(self):
         """Setup Crawler API routes"""
@@ -81,7 +86,8 @@ class RealEstateCrawler(BaseService):
         @self.app.post("/crawl/bulk")
         async def crawl_bulk(
             total: int = 1000,
-            sites: str = None  # comma-separated: "batdongsan,nhatot"
+            sites: str = None,  # comma-separated: "batdongsan,nhatot"
+            auto_index: bool = True  # Auto-index to OpenSearch after crawling
         ):
             """
             Bulk crawl properties with parallel workers and rate limiting
@@ -89,9 +95,10 @@ class RealEstateCrawler(BaseService):
             Args:
                 total: Total number of properties to crawl (max 10000)
                 sites: Comma-separated site names (default: all sites)
+                auto_index: Automatically index to OpenSearch (default: True)
 
             Example:
-                POST /crawl/bulk?total=5000&sites=batdongsan
+                POST /crawl/bulk?total=5000&sites=batdongsan&auto_index=true
             """
             import sys
             import os
@@ -113,9 +120,17 @@ class RealEstateCrawler(BaseService):
 
                 self.crawled_count += len(properties)
 
+                # Auto-index to OpenSearch if enabled
+                indexed_count = 0
+                if auto_index and properties:
+                    self.logger.info(f"{LogEmoji.DATABASE} Auto-indexing {len(properties)} properties to OpenSearch...")
+                    indexed_count = await self._index_to_opensearch(properties)
+                    self.logger.info(f"{LogEmoji.SUCCESS} Indexed {indexed_count}/{len(properties)} properties")
+
                 return {
                     "success": True,
                     "count": len(properties),
+                    "indexed_count": indexed_count if auto_index else None,
                     "total_requested": total,
                     "sites": site_list or ["all"],
                     "properties": properties
@@ -127,6 +142,7 @@ class RealEstateCrawler(BaseService):
                     "success": False,
                     "error": str(e),
                     "count": 0,
+                    "indexed_count": 0,
                     "properties": []
                 }
 
@@ -233,9 +249,12 @@ class RealEstateCrawler(BaseService):
                             "source": "batdongsan.com.vn"
                         }
 
+                        # Normalize data for consistent format
+                        normalized_data = normalize_property_data(property_data)
+
                         count += 1
                         self.crawled_count += 1
-                        yield property_data
+                        yield normalized_data
 
                     except Exception as e:
                         self.logger.warning(f"{LogEmoji.WARNING} Error parsing property item: {e}")
@@ -289,7 +308,7 @@ class RealEstateCrawler(BaseService):
         properties = []
 
         for i in range(count):
-            properties.append({
+            raw_data = {
                 "title": f"Nhà mặt tiền Quận {(i % 12) + 1}, TP.HCM",
                 "price": f"{(i + 1) * 2} tỷ",
                 "location": f"Quận {(i % 12) + 1}, TP. Hồ Chí Minh",
@@ -301,7 +320,11 @@ class RealEstateCrawler(BaseService):
                               f"Gần trường học, chợ, bệnh viện. Nhà mới xây, nội thất đẹp.",
                 "url": f"https://batdongsan.com.vn/nha-{i}",
                 "source": "batdongsan.com.vn"
-            })
+            }
+
+            # Normalize data for consistent format
+            normalized = normalize_property_data(raw_data)
+            properties.append(normalized)
 
         return properties
 
@@ -310,7 +333,7 @@ class RealEstateCrawler(BaseService):
         properties = []
 
         for i in range(count):
-            properties.append({
+            raw_data = {
                 "title": f"Căn hộ chung cư {(i % 5) + 1} phòng ngủ",
                 "price": f"{(i + 1) * 1.5} tỷ",
                 "location": f"Quận {(i % 12) + 1}, TP. Hồ Chí Minh",
@@ -322,9 +345,52 @@ class RealEstateCrawler(BaseService):
                               f"Giá {(i + 1) * 1.5} tỷ VNĐ.",
                 "url": f"https://nhatot.com/property-{i}",
                 "source": "nhatot.com"
-            })
+            }
+
+            # Normalize data for consistent format
+            normalized = normalize_property_data(raw_data)
+            properties.append(normalized)
 
         return properties
+
+    async def _index_to_opensearch(self, properties: List[Dict[str, Any]]) -> int:
+        """
+        Index crawled properties to OpenSearch via DB Gateway
+
+        Args:
+            properties: List of normalized property dictionaries
+
+        Returns:
+            Number of successfully indexed properties
+        """
+        try:
+            response = await self.http_client.post(
+                f"{self.db_gateway_url}/bulk-insert",
+                json=properties,
+                timeout=120.0  # Longer timeout for bulk insert
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                indexed_count = result.get('indexed_count', 0)
+                failed_count = result.get('failed_count', 0)
+
+                if failed_count > 0:
+                    self.logger.warning(f"{LogEmoji.WARNING} {failed_count} properties failed to index")
+
+                return indexed_count
+            else:
+                self.logger.error(f"{LogEmoji.ERROR} DB Gateway returned {response.status_code}: {response.text}")
+                return 0
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to index to OpenSearch: {e}")
+            return 0
+
+    async def on_shutdown(self):
+        """Cleanup on shutdown"""
+        await self.http_client.aclose()
+        await super().on_shutdown()
 
 
 if __name__ == "__main__":

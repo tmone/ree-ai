@@ -164,20 +164,30 @@ class RAGService(BaseService):
             context_parts.append(f"## BẤT ĐỘNG SẢN #{i}\n")
             context_parts.append(f"- **Tiêu đề**: {prop.get('title', 'N/A')}\n")
 
-            # Price (handle both string and number formats from OpenSearch)
-            price = prop.get('price', 0)
-            if isinstance(price, str):
-                # Price is already formatted string from OpenSearch (e.g., "5,7 tỷ")
-                context_parts.append(f"- **Giá**: {price}\n")
-            elif isinstance(price, (int, float)) and price > 0:
-                # Price is a number, format it
-                price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
-                context_parts.append(f"- **Giá**: {price_str}\n")
+            # Price - use price_display if available (normalized format)
+            price_display = prop.get('price_display')
+            if price_display:
+                context_parts.append(f"- **Giá**: {price_display}\n")
+            else:
+                # Fallback to old logic for backward compatibility
+                price = prop.get('price', 0)
+                if isinstance(price, str):
+                    context_parts.append(f"- **Giá**: {price}\n")
+                elif isinstance(price, (int, float)) and price > 0:
+                    price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
+                    context_parts.append(f"- **Giá**: {price_str}\n")
 
-            # Location
-            district = prop.get('district', 'N/A')
+            # Location - use city/district if available
+            city = prop.get('city', '')
+            district = prop.get('district', '')
             ward = prop.get('ward', '')
-            location_str = f"{ward}, {district}" if ward else district
+
+            if district or city:
+                location_parts = [p for p in [ward, district, city] if p]
+                location_str = ', '.join(location_parts)
+            else:
+                location_str = prop.get('location', 'N/A')
+
             context_parts.append(f"- **Vị trí**: {location_str}\n")
 
             # Attributes
@@ -185,8 +195,15 @@ class RAGService(BaseService):
                 context_parts.append(f"- **Phòng ngủ**: {prop['bedrooms']}\n")
             if prop.get('bathrooms'):
                 context_parts.append(f"- **Phòng tắm**: {prop['bathrooms']}\n")
-            if prop.get('area'):
-                context_parts.append(f"- **Diện tích**: {prop['area']} m²\n")
+
+            # Area - use area_display if available (normalized format)
+            area_display = prop.get('area_display')
+            if area_display:
+                context_parts.append(f"- **Diện tích**: {area_display}\n")
+            elif prop.get('area'):
+                area = prop['area']
+                area_str = f"{area} m²" if isinstance(area, (int, float)) else str(area)
+                context_parts.append(f"- **Diện tích**: {area_str}\n")
 
             # Description excerpt
             if prop.get('description'):
@@ -268,23 +285,36 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
         response_parts = [f"Tôi đã tìm thấy {len(properties)} bất động sản phù hợp:\n\n"]
 
         for i, prop in enumerate(properties, 1):
-            price = prop.get('price', 0)
-            # Handle both string and number formats from OpenSearch
-            if isinstance(price, str):
-                price_str = price  # Already formatted (e.g., "5,7 tỷ")
-            elif isinstance(price, (int, float)) and price > 0:
-                price_str = f"{price/1_000_000_000:.1f} tỷ"
-            else:
-                price_str = "Giá thỏa thuận"
+            # Use price_display if available (normalized format)
+            price_str = prop.get('price_display')
+            if not price_str:
+                # Fallback to old logic
+                price = prop.get('price', 0)
+                if isinstance(price, str):
+                    price_str = price
+                elif isinstance(price, (int, float)) and price > 0:
+                    price_str = f"{price/1_000_000_000:.1f} tỷ"
+                else:
+                    price_str = "Giá thỏa thuận"
+
+            # Use district/city if available
+            location_str = prop.get('district', prop.get('location', 'N/A'))
 
             response_parts.append(f"{i}. **{prop.get('title', 'N/A')}**\n")
             response_parts.append(f"   - 💰 Giá: {price_str}\n")
-            response_parts.append(f"   - 📍 Vị trí: {prop.get('district', 'N/A')}\n")
+            response_parts.append(f"   - 📍 Vị trí: {location_str}\n")
 
             if prop.get('bedrooms'):
                 response_parts.append(f"   - 🛏️ {prop['bedrooms']} phòng ngủ\n")
-            if prop.get('area'):
-                response_parts.append(f"   - 📏 Diện tích: {prop['area']} m²\n")
+
+            # Use area_display if available (normalized format)
+            area_str = prop.get('area_display')
+            if not area_str and prop.get('area'):
+                area = prop['area']
+                area_str = f"{area} m²" if isinstance(area, (int, float)) else str(area)
+
+            if area_str:
+                response_parts.append(f"   - 📏 Diện tích: {area_str}\n")
 
             response_parts.append("\n")
 

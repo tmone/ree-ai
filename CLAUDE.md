@@ -6,12 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 REE AI is a **production-ready microservices platform** for AI-powered real estate applications. The platform features a 7-layer architecture with 18+ services, integrating LangChain, Open WebUI, RAG pipelines, and multiple LLM providers (OpenAI, Ollama).
 
+### Project Mission & Core Value Proposition
+
+**THE PROBLEM:** Traditional real estate platforms struggle with **inflexible data schemas**. Properties have countless, non-standardized attributes (features, amenities, location benefits) that cannot be captured in rigid database tables. This makes accurate, intelligent search nearly impossible.
+
+**OUR SOLUTION:** REE AI uses **flexible document storage (OpenSearch)** combined with **AI-powered RAG (Retrieval-Augmented Generation)** to:
+1. Store properties as flexible JSON documents with unlimited attributes
+2. Use vector embeddings + BM25 hybrid search for semantic understanding
+3. Let AI understand and respond to natural language queries directly
+4. Provide personalized, context-aware property recommendations
+
+**CRITICAL DESIGN DECISION:**
+- **OpenSearch**: Stores ALL property data (flexible schema, vector search, full-text search)
+- **PostgreSQL**: Stores ONLY user data, conversations, and chat history (structured relational data)
+- **Why?** Properties have infinite variations. AI needs flexible data to understand context, not rigid columns.
+
 **Key Architecture Principles:**
 - Microservices communicate via REST APIs
 - Feature flags enable mock→real transitions for parallel development
 - Type-safe Pydantic models define API contracts across services
 - BaseService class provides service registration, health checks, and logging
 - Service Registry enables dynamic service discovery
+- **Flexible data storage enables AI understanding** (core differentiator)
 
 ## Essential Commands
 
@@ -82,14 +98,24 @@ docker-compose up [service-name]
 ### Database Operations
 
 ```bash
-# Access PostgreSQL
+# Access OpenSearch (PRIMARY - Property Data)
+curl http://localhost:9200                           # Health check
+curl http://localhost:9200/_cat/indices?v            # List indices
+curl http://localhost:9200/properties/_search        # Search properties
+curl http://localhost:9200/properties/_count         # Count properties
+
+# Access PostgreSQL (SECONDARY - Users & Conversations ONLY)
 docker exec -it ree-ai-postgres psql -U ree_ai_user -d ree_ai
+# Inside psql:
+# \dt                                                # List tables (users, conversations, messages)
+# SELECT COUNT(*) FROM users;                        # Count users
+# SELECT * FROM conversations LIMIT 10;              # View conversations
 
-# Access Redis
+# Access Redis (Caching)
 docker exec -it ree-ai-redis redis-cli
-
-# Access OpenSearch
-curl http://localhost:9200
+# Inside redis-cli:
+# KEYS *                                             # List all keys
+# GET user:session:abc123                            # Get cached value
 ```
 
 ## Architecture Overview
@@ -118,9 +144,9 @@ Layer 3: AI Services
 
 Layer 4: Storage
   - DB Gateway (port 8081) - Abstracts database operations
-  - PostgreSQL (port 5432)
-  - OpenSearch (port 9200) - Vector + BM25 search
-  - Redis (port 6379)
+  - OpenSearch (port 9200) - PRIMARY: All property data (flexible JSON, vector + BM25 search)
+  - PostgreSQL (port 5432) - SECONDARY: Users, conversations, chat history only
+  - Redis (port 6379) - Caching layer
 
 Layer 5: LLM Gateway
   - Core Gateway (port 8080) - LiteLLM routing to Ollama/OpenAI
@@ -128,6 +154,73 @@ Layer 5: LLM Gateway
 Layer 6: RAG
   - RAG Service (port 8091) - Full retrieval-augmented generation pipeline
 ```
+
+### Data Architecture: Why OpenSearch for Properties
+
+**THE CORE INSIGHT:** Real estate properties have **infinite, non-standardized attributes** that cannot be captured in rigid database schemas.
+
+**Examples of Property Diversity:**
+
+| Property Type | Unique Attributes |
+|---------------|-------------------|
+| **Căn hộ** (Apartment) | Pool, gym, 24/7 security, view (city/river), balcony direction |
+| **Biệt thự** (Villa) | Private garden, wine cellar, home theater, garage capacity, rooftop terrace |
+| **Nhà phố** (Townhouse) | Street frontage width, number of floors, alley width, parking space |
+| **Đất** (Land) | Zoning classification, development potential, utility connections |
+
+**The Problem with Rigid Schemas:**
+```python
+# ❌ WRONG APPROACH - Cannot capture all variations
+CREATE TABLE properties (
+    bedrooms INT,        # What about studio apartments?
+    pool BOOLEAN,        # What about villa-specific attributes?
+    garden_size FLOAT    # What about apartments that don't have gardens?
+)
+```
+
+**Our Solution: OpenSearch with Flexible JSON**
+```json
+{
+  "property_id": "123",
+  "property_type": "biệt thự",
+  "title": "Biệt thự Phú Mỹ Hưng",
+  "price": 15000000000,
+  "district": "Quận 7",
+  "bedrooms": 5,
+  "bathrooms": 6,
+  "area": 300,
+  "private_garden": "200m²",
+  "wine_cellar": true,
+  "rooftop_terrace": "Sky garden with BBQ area",
+  "smart_home": "Full Lutron system",
+  "security": "24/7 armed guards + biometric",
+  "any_other_attribute": "Flexible structure allows unlimited fields"
+}
+```
+
+**Storage Strategy:**
+
+1. **OpenSearch** (PRIMARY for ALL properties):
+   - Flexible JSON documents - add ANY attribute without schema changes
+   - Vector embeddings for semantic search ("tìm nhà gần trường quốc tế")
+   - BM25 full-text search for keyword matching
+   - Hybrid search combines both for best results
+   - No rigid schema = AI can understand natural variations
+
+2. **PostgreSQL** (SECONDARY for structured data ONLY):
+   - User accounts (email, password hash, registration date)
+   - Conversation history (user_id, conversation_id, timestamp)
+   - Chat messages (message_id, user_id, content, created_at)
+   - System configuration (feature flags, service settings)
+
+3. **Redis** (Caching layer):
+   - User session tokens
+   - Frequently accessed property listings
+   - Search result caching
+   - Rate limiting counters
+
+**Why This Matters:**
+This flexible architecture is the **CORE VALUE PROPOSITION** of REE AI. Traditional platforms fail because they try to force diverse property data into rigid columns. We let AI understand the natural, unstructured reality of real estate data.
 
 ### Key Design Patterns
 
@@ -312,12 +405,47 @@ curl http://localhost:8099/health
 
 ## Calling Other Services
 
-### Calling Core Gateway (LLM):
+### ⚠️ IMPORTANT: Correct Service Routing
+
+**For Property Search Queries:**
+- ✅ **CORRECT**: Route through RAG Service (Layer 6) - See example below
+- ❌ **WRONG**: Call DB Gateway directly from Orchestrator or other services
+
+**Why?** RAG Service implements the full pipeline: Retrieve → Augment → Generate. Direct DB Gateway calls bypass the AI context building and LLM generation steps.
+
+### Calling RAG Service (Property Search - RECOMMENDED):
+```python
+async def search_with_rag(query: str, filters: dict = None, limit: int = 5):
+    """
+    CORRECT APPROACH: Use RAG Service for property searches
+    This implements the full Retrieval-Augmented Generation pipeline
+    """
+    async with httpx.AsyncClient(timeout=90.0) as client:
+        response = await client.post(
+            "http://rag-service:8080/query",
+            json={
+                "query": query,
+                "filters": filters or {},
+                "limit": limit
+            }
+        )
+        response.raise_for_status()
+        data = response.json()
+        return {
+            "response": data["response"],  # Natural language response
+            "retrieved_count": data["retrieved_count"],
+            "confidence": data["confidence"],
+            "sources": data["sources"]
+        }
+```
+
+### Calling Core Gateway (LLM - For non-RAG tasks):
 ```python
 from shared.models.core_gateway import LLMRequest, Message, ModelType
 import httpx
 
 async def call_llm(prompt: str) -> str:
+    """Use this for direct LLM calls (classification, extraction, etc.)"""
     request = LLMRequest(
         model=ModelType.GPT4_MINI,
         messages=[
@@ -338,20 +466,23 @@ async def call_llm(prompt: str) -> str:
         return data["content"]
 ```
 
-### Calling DB Gateway (Search):
+### Calling DB Gateway (ONLY for non-RAG operations):
 ```python
-async def search_properties(query: str, limit: int = 10):
+async def get_user_history(user_id: str):
+    """
+    DB Gateway is acceptable for:
+    - User data queries (PostgreSQL)
+    - Direct data operations (not search)
+
+    For property SEARCH, use RAG Service instead!
+    """
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(
-            "http://db-gateway:8080/search",
-            json={
-                "query": query,
-                "filters": {},
-                "limit": limit
-            }
+            "http://db-gateway:8080/get-user-history",
+            json={"user_id": user_id}
         )
         response.raise_for_status()
-        return response.json()["results"]
+        return response.json()
 ```
 
 ## Environment Setup

@@ -229,7 +229,7 @@ async def search_properties(request: SearchRequest):
                     }
                 })
 
-            # Price range filter - NOW ENABLED (price is numeric after normalization!)
+            # Price range filter - USE price_normalized (numeric field)
             if request.filters.min_price or request.filters.max_price:
                 price_range = {}
                 if request.filters.min_price:
@@ -238,9 +238,10 @@ async def search_properties(request: SearchRequest):
                     price_range["lte"] = request.filters.max_price
                 filter_clauses.append({
                     "range": {
-                        "price": price_range
+                        "price_normalized": price_range  # Changed from "price" to "price_normalized"
                     }
                 })
+                logger.info(f"✅ Applied price filter: {request.filters.min_price or 0:,.0f} - {request.filters.max_price or 0:,.0f} VND")
 
             # Bedrooms filter - SOFT FILTER (use "should" to boost, not require)
             if request.filters.min_bedrooms:

@@ -596,6 +596,15 @@ Standalone query:"""
                     entities["district"] = [d.replace("Quận ", "").replace("quận ", "").strip() for d in district]
                     self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] {district} → {entities['district']}")
 
+            # FIX PRICE FILTER BUG: Normalize price field names to match SearchFilters model
+            # Attribute Extraction returns "price_min"/"price_max" but SearchFilters expects "min_price"/"max_price"
+            if "price_min" in entities:
+                entities["min_price"] = entities.pop("price_min")
+                self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] Renamed price_min → min_price: {entities['min_price']}")
+            if "price_max" in entities:
+                entities["max_price"] = entities.pop("price_max")
+                self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] Renamed price_max → max_price: {entities['max_price']}")
+
             # Step 2: Document Search
             search_response = await self.http_client.post(
                 f"{self.db_gateway_url}/search",
@@ -817,23 +826,47 @@ LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước �
             if files:
                 self.logger.info(f"{LogEmoji.AI} Using vision model {model} for {len(files)} file(s)")
 
-            response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
-                json={
-                    "model": model,
-                    "messages": messages_data,
-                    "max_tokens": 1000 if files else 500,
-                    "temperature": 0.7
-                },
-                timeout=60.0 if files else 30.0  # More time for vision
-            )
+            # FIX BUG #7: Add retry logic and better error logging
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    response = await self.http_client.post(
+                        f"{self.core_gateway_url}/chat/completions",
+                        json={
+                            "model": model,
+                            "messages": messages_data,
+                            "max_tokens": 1000 if files else 500,
+                            "temperature": 0.7
+                        },
+                        timeout=60.0 if files else 30.0  # More time for vision
+                    )
 
-            if response.status_code == 200:
-                data = response.json()
-                return data.get("content", "Xin lỗi, tôi không hiểu câu hỏi.")
-            else:
-                self.logger.error(f"{LogEmoji.ERROR} Core Gateway error: {response.status_code}")
-                return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu."
+                    if response.status_code == 200:
+                        data = response.json()
+                        return data.get("content", "Xin lỗi, tôi không hiểu câu hỏi.")
+                    else:
+                        # Log detailed error response
+                        error_body = response.text
+                        self.logger.error(
+                            f"{LogEmoji.ERROR} Core Gateway error (attempt {attempt+1}/{max_retries}): "
+                            f"status={response.status_code}, body={error_body[:200]}"
+                        )
+
+                        # Retry on 5xx errors (server issues)
+                        if attempt < max_retries - 1 and response.status_code >= 500:
+                            self.logger.info(f"{LogEmoji.WARNING} Retrying after Core Gateway error...")
+                            await asyncio.sleep(1)  # Wait 1s before retry
+                            continue
+
+                        # Give up after retries
+                        return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu."
+
+                except httpx.TimeoutException:
+                    self.logger.error(f"{LogEmoji.ERROR} Core Gateway timeout (attempt {attempt+1}/{max_retries})")
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(1)
+                        continue
+                    return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu (timeout)."
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Chat failed: {e}")
@@ -911,13 +944,15 @@ LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước �
                     city = await self._infer_city_from_district(district_for_check)
 
             # Normalize extracted entities to standard format
+            # FIX PRICE FILTER BUG: Use correct field names that match SearchFilters model
+            # SearchFilters expects: min_price, max_price (not price_min, price_max)
             requirements = {
                 "property_type": entities.get("property_type") or entities.get("loai_hinh"),
                 "bedrooms": self._parse_int(entities.get("bedrooms") or entities.get("so_phong_ngu")),
                 "district": district,  # Use corrected district (may be None if it was actually a city)
                 "city": city,
-                "price_min": self._parse_price(entities.get("price_min") or entities.get("gia_min")),
-                "price_max": self._parse_price(entities.get("price_max") or entities.get("gia_max")),
+                "min_price": self._parse_price(entities.get("price_min") or entities.get("gia_min")),
+                "max_price": self._parse_price(entities.get("price_max") or entities.get("gia_max")),
                 "special_requirements": entities.get("special_requirements", []),
                 "raw_entities": entities,
                 "extraction_confidence": confidence
@@ -1452,6 +1487,10 @@ Query mới:"""
             city = requirements.get("city", "TP.HCM")
             district = requirements.get("district")
             bedrooms = requirements.get("bedrooms")
+
+            # FIX BUG #6: Handle None city value
+            if city is None:
+                city = "Hồ Chí Minh"
 
             if stats.get("total_in_city", 0) > 0:
                 clarification_parts.append(

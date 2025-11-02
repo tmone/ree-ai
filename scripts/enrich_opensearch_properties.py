@@ -31,6 +31,53 @@ logger = setup_logger("migration")
 extraction_cache: Dict[str, Dict[str, str]] = {}
 
 
+def normalize_price(price_str: str) -> float:
+    """
+    Normalize Vietnamese price strings to numeric values
+
+    Examples:
+        "3,19 tỷ" → 3190000000
+        "2 tỷ" → 2000000000
+        "500 triệu" → 500000000
+        "Thỏa thuận" → 0
+        "Giá thỏa thuận" → 0
+    """
+    if not price_str or not isinstance(price_str, str):
+        return 0
+
+    price_str = price_str.strip().lower()
+
+    # Handle negotiable prices
+    if any(keyword in price_str for keyword in ["thỏa thuận", "liên hệ", "contact"]):
+        return 0
+
+    try:
+        # Remove commas and extra spaces
+        price_str = price_str.replace(",", ".").replace(" ", "")
+
+        # Extract number
+        number_match = re.search(r'(\d+(?:\.\d+)?)', price_str)
+        if not number_match:
+            return 0
+
+        number = float(number_match.group(1))
+
+        # Check unit
+        if "tỷ" in price_str or "billion" in price_str:
+            return number * 1_000_000_000
+        elif "triệu" in price_str or "million" in price_str:
+            return number * 1_000_000
+        elif "nghìn" in price_str or "thousand" in price_str:
+            return number * 1_000
+        else:
+            # Assume it's already in VND if no unit
+            return number
+
+    except Exception as e:
+        logger.warning(f"Failed to parse price '{price_str}': {e}")
+        return 0
+
+
 async def extract_metadata_with_llm(
     http_client: httpx.AsyncClient,
     core_gateway_url: str,
@@ -125,6 +172,11 @@ async def enrich_batch(
     bulk_body = []
     for doc, metadata in zip(documents, metadatas):
         doc_id = doc["_id"]
+        source = doc["_source"]
+
+        # Normalize price from string to numeric
+        price_str = source.get("price", "")
+        price_normalized = normalize_price(price_str)
 
         # Update action
         bulk_body.append({"update": {"_index": index_name, "_id": doc_id}})
@@ -132,7 +184,8 @@ async def enrich_batch(
             "doc": {
                 "city": metadata.get("city", ""),
                 "district": metadata.get("district", ""),
-                "property_type": metadata.get("property_type", "")
+                "property_type": metadata.get("property_type", ""),
+                "price_normalized": price_normalized  # Add normalized numeric price
             }
         })
 

@@ -2,6 +2,7 @@
 from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
+from shared.models.core_gateway import FileAttachment
 
 
 class IntentType(str, Enum):
@@ -17,11 +18,16 @@ class IntentType(str, Enum):
 
 
 class OrchestrationRequest(BaseModel):
-    """Request format for orchestration."""
+    """Request format for orchestration (supports multimodal)."""
     user_id: str = Field(..., description="User identifier")
     query: str = Field(..., description="User query text")
     conversation_id: Optional[str] = Field(None, description="Conversation ID for context")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+    files: Optional[List[FileAttachment]] = Field(None, description="Attached files (images, documents)")
+
+    def has_files(self) -> bool:
+        """Check if request contains file attachments."""
+        return self.files is not None and len(self.files) > 0
 
 
 class IntentDetectionResult(BaseModel):

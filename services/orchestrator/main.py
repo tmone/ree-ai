@@ -16,7 +16,7 @@ from shared.models.orchestrator import (
     OrchestrationRequest, OrchestrationResponse, IntentType,
     IntentDetectionResult, RoutingDecision
 )
-from shared.models.core_gateway import LLMRequest, Message, ModelType
+from shared.models.core_gateway import LLMRequest, Message, ModelType, FileAttachment
 from shared.utils.logger import LogEmoji
 from shared.config import settings
 
@@ -56,6 +56,50 @@ class Orchestrator(BaseService):
         """Convert string ID to deterministic UUID using UUID v5"""
         return uuid.uuid5(self.uuid_namespace, string_id)
 
+    def _parse_data_uri(self, data_uri: str) -> Optional[FileAttachment]:
+        """
+        Parse data URI to FileAttachment.
+
+        Format: data:image/jpeg;base64,<base64_data>
+        """
+        try:
+            if not data_uri.startswith("data:"):
+                return None
+
+            # Split data URI
+            parts = data_uri.split(",", 1)
+            if len(parts) != 2:
+                return None
+
+            # Parse header: data:image/jpeg;base64
+            header = parts[0]
+            base64_data = parts[1]
+
+            # Extract MIME type
+            mime_parts = header.split(";")
+            mime_type = mime_parts[0].replace("data:", "")
+
+            # Generate file ID and filename
+            file_id = str(uuid.uuid4())
+            extension = mime_type.split("/")[-1]  # e.g., "jpeg" from "image/jpeg"
+            filename = f"upload_{file_id[:8]}.{extension}"
+
+            # Estimate size (base64 is ~33% larger than original)
+            size_bytes = len(base64_data) * 3 // 4
+
+            return FileAttachment(
+                file_id=file_id,
+                filename=filename,
+                mime_type=mime_type,
+                size_bytes=size_bytes,
+                base64_data=base64_data,
+                upload_time=datetime.now()
+            )
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to parse data URI: {e}")
+            return None
+
     async def on_startup(self):
         """Initialize resources on startup"""
         await super().on_startup()
@@ -66,13 +110,19 @@ class Orchestrator(BaseService):
 
         @self.app.post("/orchestrate", response_model=OrchestrationResponse)
         async def orchestrate(request: OrchestrationRequest):
-            """Main orchestration with Classification routing + Conversation Memory"""
+            """Main orchestration with Classification routing + Conversation Memory + Multimodal support"""
             try:
                 start_time = time.time()
 
-                self.logger.info(
-                    f"{LogEmoji.TARGET} Query: '{request.query}'"
-                )
+                # Log multimodal request
+                if request.has_files():
+                    self.logger.info(
+                        f"{LogEmoji.AI} Multimodal Query: '{request.query}' + {len(request.files)} file(s)"
+                    )
+                else:
+                    self.logger.info(
+                        f"{LogEmoji.TARGET} Query: '{request.query}'"
+                    )
 
                 # Step 0: Get conversation history (MEMORY CONTEXT)
                 conversation_id = request.conversation_id or request.user_id
@@ -81,20 +131,24 @@ class Orchestrator(BaseService):
                 if history:
                     self.logger.info(f"{LogEmoji.INFO} Retrieved {len(history)} messages from conversation history")
 
-                # Step 1: Detect intent (simple keyword-based for now)
-                intent = self._detect_intent_simple(request.query)
-
-                self.logger.info(f"{LogEmoji.AI} Intent: {intent}")
-
-                # Step 2: Route based on intent (with history context)
-                if intent == "search":
-                    response_text = await self._handle_search(request.query, history=history)
+                # Step 1: Detect intent (simple keyword-based for now, files → chat for analysis)
+                if request.has_files():
+                    # Images/documents → Use vision model for analysis
+                    intent = "chat"  # Vision analysis goes through chat path
+                    self.logger.info(f"{LogEmoji.AI} Intent: {intent} (multimodal analysis)")
                 else:
-                    response_text = await self._handle_chat(request.query, history=history)
+                    intent = self._detect_intent_simple(request.query)
+                    self.logger.info(f"{LogEmoji.AI} Intent: {intent}")
+
+                # Step 2: Route based on intent (with history context + files)
+                if intent == "search":
+                    response_text = await self._handle_search(request.query, history=history, files=request.files)
+                else:
+                    response_text = await self._handle_chat(request.query, history=history, files=request.files)
 
                 # Step 3: Save conversation to memory
                 await self._save_message(request.user_id, conversation_id, "user", request.query)
-                await self._save_message(request.user_id, conversation_id, "assistant", response_text, metadata={"intent": intent})
+                await self._save_message(request.user_id, conversation_id, "assistant", response_text, metadata={"intent": intent, "has_files": request.has_files()})
 
                 execution_time = (time.time() - start_time) * 1000
 
@@ -102,9 +156,14 @@ class Orchestrator(BaseService):
                     intent=IntentType.SEARCH if intent == "search" else IntentType.CHAT,
                     confidence=0.9,
                     response=response_text,
-                    service_used="classification_routing_with_memory",
+                    service_used="classification_routing_with_memory_multimodal",
                     execution_time_ms=execution_time,
-                    metadata={"flow": "cto_architecture", "history_messages": len(history)}
+                    metadata={
+                        "flow": "cto_architecture",
+                        "history_messages": len(history),
+                        "multimodal": request.has_files(),
+                        "files_count": len(request.files) if request.files else 0
+                    }
                 )
 
             except Exception as e:
@@ -139,23 +198,65 @@ class Orchestrator(BaseService):
 
         @self.app.post("/v1/chat/completions")
         async def openai_compatible_chat(request: Dict[str, Any]):
-            """OpenAI-compatible endpoint"""
+            """
+            OpenAI-compatible endpoint with multimodal support.
+            Handles file uploads from Open WebUI.
+            """
             try:
                 messages = request.get("messages", [])
                 user_message = ""
+                files = []
+
+                # Extract last user message and any files
                 for msg in reversed(messages):
                     if msg.get("role") == "user":
-                        user_message = msg.get("content", "")
+                        content = msg.get("content", "")
+
+                        # Handle multimodal content (Open WebUI format)
+                        if isinstance(content, list):
+                            # Content is array of blocks: [{"type": "text", "text": "..."}, {"type": "image_url", ...}]
+                            text_parts = []
+                            for block in content:
+                                if block.get("type") == "text":
+                                    text_parts.append(block.get("text", ""))
+                                elif block.get("type") == "image_url":
+                                    # Extract image
+                                    image_url = block.get("image_url", {})
+                                    url = image_url.get("url", "")
+                                    if url.startswith("data:"):
+                                        # Parse data URI: data:image/jpeg;base64,<base64_data>
+                                        file_attachment = self._parse_data_uri(url)
+                                        if file_attachment:
+                                            files.append(file_attachment)
+                            user_message = " ".join(text_parts)
+                        else:
+                            # Text-only content
+                            user_message = content
                         break
 
-                if not user_message:
-                    return {"error": "No user message found"}
+                if not user_message and not files:
+                    return {"error": "No user message or files found"}
+
+                # If only files, add default prompt
+                if files and not user_message:
+                    user_message = "Phân tích hình ảnh này và cho tôi biết về bất động sản trong ảnh."
+
+                # Log multimodal request
+                if files:
+                    self.logger.info(
+                        f"{LogEmoji.AI} Multimodal request: {len(files)} file(s) attached"
+                    )
 
                 orch_request = OrchestrationRequest(
                     user_id=request.get("user", "anonymous"),
                     query=user_message,
                     conversation_id=None,
-                    metadata={"messages": messages}
+                    metadata={
+                        "messages": messages,
+                        "has_files": len(files) > 0,
+                        "files": [f.filename for f in files]
+                    },
+                    files=files if files else None
                 )
 
                 orch_response = await orchestrate(orch_request)
@@ -164,7 +265,7 @@ class Orchestrator(BaseService):
                     "id": f"chatcmpl-{int(time.time())}",
                     "object": "chat.completion",
                     "created": int(time.time()),
-                    "model": "ree-ai-orchestrator-v2",
+                    "model": "ree-ai-orchestrator-v3-multimodal",
                     "choices": [{
                         "index": 0,
                         "message": {
@@ -182,6 +283,8 @@ class Orchestrator(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} OpenAI chat failed: {e}")
+                import traceback
+                traceback.print_exc()
                 return {
                     "error": str(e),
                     "choices": [{
@@ -337,7 +440,7 @@ Standalone query:"""
             self.logger.warning(f"{LogEmoji.WARNING} Failed to enrich query with context: {e}")
             return query
 
-    async def _handle_search(self, query: str, history: List[Dict] = None) -> str:
+    async def _handle_search(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None) -> str:
         """
         ReAct Agent Pattern for Search:
         1. REASONING: Analyze query requirements
@@ -608,11 +711,36 @@ Standalone query:"""
 
         return "".join(response_parts)
 
-    async def _handle_chat(self, query: str, history: List[Dict] = None) -> str:
-        """Handle general chat (non-search) with conversation context"""
+    async def _handle_chat(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None) -> str:
+        """Handle general chat (non-search) with conversation context and multimodal support"""
         try:
             # Build messages with history context
-            system_prompt = """Bạn là trợ lý bất động sản thông minh và chuyên nghiệp.
+            if files and len(files) > 0:
+                # Multimodal prompt (vision analysis)
+                system_prompt = """Bạn là trợ lý bất động sản chuyên nghiệp với khả năng phân tích hình ảnh.
+
+NHIỆM VỤ KHI PHÂN TÍCH HÌNH ẢNH BẤT ĐỘNG SẢN:
+1. MÔ TẢ chi tiết căn hộ/nhà từ hình ảnh:
+   - Loại hình: Căn hộ, biệt thự, nhà phố, đất nền
+   - Phong cách thiết kế và nội thất
+   - Diện tích ước tính
+   - View và hướng (nếu nhìn thấy)
+   - Tiện ích trong ảnh (hồ bơi, gym, ban công...)
+
+2. ĐÁNH GIÁ chất lượng và giá trị:
+   - Tình trạng bất động sản
+   - Mức độ sang trọng/cao cấp
+   - Ước tính giá dựa trên vị trí và đặc điểm
+
+3. TƯ VẤN nếu người dùng hỏi:
+   - Phù hợp với nhu cầu gì
+   - Điểm mạnh/yếu của BĐS
+   - Khuyến nghị đầu tư
+
+LUÔN trả lời bằng tiếng Việt, chi tiết và chuyên nghiệp."""
+            else:
+                # Text-only prompt
+                system_prompt = """Bạn là trợ lý bất động sản thông minh và chuyên nghiệp.
 
 QUAN TRỌNG - Sử dụng lịch sử hội thoại:
 1. LUÔN LUÔN đọc kỹ toàn bộ cuộc trò chuyện trước đó
@@ -629,36 +757,54 @@ VÍ DỤ XẤU (TRÁNH):
 
 LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước đó."""
 
-            messages = [
+            messages_data = [
                 {"role": "system", "content": system_prompt}
             ]
 
-            # Add history for context
+            # Add history for context (text-only)
             if history:
-                messages.extend(history)
+                messages_data.extend(history)
 
-            # Add current query
-            messages.append({"role": "user", "content": query})
+            # Add current query with files if present
+            if files:
+                # Multimodal message
+                messages_data.append({
+                    "role": "user",
+                    "content": query,
+                    "files": [f.dict() for f in files]
+                })
+            else:
+                # Text-only message
+                messages_data.append({"role": "user", "content": query})
+
+            # Choose model based on multimodal
+            model = "gpt-4o" if files else "gpt-4o-mini"
+
+            if files:
+                self.logger.info(f"{LogEmoji.AI} Using vision model {model} for {len(files)} file(s)")
 
             response = await self.http_client.post(
                 f"{self.core_gateway_url}/chat/completions",
                 json={
-                    "model": "gpt-4o-mini",
-                    "messages": messages,
-                    "max_tokens": 500,
+                    "model": model,
+                    "messages": messages_data,
+                    "max_tokens": 1000 if files else 500,
                     "temperature": 0.7
                 },
-                timeout=30.0
+                timeout=60.0 if files else 30.0  # More time for vision
             )
 
             if response.status_code == 200:
                 data = response.json()
                 return data.get("content", "Xin lỗi, tôi không hiểu câu hỏi.")
             else:
+                self.logger.error(f"{LogEmoji.ERROR} Core Gateway error: {response.status_code}")
                 return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu."
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Chat failed: {e}")
+            import traceback
+            traceback.print_exc()
             return f"Xin lỗi, đã xảy ra lỗi: {str(e)}"
 
     # ========================================

@@ -453,6 +453,94 @@ services:
       - real
       - all
 
+  # AI Test Agent Service (Automation Testing)
+  ai-test-agent:
+    build:
+      context: .
+      dockerfile: services/ai_test_agent/Dockerfile
+    container_name: ree-ai-ai-test-agent
+    environment:
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVICE_REGISTRY_URL=${SERVICE_REGISTRY_URL:-http://service-registry:8000}
+    ports:
+      - "8095:8080"
+    depends_on:
+      - service-registry
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Test Orchestrator Service (Automation Testing)
+  test-orchestrator:
+    build:
+      context: .
+      dockerfile: services/test_orchestrator/Dockerfile
+    container_name: ree-ai-test-orchestrator
+    environment:
+      - AI_TEST_AGENT_URL=${AI_TEST_AGENT_URL:-http://ai-test-agent:8080}
+      - ORCHESTRATOR_URL=${ORCHESTRATOR_URL:-http://orchestrator:8080}
+      - EVALUATOR_URL=${EVALUATOR_URL:-http://response-evaluator:8080}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVICE_REGISTRY_URL=${SERVICE_REGISTRY_URL:-http://service-registry:8000}
+    ports:
+      - "8096:8080"
+    depends_on:
+      - service-registry
+      - ai-test-agent
+      - orchestrator
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Response Evaluator Service (Automation Testing)
+  response-evaluator:
+    build:
+      context: .
+      dockerfile: services/response_evaluator/Dockerfile
+    container_name: ree-ai-response-evaluator
+    environment:
+      - DB_GATEWAY_URL=${DB_GATEWAY_URL:-http://db-gateway:8080}
+      - CORE_GATEWAY_URL=${CORE_GATEWAY_URL:-http://core-gateway:8080}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVICE_REGISTRY_URL=${SERVICE_REGISTRY_URL:-http://service-registry:8000}
+    ports:
+      - "8097:8080"
+    depends_on:
+      - service-registry
+      - db-gateway
+      - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
   # System Monitoring Service (Layer 0 - DevOps)
   monitoring-service:
     build:

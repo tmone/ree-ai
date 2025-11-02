@@ -197,6 +197,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8081:8080"
+    volumes:
+      - ./core:/app/core
+      - ./shared:/app/shared
+      - ./services/db_gateway:/app/services/db_gateway
     depends_on:
       - postgres
       - opensearch
@@ -220,6 +224,10 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8090:8080"
+    volumes:
+      - ./core:/app/core
+      - ./shared:/app/shared
+      - ./services/orchestrator:/app/services/orchestrator
     depends_on:
       - core-gateway
       - db-gateway

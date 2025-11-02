@@ -480,17 +480,30 @@ Standalone query:"""
                     consecutive_no_results += 1
                     self.logger.warning(f"{LogEmoji.WARNING} [ReAct Agent] No results found ({consecutive_no_results} consecutive)")
 
-                    # Early stop if 2 consecutive iterations with no results
+                    # INTELLIGENT BEHAVIOR: Progressive filter relaxation
                     if consecutive_no_results >= 2:
-                        self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Early stop: No results after {consecutive_no_results} attempts")
-                        # Fallback to generic search without filters
-                        self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Trying generic search as fallback...")
-                        results = await self._execute_semantic_search(query)  # Use original query
-                        if results:
-                            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Agent] Generic search found {len(results)} results")
-                            return await self._generate_quality_response(query, results, requirements, evaluation)
-                        else:
-                            return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn. Bạn có thể cung cấp thêm thông tin hoặc mở rộng tiêu chí tìm kiếm không?"
+                        self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Investigating... Trying relaxed search strategies")
+
+                        # Strategy 1: Try with ONLY location filters (remove property_type, price, bedrooms)
+                        self.logger.info(f"{LogEmoji.INFO} [ReAct Strategy 1] Search with location only...")
+                        relaxed_results = await self._try_location_only_search(requirements)
+
+                        if relaxed_results:
+                            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Strategy 1] Found {len(relaxed_results)} properties in requested area")
+                            # Return suggestions with disclaimer
+                            return await self._generate_suggestions_response(query, relaxed_results, requirements)
+
+                        # Strategy 2: Semantic search fallback
+                        self.logger.info(f"{LogEmoji.INFO} [ReAct Strategy 2] Trying semantic search...")
+                        semantic_results = await self._execute_semantic_search(query)
+
+                        if semantic_results:
+                            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Strategy 2] Semantic search found {len(semantic_results)} results")
+                            return await self._generate_suggestions_response(query, semantic_results, requirements)
+
+                        # Strategy 3: Give up gracefully
+                        self.logger.warning(f"{LogEmoji.WARNING} [ReAct Agent] All strategies failed")
+                        return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn. Bạn có thể cung cấp thêm thông tin hoặc mở rộng tiêu chí tìm kiếm không?"
                 else:
                     consecutive_no_results = 0  # Reset counter when results found
 
@@ -584,17 +597,12 @@ Standalone query:"""
             entities = extraction.get("entities", {})
 
             # FIX BUG #4: Normalize district to match OpenSearch data format
-            # Attribute Extraction returns "Quận Thủ Đức" but OpenSearch data has "Thủ Đức"
-            # Remove "Quận " prefix to match data
+            # District filtering: KEEP ORIGINAL FORMAT (OpenSearch has "Quận 7", not "7")
+            # DB Gateway uses term query requiring exact match
+            # FIX: Don't strip "Quận " prefix - keep as-is
             if "district" in entities and entities["district"]:
                 district = entities["district"]
-                # Handle both string and list cases (multi-district queries)
-                if isinstance(district, str):
-                    entities["district"] = district.replace("Quận ", "").replace("quận ", "").strip()
-                    self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] '{district}' → '{entities['district']}'")
-                elif isinstance(district, list):
-                    entities["district"] = [d.replace("Quận ", "").replace("quận ", "").strip() for d in district]
-                    self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] {district} → {entities['district']}")
+                self.logger.info(f"{LogEmoji.INFO} [Filter] District: '{district}' (no normalization - exact match required)")
 
             # FIX PRICE FILTER BUG: Normalize price field names to match SearchFilters model
             # Attribute Extraction returns "price_min"/"price_max" but SearchFilters expects "min_price"/"max_price"
@@ -604,6 +612,15 @@ Standalone query:"""
             if "price_max" in entities:
                 entities["max_price"] = entities.pop("price_max")
                 self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] Renamed price_max → max_price: {entities['max_price']}")
+
+            # FIX EMPTY PROPERTY_TYPE BUG: Remove vague property_type filters
+            # Database has empty property_type="" for most properties, so vague terms cause 0 results
+            if "property_type" in entities:
+                vague_terms = ["nhà", "bds", "bất động sản", "property", "real estate", ""]
+                property_type_lower = entities["property_type"].lower().strip()
+                if property_type_lower in vague_terms or not property_type_lower:
+                    self.logger.info(f"{LogEmoji.WARNING} [Filter Normalization] Removing vague property_type='{entities['property_type']}' (DB has empty property_type field)")
+                    del entities["property_type"]
 
             # Step 2: Document Search
             search_response = await self.http_client.post(
@@ -647,6 +664,100 @@ Standalone query:"""
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Semantic search failed: {e}")
             return []
+
+    async def _try_location_only_search(self, requirements: Dict) -> List[Dict]:
+        """
+        INTELLIGENT STRATEGY: Search with location filters ONLY
+        Remove property_type, price, bedrooms to get broader results
+        Used when strict filters return 0 results
+        """
+        try:
+            # Extract ONLY location filters from requirements
+            location_filters = {}
+
+            if requirements.get("district"):
+                district = requirements["district"]
+                # KEEP ORIGINAL FORMAT - don't strip "Quận " prefix (OpenSearch has "Quận 7")
+                location_filters["district"] = district
+
+            if requirements.get("city"):
+                location_filters["city"] = requirements["city"]
+
+            if not location_filters:
+                self.logger.warning(f"{LogEmoji.WARNING} No location filters found in requirements")
+                return []
+
+            self.logger.info(f"{LogEmoji.INFO} [Location-Only Search] Filters: {location_filters}")
+
+            # Search with location ONLY
+            search_response = await self.http_client.post(
+                f"{self.db_gateway_url}/search",
+                json={
+                    "query": "",  # Empty query, rely on filters
+                    "filters": location_filters,
+                    "limit": 10  # Get more results for suggestions
+                },
+                timeout=30.0
+            )
+
+            if search_response.status_code != 200:
+                return []
+
+            search_results = search_response.json()
+            results = search_results.get("results", [])
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [Location-Only Search] Found {len(results)} properties")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Location-only search failed: {e}")
+            return []
+
+    async def _generate_suggestions_response(self, query: str, results: List[Dict], requirements: Dict) -> str:
+        """
+        Generate response with suggestions and disclaimer
+        Used when relaxed search found results but query was incomplete
+        """
+        try:
+            # Build context about what filters were relaxed
+            location = requirements.get("district", "khu vực này")
+
+            # Build property list
+            properties_text = []
+            for idx, prop in enumerate(results[:5], 1):  # Top 5 only
+                title = prop.get("title", "Bất động sản")
+                price = prop.get("price", "Liên hệ")
+                area = prop.get("area", "")
+                bedrooms = prop.get("bedrooms")
+
+                prop_desc = f"{idx}. {title}\n"
+                prop_desc += f"   💰 Giá: {price}"
+                if bedrooms:
+                    prop_desc += f" | 🛏️ {bedrooms} phòng ngủ"
+                if area:
+                    prop_desc += f" | 📐 {area}"
+
+                properties_text.append(prop_desc)
+
+            properties_str = "\n\n".join(properties_text)
+
+            # Generate response với disclaimer
+            response = f"""📍 Tôi tìm thấy {len(results)} bất động sản ở {location}. Đây là một số gợi ý:
+
+{properties_str}
+
+💡 **Gợi ý:** Để tôi tìm chính xác hơn, bạn có thể cho biết thêm:
+- Loại hình: căn hộ, nhà phố, biệt thự?
+- Ngân sách: khoảng bao nhiêu tỷ?
+- Diện tích hoặc số phòng ngủ mong muốn?
+
+Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"""
+
+            return response
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to generate suggestions response: {e}")
+            return "Tôi tìm thấy một số bất động sản phù hợp. Bạn có thể cung cấp thêm thông tin để tôi tìm chính xác hơn?"
 
     async def _handle_filter_search(self, query: str) -> str:
         """Filter mode: Extraction → Document search"""

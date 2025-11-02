@@ -445,6 +445,33 @@ services:
       - real
       - all
 
+  # System Monitoring Service (Layer 0 - DevOps)
+  monitoring-service:
+    build:
+      context: .
+      dockerfile: services/monitoring_service/Dockerfile
+    container_name: ree-ai-monitoring-service
+    environment:
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - SERVICE_REGISTRY_URL=${SERVICE_REGISTRY_URL:-http://service-registry:8000}
+    ports:
+      - "9999:8080"  # Web UI available at http://localhost:9999
+    volumes:
+      # Mount Docker socket to enable container control
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
 # ============================================================
 # VOLUMES
 # ============================================================

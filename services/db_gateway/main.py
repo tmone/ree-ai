@@ -35,13 +35,16 @@ async def lifespan(app: FastAPI):
 
     # Load embedding model for semantic search
     global embedding_model
-    try:
-        logger.info("📦 Loading sentence-transformers model for semantic search...")
-        embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
-        logger.info("✅ Embedding model loaded successfully!")
-    except Exception as e:
-        logger.error(f"❌ Failed to load embedding model: {e}")
-        logger.warning("⚠️  Semantic search will not be available")
+    # TEMPORARY: Disabled to speed up startup for testing city filtering
+    logger.warning("⚠️  Semantic search temporarily disabled for testing")
+    embedding_model = None
+    # try:
+    #     logger.info("📦 Loading sentence-transformers model for semantic search...")
+    #     embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+    #     logger.info("✅ Embedding model loaded successfully!")
+    # except Exception as e:
+    #     logger.error(f"❌ Failed to load embedding model: {e}")
+    #     logger.warning("⚠️  Semantic search will not be available")
 
     # Initialize OpenSearch client
     try:
@@ -178,9 +181,27 @@ async def search_properties(request: SearchRequest):
         should_clauses = []
 
         if request.filters:
-            # Region/location filter - ADD TO QUERY TEXT for better BM25 matching
+            # City filter - HARD FILTER (exact match required!)
+            if request.filters.city:
+                filter_clauses.append({
+                    "term": {
+                        "city": request.filters.city  # Field is already keyword type, no .keyword suffix
+                    }
+                })
+                logger.info(f"✅ Applied city filter: {request.filters.city}")
+
+            # District filter - HARD FILTER (exact match)
+            if request.filters.district:
+                filter_clauses.append({
+                    "term": {
+                        "district": request.filters.district  # Field is already keyword type, no .keyword suffix
+                    }
+                })
+                logger.info(f"✅ Applied district filter: {request.filters.district}")
+
+            # Region/location filter - FALLBACK (for backward compatibility)
             if request.filters.region:
-                # Enhance the query text with region info for better full-text matching
+                # Enhance the query text with region info for better BM25 matching
                 must_clauses.append({
                     "multi_match": {
                         "query": request.filters.region,

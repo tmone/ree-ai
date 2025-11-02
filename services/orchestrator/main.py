@@ -451,21 +451,22 @@ Standalone query:"""
         Max 2 iterations to balance quality vs response time
         """
         try:
-            self.logger.info(f"{LogEmoji.AI} [ReAct Agent] Starting search with query: '{query}'")
-
-            # STEP 1: REASONING - Analyze query requirements
-            requirements = await self._analyze_query_requirements(query, history)
+            self.logger.info(f"{LogEmoji.AI} [ReAct Agent] Starting INTELLIGENT search with query: '{query}'")
 
             # Enrich query with conversation context if available
             enriched_query = await self._enrich_query_with_context(query, history or [])
 
-            max_iterations = 2  # Balance quality vs speed
+            max_iterations = 5  # INCREASED: Deep reasoning requires more iterations
             current_query = enriched_query
             best_results = []  # Keep track of BEST results across iterations for clarification
             best_evaluation = None
+            requirements = None  # Will be extracted in each iteration
 
             for iteration in range(max_iterations):
-                self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Iteration {iteration + 1}/{max_iterations}")
+                self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] ========== Iteration {iteration + 1}/{max_iterations} ==========")
+
+                # STEP 1: REASONING - Extract requirements using AI service (fresh each iteration)
+                requirements = await self._analyze_query_requirements(current_query, history, iteration=iteration+1)
 
                 # STEP 2: ACT - Execute search
                 results = await self._execute_search_internal(current_query)
@@ -811,44 +812,118 @@ LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước �
     # ReAct Agent Pattern Methods
     # ========================================
 
-    async def _analyze_query_requirements(self, query: str, history: List[Dict] = None) -> Dict:
+    async def _analyze_query_requirements(self, query: str, history: List[Dict] = None, iteration: int = 1) -> Dict:
         """
-        REASONING Step: Extract structured requirements from user query
+        REASONING Step: Extract structured requirements using ATTRIBUTE EXTRACTION SERVICE
+
+        NO MORE REGEX! Use AI service for intelligent extraction.
+
+        Args:
+            query: User query
+            history: Conversation history (for context)
+            iteration: Current iteration number (for progressive refinement)
 
         Returns:
             {
-                "property_type": str,  # "căn hộ", "nhà phố", "biệt thự", etc.
+                "property_type": str,
                 "bedrooms": int or None,
                 "district": str or None,
                 "city": str or None,
                 "price_min": float or None,
                 "price_max": float or None,
-                "special_requirements": List[str]  # ["gần trường quốc tế", "view sông", etc.]
+                "special_requirements": List[str],
+                "raw_entities": Dict  # Raw extraction from service
             }
         """
         try:
-            self.logger.info(f"{LogEmoji.AI} [ReAct-Reasoning] Analyzing query requirements...")
+            self.logger.info(f"{LogEmoji.AI} [ReAct-Reasoning] Iteration {iteration}: Calling Attribute Extraction service...")
 
-            analysis_prompt = f"""Phân tích yêu cầu tìm kiếm bất động sản từ người dùng.
+            # Call Attribute Extraction service
+            extraction_response = await self.http_client.post(
+                f"{self.extraction_url}/extract-query",
+                json={
+                    "query": query,
+                    "intent": "SEARCH"
+                },
+                timeout=30.0
+            )
+
+            if extraction_response.status_code != 200:
+                self.logger.warning(f"{LogEmoji.WARNING} Attribute extraction failed, using fallback LLM")
+                return await self._fallback_llm_extraction(query)
+
+            extraction_data = extraction_response.json()
+            entities = extraction_data.get("entities", {})
+            confidence = extraction_data.get("confidence", 0.0)
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Reasoning] Extracted entities (confidence: {confidence:.1%}): {entities}")
+
+            # Infer city from district if city not provided (must await since it's async)
+            city = entities.get("city") or entities.get("thanh_pho")
+            district = entities.get("district") or entities.get("quan_huyen")
+
+            # FIX: Attribute Extraction sometimes misclassifies city as district
+            # If "district" looks like a city name (contains "Thành phố", "TP"), treat it as city
+            if not city and district:
+                if any(keyword in district.lower() for keyword in ["thành phố", "tp.", "tp ", "city"]):
+                    # This is actually a city, not a district!
+                    city = district.replace("Thành phố", "").replace("TP.", "").replace("TP", "").strip()
+                    district = None  # Clear the wrongly classified district
+                else:
+                    # Infer city from actual district
+                    city = await self._infer_city_from_district(district)
+
+            # Normalize extracted entities to standard format
+            requirements = {
+                "property_type": entities.get("property_type") or entities.get("loai_hinh"),
+                "bedrooms": self._parse_int(entities.get("bedrooms") or entities.get("so_phong_ngu")),
+                "district": district,  # Use corrected district (may be None if it was actually a city)
+                "city": city,
+                "price_min": self._parse_price(entities.get("price_min") or entities.get("gia_min")),
+                "price_max": self._parse_price(entities.get("price_max") or entities.get("gia_max")),
+                "special_requirements": entities.get("special_requirements", []),
+                "raw_entities": entities,
+                "extraction_confidence": confidence
+            }
+
+            # Log warnings for missing critical fields
+            if not requirements.get("city"):
+                self.logger.warning(f"{LogEmoji.WARNING} [ReAct-Reasoning] CRITICAL: No city extracted from query!")
+            if not requirements.get("property_type"):
+                self.logger.warning(f"{LogEmoji.WARNING} [ReAct-Reasoning] No property_type extracted")
+
+            return requirements
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Attribute extraction failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback to simple LLM extraction
+            return await self._fallback_llm_extraction(query)
+
+    async def _fallback_llm_extraction(self, query: str) -> Dict:
+        """Fallback: Simple LLM extraction if Attribute Extraction service fails"""
+        try:
+            analysis_prompt = f"""Extract real estate search requirements from this Vietnamese query.
 
 Query: "{query}"
 
-Trích xuất thông tin theo format JSON:
+Return JSON with these fields:
 {{
-    "property_type": "căn hộ/nhà phố/biệt thự/đất/etc hoặc null",
-    "bedrooms": số phòng ngủ (số nguyên) hoặc null,
-    "district": "quận X/huyện Y hoặc null",
-    "city": "TP.HCM/Hà Nội/Đà Nẵng/etc hoặc null",
-    "price_min": giá tối thiểu (tỷ VND) hoặc null,
-    "price_max": giá tối đa (tỷ VND) hoặc null,
-    "special_requirements": ["gần trường quốc tế", "view sông", "yên tĩnh", etc]
+    "property_type": "căn hộ/nhà phố/biệt thự/đất/shophouse/etc",
+    "bedrooms": integer or null,
+    "district": "Quận X/Huyện Y" or null,
+    "city": "Hồ Chí Minh/Hà Nội/Đà Nẵng/etc" or null,
+    "price_min": float (billion VND) or null,
+    "price_max": float (billion VND) or null,
+    "special_requirements": ["requirement1", "requirement2"]
 }}
 
-CHÚ Ý:
-- Nếu query nói "quận 2" thì city mặc định là "TP.HCM"
-- Nếu query nói "Cầu Giấy" thì city mặc định là "Hà Nội"
-- Trích xuất TẤT CẢ yêu cầu đặc biệt (gần trường, view đẹp, yên tĩnh, etc.)
-- Chỉ trả về JSON, không giải thích thêm.
+CRITICAL RULES:
+- If query mentions "quận 2/7/9" or "Thủ Đức" → city = "Hồ Chí Minh"
+- If query mentions "Cầu Giấy/Đống Đa/Hoàn Kiếm" → city = "Hà Nội"
+- Extract city explicitly, do NOT leave null if inferable
+- Return ONLY JSON, no explanation
 
 JSON:"""
 
@@ -866,38 +941,118 @@ JSON:"""
             if response.status_code == 200:
                 data = response.json()
                 content = data.get("content", "{}")
-
-                # Parse JSON from response
-                try:
-                    requirements = json.loads(content)
-                    self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Reasoning] Requirements: {requirements}")
-                    return requirements
-                except json.JSONDecodeError:
-                    self.logger.warning(f"{LogEmoji.WARNING} Failed to parse requirements JSON")
-                    return {}
+                requirements = json.loads(content)
+                requirements["extraction_confidence"] = 0.5  # Lower confidence for fallback
+                return requirements
             else:
-                return {}
+                return {"extraction_confidence": 0.0}
 
         except Exception as e:
-            self.logger.error(f"{LogEmoji.ERROR} Query analysis failed: {e}")
-            return {}
+            self.logger.error(f"{LogEmoji.ERROR} Fallback LLM extraction failed: {e}")
+            return {"extraction_confidence": 0.0}
+
+    def _parse_int(self, value) -> Optional[int]:
+        """Safely parse integer from various formats"""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except:
+            return None
+
+    def _parse_price(self, value) -> Optional[float]:
+        """Safely parse price from various formats"""
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except:
+            return None
+
+    async def _infer_city_from_district(self, district: Optional[str]) -> Optional[str]:
+        """
+        INTELLIGENT city inference using LLM geographic knowledge
+
+        NO HARDCODING! Works for ANY location globally:
+        - "Quận 2" → "Hồ Chí Minh"
+        - "Cầu Giấy" → "Hà Nội"
+        - "Sukhumvit" → "Bangkok"
+        - "Orchard Road" → "Singapore"
+
+        Uses LLM's built-in geographic knowledge + web search fallback
+        """
+        if not district:
+            return None
+
+        try:
+            # Use LLM to infer city from district (works globally!)
+            geo_prompt = f"""What city is "{district}" located in?
+
+RULES:
+- Return ONLY the city name, nothing else
+- Use local language for city name (e.g., "Hồ Chí Minh" not "Ho Chi Minh City")
+- If uncertain, return "UNKNOWN"
+- Examples:
+  * "Quận 2" → "Hồ Chí Minh"
+  * "Cầu Giấy" → "Hà Nội"
+  * "Sukhumvit" → "Bangkok"
+  * "Brooklyn" → "New York"
+
+City name:"""
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": geo_prompt}],
+                    "max_tokens": 20,
+                    "temperature": 0.0  # Deterministic for geo facts
+                },
+                timeout=10.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                city = data.get("content", "").strip()
+
+                if city and city != "UNKNOWN":
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Geo Inference] '{district}' → '{city}'")
+                    return city
+                else:
+                    self.logger.warning(f"{LogEmoji.WARNING} [Geo Inference] Could not infer city for '{district}'")
+                    return None
+            else:
+                return None
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} City inference failed: {e}")
+            return None
 
     async def _evaluate_results(self, results: List[Dict], requirements: Dict) -> Dict:
         """
-        EVALUATE Step: Check if search results match requirements
+        EVALUATE Step: INTELLIGENT evaluation using LLM + rule-based validation
+
+        TWO-LAYER VALIDATION:
+        1. CRITICAL CHECKS (instant rejection):
+           - City mismatch (HCM vs Hà Nội/Quy Nhơn)
+           - Property type semantic mismatch (căn hộ vs shophouse/đất)
+
+        2. SOFT CHECKS (score reduction):
+           - District, bedrooms, price, area variations
 
         Returns:
             {
-                "satisfied": bool,  # Overall satisfaction
-                "match_count": int,  # Number of results matching requirements
-                "total_count": int,  # Total results
-                "match_rate": float,  # Percentage (0-1)
-                "missing_criteria": List[str],  # What's not matching
-                "quality_score": float  # 0-1 score
+                "satisfied": bool,
+                "match_count": int,
+                "total_count": int,
+                "match_rate": float,
+                "missing_criteria": List[str],
+                "quality_score": float,
+                "critical_failures": List[str]  # NEW: Critical mismatches
             }
         """
         try:
-            self.logger.info(f"{LogEmoji.AI} [ReAct-Evaluate] Checking result quality...")
+            self.logger.info(f"{LogEmoji.AI} [ReAct-Evaluate] Intelligent evaluation with LLM...")
 
             if not results:
                 return {
@@ -906,22 +1061,61 @@ JSON:"""
                     "total_count": 0,
                     "match_rate": 0.0,
                     "missing_criteria": ["No results found"],
-                    "quality_score": 0.0
+                    "quality_score": 0.0,
+                    "critical_failures": []
                 }
 
+            # LAYER 1: LLM-based semantic validation (CRITICAL)
+            semantic_validation = await self._validate_results_with_llm(results, requirements)
+
+            if not semantic_validation["semantically_valid"]:
+                # REJECT immediately if semantic mismatch
+                self.logger.warning(f"{LogEmoji.WARNING} [ReAct-Evaluate] CRITICAL: Semantic mismatch detected!")
+                return {
+                    "satisfied": False,
+                    "match_count": 0,
+                    "total_count": len(results),
+                    "match_rate": 0.0,
+                    "missing_criteria": semantic_validation["issues"],
+                    "quality_score": 0.0,
+                    "critical_failures": semantic_validation["issues"]
+                }
+
+            # LAYER 2: Rule-based field validation (if semantic passes)
             match_count = 0
             missing_criteria = []
 
-            # Check each result against requirements
             for prop in results:
                 matches = True
 
-                # Check district (CRITICAL)
+                # Check city (CRITICAL - must match)
+                if requirements.get("city"):
+                    required_city = requirements["city"].lower()
+                    prop_city = str(prop.get("city", "")).lower()
+
+                    # Normalize city names
+                    city_aliases = {
+                        "hồ chí minh": ["hcm", "sài gòn", "saigon", "tp.hcm", "tphcm"],
+                        "hà nội": ["hanoi", "hn"],
+                        "đà nẵng": ["da nang", "danang"]
+                    }
+
+                    city_match = False
+                    for canonical, aliases in city_aliases.items():
+                        if canonical in required_city or any(alias in required_city for alias in aliases):
+                            if canonical in prop_city or any(alias in prop_city for alias in aliases):
+                                city_match = True
+                                break
+
+                    if not city_match and required_city not in prop_city and prop_city not in required_city:
+                        matches = False
+                        self.logger.info(f"{LogEmoji.WARNING} City mismatch: required '{required_city}' but got '{prop_city}'")
+
+                # Check district (IMPORTANT but not critical)
                 if requirements.get("district"):
                     required_district = requirements["district"].lower()
                     prop_district = str(prop.get("district", "")).lower()
 
-                    # Extract district number (e.g., "quận 2" → "2")
                     import re
                     required_num = re.search(r'\d+', required_district)
                     prop_num = re.search(r'\d+', prop_district)
@@ -942,13 +1136,8 @@ JSON:"""
                         except:
                             pass
 
-                # Check property type
-                if requirements.get("property_type"):
-                    required_type = requirements["property_type"].lower()
-                    prop_title = str(prop.get("title", "")).lower()
-                    if required_type not in prop_title:
-                        # Don't fail on property type, just lower score
-                        pass
+                # Check property type (use LLM semantic validation above)
+                # Skip rule-based property type check since LLM handles it better
 
                 # Check price range
                 if requirements.get("price_max"):
@@ -956,7 +1145,7 @@ JSON:"""
                     if prop_price:
                         try:
                             price_val = float(prop_price)
-                            if price_val > requirements["price_max"] * 1e9:  # Convert tỷ to VND
+                            if price_val > requirements["price_max"] * 1e9:
                                 matches = False
                         except:
                             pass
@@ -968,6 +1157,8 @@ JSON:"""
 
             # Determine missing criteria
             if match_rate < 0.6:
+                if requirements.get("city"):
+                    missing_criteria.append(f"Không đủ BDS ở {requirements['city']}")
                 if requirements.get("district"):
                     missing_criteria.append(f"Không đủ BDS ở {requirements['district']}")
                 if requirements.get("bedrooms"):
@@ -975,9 +1166,9 @@ JSON:"""
                 if requirements.get("special_requirements"):
                     missing_criteria.extend([f"Thiếu: {req}" for req in requirements["special_requirements"]])
 
-            # Quality score based on match rate
-            quality_score = match_rate
-            satisfied = quality_score >= 0.6  # At least 60% match
+            # Quality score: weighted average of semantic + field match
+            quality_score = (semantic_validation["confidence"] * 0.4) + (match_rate * 0.6)
+            satisfied = quality_score >= 0.6
 
             evaluation = {
                 "satisfied": satisfied,
@@ -985,22 +1176,149 @@ JSON:"""
                 "total_count": len(results),
                 "match_rate": match_rate,
                 "missing_criteria": missing_criteria,
-                "quality_score": quality_score
+                "quality_score": quality_score,
+                "critical_failures": []
             }
 
-            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Evaluate] Quality: {quality_score:.1%} ({match_count}/{len(results)} matches)")
+            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Evaluate] Quality: {quality_score:.1%} (semantic: {semantic_validation['confidence']:.1%}, field: {match_rate:.1%})")
 
             return evaluation
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Evaluation failed: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "satisfied": False,
                 "match_count": 0,
                 "total_count": len(results) if results else 0,
                 "match_rate": 0.0,
                 "missing_criteria": [str(e)],
-                "quality_score": 0.0
+                "quality_score": 0.0,
+                "critical_failures": []
+            }
+
+    async def _validate_results_with_llm(self, results: List[Dict], requirements: Dict) -> Dict:
+        """
+        LLM-based semantic validation: "Do these results match what user asked for?"
+
+        This is the INTELLIGENCE layer that prevents:
+        - Returning "Quy Nhơn" properties when user asked for "Hồ Chí Minh"
+        - Returning "shophouse/đất" when user asked for "căn hộ"
+        - Returning "3 bedrooms" when user specifically asked for "2 bedrooms"
+
+        Returns:
+            {
+                "semantically_valid": bool,  # True if results match requirements
+                "confidence": float,  # 0-1 confidence score
+                "issues": List[str]  # Critical mismatches found
+            }
+        """
+        try:
+            if not results or not requirements:
+                return {
+                    "semantically_valid": True,
+                    "confidence": 0.5,
+                    "issues": []
+                }
+
+            # Build validation prompt with top 3 results
+            validation_prompt = f"""Bạn là trợ lý đánh giá chất lượng kết quả tìm kiếm bất động sản.
+
+**YÊU CẦU CỦA NGƯỜI DÙNG:**
+{json.dumps(requirements, ensure_ascii=False, indent=2)}
+
+**KẾT QUẢ TÌM ĐƯỢC (Top 3):**
+"""
+
+            for i, prop in enumerate(results[:3], 1):
+                validation_prompt += f"""
+{i}. Tiêu đề: {prop.get('title', 'N/A')}
+   - Loại: {prop.get('property_type', 'N/A')}
+   - Khu vực: {prop.get('district', 'N/A')}, {prop.get('city', 'N/A')}
+   - Phòng ngủ: {prop.get('bedrooms', 'N/A')}
+   - Giá: {prop.get('price', 'N/A')}
+"""
+
+            validation_prompt += """
+
+**NHIỆM VỤ:**
+Đánh giá xem kết quả có PHÙHỢP NGỮ NGHĨA với yêu cầu không?
+
+**KIỂM TRA CÁC LỖI NGHIÊM TRỌNG:**
+1. **City mismatch**: User yêu cầu "Hồ Chí Minh/TP.HCM" nhưng kết quả là "Hà Nội/Quy Nhơn/Đà Nẵng" → LỖI NGHIÊM TRỌNG
+2. **Property type mismatch**: User yêu cầu "căn hộ" nhưng kết quả là "shophouse/đất/nhà phố/biệt thự" → LỖI NGHIÊM TRỌNG
+3. **Complete irrelevance**: Kết quả hoàn toàn không liên quan đến yêu cầu
+
+**TRƯỜNG HỢP CHẤP NHẬN:**
+- User yêu cầu "quận 2" nhưng kết quả là "quận 9" (cùng thành phố) → CHẤP NHẬN (district flexibility)
+- User yêu cầu "2 phòng ngủ" nhưng có kết quả "3 phòng ngủ" → CHẤP NHẬN (bedroom flexibility)
+- User yêu cầu "căn hộ" và kết quả là "căn hộ/chung cư" → CHẤP NHẬN (synonyms)
+
+**TRẢ LỜI FORMAT JSON:**
+{
+    "semantically_valid": true/false,
+    "confidence": 0.0-1.0,
+    "issues": ["Lỗi 1", "Lỗi 2", ...]
+}
+
+Chỉ trả về JSON, không giải thích thêm.
+
+JSON:"""
+
+            # Call LLM for semantic validation
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": validation_prompt}],
+                    "max_tokens": 300,
+                    "temperature": 0.1  # Low temperature for consistent judgment
+                },
+                timeout=20.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("content", "{}")
+
+                # Parse JSON response
+                try:
+                    validation_result = json.loads(content)
+                    self.logger.info(
+                        f"{LogEmoji.INFO} [LLM Validation] Valid: {validation_result.get('semantically_valid')}, "
+                        f"Confidence: {validation_result.get('confidence', 0):.1%}"
+                    )
+
+                    if validation_result.get("issues"):
+                        for issue in validation_result["issues"]:
+                            self.logger.warning(f"{LogEmoji.WARNING} Issue: {issue}")
+
+                    return validation_result
+
+                except json.JSONDecodeError as e:
+                    self.logger.warning(f"{LogEmoji.WARNING} Failed to parse LLM validation JSON: {e}")
+                    # Fallback: assume valid if can't parse
+                    return {
+                        "semantically_valid": True,
+                        "confidence": 0.5,
+                        "issues": []
+                    }
+            else:
+                # LLM failed, use fallback
+                return {
+                    "semantically_valid": True,
+                    "confidence": 0.5,
+                    "issues": []
+                }
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} LLM validation failed: {e}")
+            # Fail-safe: assume valid to not block searches
+            return {
+                "semantically_valid": True,
+                "confidence": 0.5,
+                "issues": []
             }
 
     async def _refine_query(self, original_query: str, requirements: Dict, evaluation: Dict) -> str:
@@ -1123,7 +1441,7 @@ Query mới:"""
 
             if district:
                 # Suggest expanding to nearby districts
-                nearby_districts = self._get_nearby_districts(district)
+                nearby_districts = await self._get_nearby_districts(district, requirements.get("city"))
                 if nearby_districts:
                     clarification_parts.append(
                         f"- 🔍 Tìm thêm ở **các quận lân cận** ({', '.join(nearby_districts[:3])})\n"
@@ -1266,35 +1584,62 @@ Query mới:"""
                 "total_in_district": 0
             }
 
-    def _get_nearby_districts(self, district: str) -> List[str]:
+    async def _get_nearby_districts(self, district: str, city: Optional[str] = None) -> List[str]:
         """
-        Get nearby districts for expansion suggestions
+        INTELLIGENT nearby districts using LLM geographic knowledge
 
-        Simple mapping for now, can be improved with geographic data
+        NO HARDCODING! Works globally:
+        - "Quận 2" (HCM) → ["Quận 9", "Thủ Đức", "Bình Thạnh"]
+        - "Brooklyn" (NYC) → ["Queens", "Manhattan"]
+        - "Shibuya" (Tokyo) → ["Shinjuku", "Minato"]
+
+        Uses LLM's built-in geographic intelligence
         """
-        nearby_map = {
-            "quận 1": ["Quận 3", "Quận 4", "Quận 5"],
-            "quận 2": ["Quận 9", "Thủ Đức", "Bình Thạnh"],
-            "quận 3": ["Quận 1", "Quận 10", "Bình Thạnh"],
-            "quận 4": ["Quận 1", "Quận 7", "Quận 8"],
-            "quận 5": ["Quận 6", "Quận 8", "Quận 11"],
-            "quận 6": ["Quận 5", "Quận 8", "Quận 11"],
-            "quận 7": ["Quận 4", "Nhà Bè", "Bình Chánh"],
-            "quận 8": ["Quận 5", "Quận 6", "Bình Tân"],
-            "quận 9": ["Quận 2", "Thủ Đức"],
-            "quận 10": ["Quận 3", "Quận 6", "Quận 11"],
-            "quận 11": ["Quận 5", "Quận 6", "Quận 10"],
-            "quận 12": ["Gò Vấp", "Tân Bình", "Bình Thạnh"],
-            "bình thạnh": ["Quận 2", "Quận 3", "Quận 12"],
-            "gò vấp": ["Quận 12", "Tân Bình", "Bình Thạnh"],
-            "tân bình": ["Quận 10", "Quận 11", "Gò Vấp"],
-            "tân phú": ["Quận 6", "Quận 12", "Bình Tân"],
-            "thủ đức": ["Quận 2", "Quận 9", "Bình Thạnh"],
-            "bình tân": ["Quận 8", "Tân Phú", "Bình Chánh"],
-        }
+        try:
+            location = f"{district}, {city}" if city else district
 
-        district_lower = district.lower()
-        return nearby_map.get(district_lower, ["Quận 1", "Quận 7", "Thủ Đức"])
+            nearby_prompt = f"""What are the 3-4 neighboring districts/areas closest to "{location}"?
+
+RULES:
+- Return ONLY a comma-separated list of district names
+- Use local language names
+- Order by proximity (closest first)
+- If uncertain, return "UNKNOWN"
+- Examples:
+  * "Quận 2, Hồ Chí Minh" → "Quận 9, Thủ Đức, Bình Thạnh"
+  * "Brooklyn, New York" → "Queens, Manhattan, Staten Island"
+  * "Shibuya, Tokyo" → "Shinjuku, Minato, Meguro"
+
+Nearby districts:"""
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": nearby_prompt}],
+                    "max_tokens": 50,
+                    "temperature": 0.0  # Deterministic for geo facts
+                },
+                timeout=10.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                nearby_str = data.get("content", "").strip()
+
+                if nearby_str and nearby_str != "UNKNOWN":
+                    # Parse comma-separated list
+                    nearby_list = [d.strip() for d in nearby_str.split(",") if d.strip()]
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Nearby Districts] '{district}' → {nearby_list[:3]}")
+                    return nearby_list[:3]  # Top 3
+                else:
+                    return []
+            else:
+                return []
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Nearby districts inference failed: {e}")
+            return []
 
     async def _generate_quality_response(self, query: str, results: List[Dict], requirements: Dict, evaluation: Dict) -> str:
         """

@@ -19,8 +19,10 @@ import hashlib
 from crawl4ai import WebCrawler
 from bs4 import BeautifulSoup
 import re
+import httpx
 
 from shared.utils.logger import setup_logger, LogEmoji
+from shared.config import settings
 
 logger = setup_logger("bulk_crawler")
 
@@ -162,6 +164,13 @@ class ParallelBulkCrawler:
         # Crawl configurations for each site
         self.configs = self._get_crawl_configs()
 
+        # HTTP client for LLM extraction calls
+        self.http_client = httpx.AsyncClient(timeout=30.0)
+        self.core_gateway_url = settings.get_core_gateway_url()
+
+        # Cache for extracted metadata (avoid redundant LLM calls)
+        self.extraction_cache: Dict[str, Dict[str, str]] = {}
+
     def _get_crawl_configs(self) -> List[CrawlConfig]:
         """Get crawl configurations for all sites"""
         return [
@@ -243,20 +252,26 @@ class ParallelBulkCrawler:
 
             logger.info(f"{LogEmoji.SUCCESS} Found {len(property_items)} items on page {page_num}")
 
-            # Extract properties
-            properties = []
-            for item in property_items:
-                try:
-                    prop_data = self._extract_property(item, config)
-                    prop_data["source"] = config.site_name
+            # Extract properties (async with LLM enrichment)
+            extraction_tasks = [
+                self._extract_property(item, config)
+                for item in property_items
+            ]
 
+            # Execute extractions in parallel (faster!)
+            extracted_properties = await asyncio.gather(*extraction_tasks, return_exceptions=True)
+
+            # Filter valid results and check duplicates
+            properties = []
+            for prop_data in extracted_properties:
+                if isinstance(prop_data, Exception):
+                    logger.warning(f"{LogEmoji.WARNING} Extraction error: {prop_data}")
+                    continue
+
+                if isinstance(prop_data, dict):
                     # Check for duplicates
                     if not self.deduplicator.is_duplicate(prop_data):
                         properties.append(prop_data)
-
-                except Exception as e:
-                    logger.warning(f"{LogEmoji.WARNING} Error extracting property: {e}")
-                    continue
 
             return properties
 
@@ -264,12 +279,78 @@ class ParallelBulkCrawler:
             logger.error(f"{LogEmoji.ERROR} Error crawling page {page_num}: {e}")
             return []
 
-    def _extract_property(
+    async def _extract_metadata_with_llm(self, title: str, location: str) -> Dict[str, str]:
+        """
+        Extract city, district, property_type using LLM (NO HARDCODING!)
+
+        Uses cache to avoid redundant API calls for same patterns
+        """
+        cache_key = f"{title[:50]}_{location[:30]}"
+
+        # Check cache first
+        if cache_key in self.extraction_cache:
+            return self.extraction_cache[cache_key]
+
+        try:
+            prompt = f"""Extract structured metadata from this Vietnamese real estate listing.
+
+Title: {title}
+Location: {location}
+
+Return ONLY valid JSON with these exact fields:
+{{
+    "city": "Hồ Chí Minh" | "Hà Nội" | "Đà Nẵng" | etc,
+    "district": "Quận 1" | "Thủ Đức" | "Cầu Giấy" | etc (or empty string if not found),
+    "property_type": "căn hộ" | "nhà phố" | "biệt thự" | "đất" | "chung cư" | "shophouse" | etc
+}}
+
+Rules:
+- Infer city from district if not explicitly mentioned ("Quận 2" → city: "Hồ Chí Minh")
+- Normalize district names ("Q2" → "Quận 2", "Q.7" → "Quận 7")
+- Extract property_type from title keywords
+- Use empty string for missing fields, never null
+
+JSON:"""
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 150,
+                    "temperature": 0.0  # Deterministic
+                },
+                timeout=10.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("content", "").strip()
+
+                # Clean markdown
+                content = re.sub(r'^```(?:json)?\s*\n?', '', content)
+                content = re.sub(r'\n?```\s*$', '', content)
+
+                metadata = json.loads(content)
+
+                # Cache result
+                self.extraction_cache[cache_key] = metadata
+
+                return metadata
+            else:
+                logger.warning(f"LLM extraction failed: {response.status_code}")
+                return {"city": "", "district": "", "property_type": ""}
+
+        except Exception as e:
+            logger.warning(f"LLM extraction error: {e}")
+            return {"city": "", "district": "", "property_type": ""}
+
+    async def _extract_property(
         self,
         item: BeautifulSoup,
         config: CrawlConfig
     ) -> Dict[str, Any]:
-        """Extract property data from HTML element"""
+        """Extract property data from HTML element with LLM-enriched metadata"""
 
         selectors = config.css_selectors
 
@@ -290,7 +371,7 @@ class ParallelBulkCrawler:
         if property_url and not property_url.startswith('http'):
             property_url = f"{config.base_url.split('/')[0]}//{config.base_url.split('/')[2]}{property_url}"
 
-        # Extract bedrooms/bathrooms from description
+        # Extract bedrooms/bathrooms from description (regex)
         bedrooms = 0
         bathrooms = 0
 
@@ -302,15 +383,22 @@ class ParallelBulkCrawler:
         if bathroom_match:
             bathrooms = int(bathroom_match.group(1))
 
+        # Extract city, district, property_type using LLM (NO HARDCODING!)
+        metadata = await self._extract_metadata_with_llm(title, location)
+
         return {
             "title": title,
             "price": price,
             "location": location,
+            "city": metadata.get("city", ""),  # ← NEW!
+            "district": metadata.get("district", ""),  # ← NEW!
+            "property_type": metadata.get("property_type", ""),  # ← NEW!
             "bedrooms": bedrooms,
             "bathrooms": bathrooms,
             "area": area,
             "description": description,
-            "url": property_url
+            "url": property_url,
+            "source": config.site_name
         }
 
     async def crawl_site_parallel(

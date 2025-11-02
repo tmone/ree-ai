@@ -183,21 +183,28 @@ async def search_properties(request: SearchRequest):
         if request.filters:
             # City filter - HARD FILTER (exact match required!)
             if request.filters.city:
+                # Normalize to title case for case-insensitive matching
+                # "hồ chí minh" → "Hồ Chí Minh", "HỒ CHÍ MINH" → "Hồ Chí Minh"
+                normalized_city = request.filters.city.title()
+
                 filter_clauses.append({
                     "term": {
-                        "city": request.filters.city  # Field is already keyword type, no .keyword suffix
+                        "city": normalized_city  # Field is already keyword type, no .keyword suffix
                     }
                 })
-                logger.info(f"✅ Applied city filter: {request.filters.city}")
+                logger.info(f"✅ Applied city filter: {normalized_city} (input: {request.filters.city})")
 
             # District filter - HARD FILTER (exact match)
             if request.filters.district:
+                # Normalize to title case for case-insensitive matching
+                normalized_district = request.filters.district.title()
+
                 filter_clauses.append({
                     "term": {
-                        "district": request.filters.district  # Field is already keyword type, no .keyword suffix
+                        "district": normalized_district  # Field is already keyword type, no .keyword suffix
                     }
                 })
-                logger.info(f"✅ Applied district filter: {request.filters.district}")
+                logger.info(f"✅ Applied district filter: {normalized_district} (input: {request.filters.district})")
 
             # Region/location filter - FALLBACK (for backward compatibility)
             if request.filters.region:

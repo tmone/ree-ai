@@ -456,11 +456,12 @@ Standalone query:"""
             # Enrich query with conversation context if available
             enriched_query = await self._enrich_query_with_context(query, history or [])
 
-            max_iterations = 5  # INCREASED: Deep reasoning requires more iterations
+            max_iterations = 2  # OPTIMIZED: Reduced from 5 to 2 for faster responses (1 original + 1 refine)
             current_query = enriched_query
             best_results = []  # Keep track of BEST results across iterations for clarification
             best_evaluation = None
             requirements = None  # Will be extracted in each iteration
+            consecutive_no_results = 0  # Track consecutive iterations with 0 results for early stop
 
             for iteration in range(max_iterations):
                 self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] ========== Iteration {iteration + 1}/{max_iterations} ==========")
@@ -473,6 +474,25 @@ Standalone query:"""
 
                 # STEP 3: EVALUATE - Check result quality
                 evaluation = await self._evaluate_results(results, requirements)
+
+                # Track consecutive no results for early stop
+                if not results:
+                    consecutive_no_results += 1
+                    self.logger.warning(f"{LogEmoji.WARNING} [ReAct Agent] No results found ({consecutive_no_results} consecutive)")
+
+                    # Early stop if 2 consecutive iterations with no results
+                    if consecutive_no_results >= 2:
+                        self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Early stop: No results after {consecutive_no_results} attempts")
+                        # Fallback to generic search without filters
+                        self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Trying generic search as fallback...")
+                        results = await self._execute_semantic_search(query)  # Use original query
+                        if results:
+                            self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Agent] Generic search found {len(results)} results")
+                            return await self._generate_quality_response(query, results, requirements, evaluation)
+                        else:
+                            return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn. Bạn có thể cung cấp thêm thông tin hoặc mở rộng tiêu chí tìm kiếm không?"
+                else:
+                    consecutive_no_results = 0  # Reset counter when results found
 
                 # Keep track of best results (prefer more results if quality is similar)
                 if (not best_results and results) or (results and len(results) > len(best_results)):
@@ -562,6 +582,19 @@ Standalone query:"""
 
             extraction = extraction_response.json()
             entities = extraction.get("entities", {})
+
+            # FIX BUG #4: Normalize district to match OpenSearch data format
+            # Attribute Extraction returns "Quận Thủ Đức" but OpenSearch data has "Thủ Đức"
+            # Remove "Quận " prefix to match data
+            if "district" in entities and entities["district"]:
+                district = entities["district"]
+                # Handle both string and list cases (multi-district queries)
+                if isinstance(district, str):
+                    entities["district"] = district.replace("Quận ", "").replace("quận ", "").strip()
+                    self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] '{district}' → '{entities['district']}'")
+                elif isinstance(district, list):
+                    entities["district"] = [d.replace("Quận ", "").replace("quận ", "").strip() for d in district]
+                    self.logger.info(f"{LogEmoji.INFO} [Filter Normalization] {district} → {entities['district']}")
 
             # Step 2: Document Search
             search_response = await self.http_client.post(
@@ -864,14 +897,18 @@ LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước �
 
             # FIX: Attribute Extraction sometimes misclassifies city as district
             # If "district" looks like a city name (contains "Thành phố", "TP"), treat it as city
+            # ALSO FIX: Handle case where district is a list (multi-district queries)
             if not city and district:
-                if any(keyword in district.lower() for keyword in ["thành phố", "tp.", "tp ", "city"]):
+                # Handle both string and list cases
+                district_for_check = district if isinstance(district, str) else (district[0] if isinstance(district, list) and len(district) > 0 else "")
+
+                if district_for_check and any(keyword in district_for_check.lower() for keyword in ["thành phố", "tp.", "tp ", "city"]):
                     # This is actually a city, not a district!
-                    city = district.replace("Thành phố", "").replace("TP.", "").replace("TP", "").strip()
+                    city = district_for_check.replace("Thành phố", "").replace("TP.", "").replace("TP", "").strip()
                     district = None  # Clear the wrongly classified district
                 else:
-                    # Infer city from actual district
-                    city = await self._infer_city_from_district(district)
+                    # Infer city from actual district (use first district if it's a list)
+                    city = await self._infer_city_from_district(district_for_check)
 
             # Normalize extracted entities to standard format
             requirements = {

@@ -14,14 +14,28 @@
     <!-- Alpine.js for reactivity -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 
-    <!-- Custom styles -->
     <style>
         [x-cloak] { display: none !important; }
 
-        .status-running { @apply bg-green-100 text-green-800; }
-        .status-stopped { @apply bg-gray-100 text-gray-800; }
-        .status-unhealthy { @apply bg-red-100 text-red-800; }
-        .status-unknown { @apply bg-yellow-100 text-yellow-800; }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .status-running { @apply bg-gradient-to-r from-green-400 to-green-600 text-white; }
+        .status-stopped { @apply bg-gradient-to-r from-gray-400 to-gray-600 text-white; }
+        .status-unhealthy { @apply bg-gradient-to-r from-red-400 to-red-600 text-white; }
+        .status-unknown { @apply bg-gradient-to-r from-yellow-400 to-yellow-600 text-white; }
+
+        .service-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .service-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            border-left-color: #667eea;
+        }
 
         .log-viewer {
             font-family: 'Courier New', monospace;
@@ -37,27 +51,48 @@
             0%, 100% { opacity: 1; }
             50% { opacity: .5; }
         }
+
+        .metric-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .clickable-port {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .clickable-port:hover {
+            color: #667eea;
+            text-decoration: underline;
+        }
     </style>
 </head>
-<body class="bg-gray-50" x-data="monitoringApp()" x-init="init()">
+<body class="bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen" x-data="monitoringApp()" x-init="init()">
 
     <!-- Header -->
-    <header class="bg-white shadow">
+    <header class="gradient-bg shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex items-center justify-between">
                 <div class="flex items-center">
-                    <h1 class="text-3xl font-bold text-gray-900">🎯 REE AI System Monitor</h1>
-                    <span class="ml-4 flex items-center">
-                        <span class="pulse-dot h-3 w-3 rounded-full bg-green-500 mr-2"></span>
-                        <span class="text-sm text-gray-600" x-text="'Connected to ' + services.length + ' services'"></span>
+                    <h1 class="text-3xl font-bold text-white flex items-center">
+                        <span class="text-4xl mr-3">🎯</span>
+                        REE AI System Monitor
+                    </h1>
+                    <span class="ml-6 flex items-center bg-white bg-opacity-20 px-4 py-2 rounded-full">
+                        <span class="pulse-dot h-3 w-3 rounded-full bg-green-400 mr-2"></span>
+                        <span class="text-sm text-white font-medium" x-text="services.length + ' services connected'"></span>
+                        <span class="text-xs text-white ml-2 opacity-75" x-text="'• Updated ' + lastUpdate"></span>
                     </span>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <button @click="refreshServices()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        🔄 Refresh
+                <div class="flex items-center space-x-3">
+                    <button @click="refreshServices()" class="px-5 py-2.5 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2">
+                        <span>🔄</span>
+                        <span>Refresh</span>
                     </button>
-                    <button @click="showConfigModal = true" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                        ⚙️ Configure
+                    <button @click="showConfigModal = true" class="px-5 py-2.5 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center space-x-2">
+                        <span>⚙️</span>
+                        <span>Configure</span>
                     </button>
                 </div>
             </div>
@@ -69,43 +104,43 @@
 
         <!-- Summary Cards -->
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="metric-card rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm text-gray-600">Running Services</p>
-                        <p class="text-3xl font-bold text-green-600" x-text="runningCount"></p>
+                        <p class="text-sm font-medium text-gray-600 mb-1">Running Services</p>
+                        <p class="text-4xl font-bold text-green-600" x-text="runningCount"></p>
                     </div>
-                    <div class="text-4xl">✅</div>
+                    <div class="text-5xl">✅</div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="metric-card rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm text-gray-600">Stopped Services</p>
-                        <p class="text-3xl font-bold text-gray-600" x-text="stoppedCount"></p>
+                        <p class="text-sm font-medium text-gray-600 mb-1">Stopped Services</p>
+                        <p class="text-4xl font-bold text-gray-600" x-text="stoppedCount"></p>
                     </div>
-                    <div class="text-4xl">⏸️</div>
+                    <div class="text-5xl">⏸️</div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="metric-card rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm text-gray-600">Unhealthy</p>
-                        <p class="text-3xl font-bold text-red-600" x-text="unhealthyCount"></p>
+                        <p class="text-sm font-medium text-gray-600 mb-1">Unhealthy</p>
+                        <p class="text-4xl font-bold text-red-600" x-text="unhealthyCount"></p>
                     </div>
-                    <div class="text-4xl">❌</div>
+                    <div class="text-5xl">❌</div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-lg shadow p-6">
+            <div class="metric-card rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-200">
                 <div class="flex items-center justify-between">
                     <div>
-                        <p class="text-sm text-gray-600">Avg CPU Usage</p>
-                        <p class="text-3xl font-bold text-blue-600" x-text="avgCpuUsage + '%'"></p>
+                        <p class="text-sm font-medium text-gray-600 mb-1">Avg CPU Usage</p>
+                        <p class="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent" x-text="avgCpuUsage + '%'"></p>
                     </div>
-                    <div class="text-4xl">📊</div>
+                    <div class="text-5xl">📊</div>
                 </div>
             </div>
         </div>
@@ -113,18 +148,22 @@
         <!-- Services Grid -->
         <div class="grid grid-cols-1 gap-6 mb-8">
             <template x-for="service in services" :key="service.name">
-                <div class="bg-white rounded-lg shadow overflow-hidden">
+                <div class="service-card bg-white rounded-xl shadow-lg overflow-hidden">
                     <div class="p-6">
-                        <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center justify-between mb-6">
                             <div class="flex items-center space-x-4">
-                                <h3 class="text-xl font-semibold" x-text="service.name"></h3>
+                                <h3 class="text-2xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent" x-text="service.name"></h3>
                                 <span
-                                    class="px-3 py-1 rounded-full text-xs font-medium"
+                                    class="px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wide shadow-md"
                                     :class="'status-' + service.status"
-                                    x-text="service.status.toUpperCase()"
+                                    x-text="service.status"
                                 ></span>
                                 <template x-if="service.health">
-                                    <span class="text-sm text-gray-600" x-text="'Health: ' + service.health"></span>
+                                    <span
+                                        class="px-3 py-1 rounded-full text-xs font-semibold"
+                                        :class="service.health === 'healthy' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                                        x-text="'Health: ' + service.health">
+                                    </span>
                                 </template>
                             </div>
 
@@ -133,86 +172,104 @@
                                 <button
                                     @click="controlService(service.name, 'start')"
                                     :disabled="service.status === 'running'"
-                                    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-1"
                                 >
-                                    ▶️ Start
+                                    <span>▶️</span>
+                                    <span class="font-medium">Start</span>
                                 </button>
                                 <button
                                     @click="controlService(service.name, 'stop')"
                                     :disabled="service.status !== 'running'"
-                                    class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-1"
                                 >
-                                    ⏹️ Stop
+                                    <span>⏹️</span>
+                                    <span class="font-medium">Stop</span>
                                 </button>
                                 <button
                                     @click="controlService(service.name, 'restart')"
                                     :disabled="service.status !== 'running'"
-                                    class="px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    class="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-600 text-white rounded-lg hover:from-yellow-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-1"
                                 >
-                                    🔄 Restart
+                                    <span>🔄</span>
+                                    <span class="font-medium">Restart</span>
                                 </button>
                                 <button
                                     @click="viewLogs(service.name)"
-                                    class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                                    class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-md hover:shadow-lg transition-all duration-200 flex items-center space-x-1"
                                 >
-                                    📋 Logs
+                                    <span>📋</span>
+                                    <span class="font-medium">Logs</span>
                                 </button>
                             </div>
                         </div>
 
                         <!-- Service Info -->
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                            <div>
-                                <p class="text-gray-600">Container ID</p>
-                                <p class="font-mono" x-text="service.container_id || 'N/A'"></p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
+                            <div class="bg-gray-50 p-3 rounded-lg">
+                                <p class="text-xs text-gray-500 mb-1 uppercase tracking-wide">Container ID</p>
+                                <p class="font-mono text-gray-900 font-medium" x-text="service.container_id ? service.container_id.substring(0, 12) : 'N/A'"></p>
                             </div>
-                            <div>
-                                <p class="text-gray-600">Image</p>
-                                <p class="font-mono truncate" x-text="service.image"></p>
+                            <div class="bg-gray-50 p-3 rounded-lg">
+                                <p class="text-xs text-gray-500 mb-1 uppercase tracking-wide">Image</p>
+                                <p class="font-mono text-gray-900 truncate font-medium" x-text="service.image"></p>
                             </div>
-                            <div>
-                                <p class="text-gray-600">Ports</p>
-                                <p class="font-mono" x-text="service.ports.join(', ') || 'N/A'"></p>
+                            <div class="bg-gray-50 p-3 rounded-lg">
+                                <p class="text-xs text-gray-500 mb-1 uppercase tracking-wide">Ports</p>
+                                <template x-if="service.ports && service.ports.length > 0">
+                                    <div class="space-y-1">
+                                        <template x-for="port in service.ports" :key="port">
+                                            <a
+                                                :href="getServiceUrl(port)"
+                                                target="_blank"
+                                                class="clickable-port font-mono text-blue-600 hover:text-purple-600 font-medium block"
+                                                x-text="port"
+                                            ></a>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="!service.ports || service.ports.length === 0">
+                                    <p class="font-mono text-gray-400">N/A</p>
+                                </template>
                             </div>
-                            <div>
-                                <p class="text-gray-600">Created</p>
-                                <p x-text="formatDate(service.created)"></p>
+                            <div class="bg-gray-50 p-3 rounded-lg">
+                                <p class="text-xs text-gray-500 mb-1 uppercase tracking-wide">Created</p>
+                                <p class="text-gray-900 font-medium" x-text="formatDate(service.created)"></p>
                             </div>
                         </div>
 
                         <!-- Metrics (if available) -->
                         <template x-if="service.cpu_usage !== null || service.memory_usage !== null">
-                            <div class="mt-4 pt-4 border-t grid grid-cols-3 gap-4">
+                            <div class="mt-4 pt-4 border-t border-gray-100 grid grid-cols-3 gap-6">
                                 <template x-if="service.cpu_usage !== null">
                                     <div>
-                                        <p class="text-sm text-gray-600">CPU Usage</p>
-                                        <div class="flex items-center space-x-2">
-                                            <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide font-semibold">CPU Usage</p>
+                                        <div class="flex items-center space-x-3">
+                                            <div class="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden shadow-inner">
                                                 <div
-                                                    class="h-full bg-blue-600"
+                                                    class="h-full bg-gradient-to-r from-blue-500 to-purple-600 transition-all duration-500"
                                                     :style="'width: ' + Math.min(service.cpu_usage, 100) + '%'"
                                                 ></div>
                                             </div>
-                                            <span class="text-sm font-medium" x-text="service.cpu_usage.toFixed(1) + '%'"></span>
+                                            <span class="text-sm font-bold text-gray-700 w-12" x-text="service.cpu_usage.toFixed(1) + '%'"></span>
                                         </div>
                                     </div>
                                 </template>
 
                                 <template x-if="service.memory_usage !== null">
                                     <div>
-                                        <p class="text-sm text-gray-600">Memory Usage</p>
+                                        <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide font-semibold">Memory Usage</p>
                                         <div class="flex items-center space-x-2">
-                                            <span class="text-sm font-medium" x-text="service.memory_usage.toFixed(0) + ' MB'"></span>
+                                            <span class="text-sm font-bold text-gray-700" x-text="service.memory_usage.toFixed(0) + ' MB'"></span>
                                         </div>
                                     </div>
                                 </template>
 
                                 <template x-if="service.network_rx !== null">
                                     <div>
-                                        <p class="text-sm text-gray-600">Network I/O</p>
-                                        <div class="text-sm">
-                                            <span>↓ </span><span x-text="formatBytes(service.network_rx)"></span>
-                                            <span class="ml-2">↑ </span><span x-text="formatBytes(service.network_tx)"></span>
+                                        <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide font-semibold">Network I/O</p>
+                                        <div class="text-sm font-medium text-gray-700 space-x-3">
+                                            <span class="text-green-600">↓ <span x-text="formatBytes(service.network_rx)"></span></span>
+                                            <span class="text-blue-600">↑ <span x-text="formatBytes(service.network_tx)"></span></span>
                                         </div>
                                     </div>
                                 </template>
@@ -225,7 +282,7 @@
 
         <!-- Empty State -->
         <template x-if="services.length === 0">
-            <div class="bg-white rounded-lg shadow p-12 text-center">
+            <div class="bg-white rounded-xl shadow-lg p-12 text-center">
                 <div class="text-6xl mb-4">🔍</div>
                 <h3 class="text-xl font-semibold text-gray-900 mb-2">No Services Found</h3>
                 <p class="text-gray-600">Start some REE AI services to see them here.</p>
@@ -235,11 +292,14 @@
     </main>
 
     <!-- Log Viewer Modal -->
-    <div x-show="showLogsModal" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showLogsModal = false">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[80vh] flex flex-col">
-            <div class="p-6 border-b flex items-center justify-between">
-                <h2 class="text-2xl font-bold">📋 Logs: <span x-text="currentService"></span></h2>
-                <button @click="showLogsModal = false" class="text-gray-500 hover:text-gray-700">
+    <div x-show="showLogsModal" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm" @click.self="showLogsModal = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[80vh] flex flex-col">
+            <div class="p-6 border-b bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-t-xl flex items-center justify-between">
+                <h2 class="text-2xl font-bold flex items-center">
+                    <span class="mr-2">📋</span>
+                    Logs: <span class="ml-2 font-mono" x-text="currentService"></span>
+                </h2>
+                <button @click="showLogsModal = false" class="text-white hover:bg-white hover:bg-opacity-20 rounded-lg p-2 transition-all">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                     </svg>
@@ -248,11 +308,11 @@
             <div class="flex-1 overflow-auto p-6 bg-gray-900">
                 <pre class="log-viewer text-green-400"><code x-html="formatLogs(logs)"></code></pre>
             </div>
-            <div class="p-4 border-t flex justify-between items-center">
-                <button @click="refreshLogs()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            <div class="p-4 border-t bg-gray-50 rounded-b-xl flex justify-between items-center">
+                <button @click="refreshLogs()" class="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-md font-medium">
                     🔄 Refresh Logs
                 </button>
-                <button @click="showLogsModal = false" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                <button @click="showLogsModal = false" class="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 shadow-md font-medium">
                     Close
                 </button>
             </div>
@@ -260,9 +320,9 @@
     </div>
 
     <!-- Configuration Modal -->
-    <div x-show="showConfigModal" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @click.self="showConfigModal = false">
-        <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-auto">
-            <div class="p-6 border-b">
+    <div x-show="showConfigModal" x-cloak class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm" @click.self="showConfigModal = false">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[80vh] overflow-auto">
+            <div class="p-6 border-b bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-t-xl">
                 <h2 class="text-2xl font-bold">⚙️ Monitoring Configuration</h2>
             </div>
             <div class="p-6">
@@ -270,9 +330,9 @@
                     <!-- Alert Configuration -->
                     <div>
                         <h3 class="text-lg font-semibold mb-4">Alert Configuration</h3>
-                        <div class="bg-gray-50 p-4 rounded">
+                        <div class="bg-gradient-to-br from-purple-50 to-blue-50 p-4 rounded-lg border border-purple-200">
                             <p class="text-sm text-gray-600">Configure alerts for service health, CPU, memory, and disk usage.</p>
-                            <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            <button class="mt-4 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 shadow-md">
                                 + Add Alert Rule
                             </button>
                         </div>
@@ -282,27 +342,27 @@
                     <div>
                         <h3 class="text-lg font-semibold mb-4">Notification Channels</h3>
                         <div class="space-y-4">
-                            <div class="bg-gray-50 p-4 rounded">
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <h4 class="font-medium mb-2">📧 Email Notifications</h4>
-                                <input type="email" placeholder="admin@example.com" class="w-full px-3 py-2 border rounded">
+                                <input type="email" placeholder="admin@example.com" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                             </div>
-                            <div class="bg-gray-50 p-4 rounded">
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <h4 class="font-medium mb-2">💬 Slack Webhook</h4>
-                                <input type="url" placeholder="https://hooks.slack.com/..." class="w-full px-3 py-2 border rounded">
+                                <input type="url" placeholder="https://hooks.slack.com/..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                             </div>
-                            <div class="bg-gray-50 p-4 rounded">
+                            <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
                                 <h4 class="font-medium mb-2">🔗 Custom Webhook</h4>
-                                <input type="url" placeholder="https://your-webhook.com/alerts" class="w-full px-3 py-2 border rounded">
+                                <input type="url" placeholder="https://your-webhook.com/alerts" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="p-6 border-t flex justify-end space-x-4">
-                <button @click="showConfigModal = false" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+            <div class="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end space-x-4">
+                <button @click="showConfigModal = false" class="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 shadow-md font-medium">
                     Cancel
                 </button>
-                <button class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                <button class="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 shadow-md font-medium">
                     Save Configuration
                 </button>
             </div>
@@ -319,6 +379,7 @@
                 showLogsModal: false,
                 showConfigModal: false,
                 ws: null,
+                lastUpdate: 'just now',
 
                 // Computed properties
                 get runningCount() {
@@ -341,20 +402,51 @@
                     await this.refreshServices();
                     this.connectWebSocket();
 
-                    // Auto-refresh every 30 seconds
-                    setInterval(() => this.refreshServices(), 30000);
+                    // REALTIME: Auto-refresh every 5 seconds (was 30s)
+                    setInterval(() => {
+                        this.refreshServices();
+                        this.updateLastRefreshTime();
+                    }, 5000);
                 },
 
                 async refreshServices() {
                     try {
                         const response = await fetch('/api/services');
-                        this.services = await response.json();
+                        let allServices = await response.json();
+
+                        // FILTER: Remove monitoring-service from list (self)
+                        this.services = allServices.filter(s => s.name !== 'monitoring-service');
+
+                        this.updateLastRefreshTime();
                     } catch (error) {
                         console.error('Failed to fetch services:', error);
                     }
                 },
 
+                updateLastRefreshTime() {
+                    const now = new Date();
+                    this.lastUpdate = now.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                },
+
+                getServiceUrl(portMapping) {
+                    // portMapping format: "9999:8080/tcp" or "9999:8080/tcp"
+                    const match = portMapping.match(/(\d+):(\d+)/);
+                    if (match) {
+                        const externalPort = match[1];
+                        return `http://localhost:${externalPort}`;
+                    }
+                    return '#';
+                },
+
                 async controlService(serviceName, action) {
+                    if (!confirm(`Are you sure you want to ${action} ${serviceName}?`)) {
+                        return;
+                    }
+
                     try {
                         const response = await fetch('/api/control', {
                             method: 'POST',
@@ -409,7 +501,8 @@
                         const data = JSON.parse(event.data);
 
                         if (data.type === 'status_update') {
-                            this.services = data.services;
+                            // Filter monitoring-service from WebSocket updates too
+                            this.services = data.services.filter(s => s.name !== 'monitoring-service');
                         } else if (data.type === 'service_update') {
                             // Service was started/stopped/restarted
                             this.refreshServices();

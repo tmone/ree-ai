@@ -68,22 +68,22 @@ class BaseService:
             allow_headers=["*"],
         )
 
-        # Setup standard routes
-        self._setup_standard_routes()
-
-        # Setup custom routes (to be implemented by subclasses)
+        # Setup custom routes FIRST (to be implemented by subclasses)
+        # This allows services to override default routes like "/"
         self.setup_routes()
 
-    def _setup_standard_routes(self):
-        """Setup standard health check and info endpoints."""
+        # Setup standard routes AFTER custom routes
+        # Custom routes defined in setup_routes() will take precedence
+        self._setup_standard_routes()
 
-        @self.app.get("/")
-        async def root():
-            return {
-                "service": self.name,
-                "version": self.version,
-                "status": "running"
-            }
+    def _setup_standard_routes(self):
+        """
+        Setup standard health check and info endpoints.
+
+        Note: No root ("/") route is defined here to allow services
+        to define their own custom root routes (e.g., web dashboards).
+        API services can use /health and /info for service discovery.
+        """
 
         @self.app.get("/health")
         async def health():

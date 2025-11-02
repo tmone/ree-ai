@@ -180,36 +180,13 @@ class MonitoringService(BaseService):
 
                 for container in containers:
                     try:
-                        # Get container stats (non-blocking)
-                        stats = None
-                        try:
-                            stats = container.stats(stream=False)
-                        except:
-                            pass
-
-                        # Parse stats
+                        # PERFORMANCE FIX: Disable real-time stats to prevent timeout
+                        # Stats collection is expensive (2-3s per container)
+                        # TODO: Implement background stats caching for better performance
                         cpu_usage = None
                         memory_usage = None
                         network_rx = None
                         network_tx = None
-
-                        if stats:
-                            # CPU percentage
-                            cpu_delta = stats['cpu_stats']['cpu_usage']['total_usage'] - \
-                                       stats['precpu_stats']['cpu_usage']['total_usage']
-                            system_delta = stats['cpu_stats']['system_cpu_usage'] - \
-                                          stats['precpu_stats']['system_cpu_usage']
-                            if system_delta > 0:
-                                cpu_usage = (cpu_delta / system_delta) * 100.0
-
-                            # Memory usage in MB
-                            if 'usage' in stats['memory_stats']:
-                                memory_usage = stats['memory_stats']['usage'] / (1024 * 1024)
-
-                            # Network I/O
-                            if 'networks' in stats:
-                                network_rx = sum(net['rx_bytes'] for net in stats['networks'].values())
-                                network_tx = sum(net['tx_bytes'] for net in stats['networks'].values())
 
                         # Get health status
                         health = None

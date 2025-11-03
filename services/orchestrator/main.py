@@ -191,7 +191,8 @@ class Orchestrator(BaseService):
                         "owned_by": "ree-ai",
                         "permission": [],
                         "root": "ree-ai-assistant",
-                        "parent": None
+                        "parent": None,
+                        "description": "REE AI Assistant - Trợ lý bất động sản thông minh"
                     }
                 ]
             }
@@ -856,7 +857,7 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
             response_parts.append(
                 f"\n{i}. **{title}**\n"
                 f"   - Giá: {price}\n"
-                f"   - Diện tích: {area} m²\n"
+                f"   - Diện tích: {self._format_area(area)}\n"
                 f"   - Khu vực: {location}"
             )
 
@@ -1670,7 +1671,7 @@ Query mới:"""
 
                     clarification_parts.append(
                         f"\n{i + 1}. {match_indicator} **{title}** (Điểm: {score}/100)\n"
-                        f"   💰 Giá: {price} | 📐 {area}m² | 🛏️ {prop_bedrooms} PN\n"
+                        f"   💰 Giá: {price} | 📐 {self._format_area(area)} | 🛏️ {prop_bedrooms} PN\n"
                         f"   📍 {location}\n"
                     )
 
@@ -1682,6 +1683,28 @@ Query mới:"""
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Clarification generation failed: {e}")
             return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp chính xác. Bạn có thể cung cấp thêm thông tin để tôi tìm kiếm tốt hơn không?"
+
+    def _format_area(self, area) -> str:
+        """
+        Format area value to avoid duplicate units.
+
+        Examples:
+        - "78" → "78 m²"
+        - "78 m²" → "78 m²"
+        - "78m²" → "78 m²"
+        - 78 → "78 m²"
+        """
+        if not area or area == "N/A":
+            return "N/A"
+
+        # Convert to string
+        area_str = str(area).strip()
+
+        # Remove existing m² variations
+        area_str = area_str.replace("m²", "").replace("m2", "").strip()
+
+        # Return with proper unit
+        return f"{area_str} m²" if area_str else "N/A"
 
     def _calculate_match_score(self, prop: Dict, requirements: Dict) -> int:
         """
@@ -1872,7 +1895,7 @@ Nearby districts:"""
                     response_parts.append(
                         f"\n{shown + 1}. **{title}**\n"
                         f"   - Giá: {price}\n"
-                        f"   - Diện tích: {area} m²\n"
+                        f"   - Diện tích: {self._format_area(area)}\n"
                         f"   - Khu vực: {location}"
                     )
                     shown += 1

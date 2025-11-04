@@ -1,0 +1,629 @@
+{
+  "timestamp": "2025-11-04T15:01:42.880291",
+  "total_tests": 24,
+  "results": [
+    {
+      "test_id": 1,
+      "scenario": "simple_queries",
+      "query": "Tìm căn hộ 2 phòng ngủ Quận 2",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 1.2159347534179688e-05,
+      "basic_quality": 0.31450000000000006,
+      "enhanced_success": true,
+      "enhanced_time": 0.0009388923645019531,
+      "enhanced_quality": 0.95,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_3_irrelevant",
+        "reranking"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 202.06677265500787,
+      "winner": "enhanced",
+      "bugs_detected": [],
+      "warnings": []
+    },
+    {
+      "test_id": 2,
+      "scenario": "simple_queries",
+      "query": "Biệt thự Phú Mỹ Hưng dưới 20 tỷ",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 7.867813110351562e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.00010704994201660156,
+      "enhanced_quality": 0.4,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_1_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 40.0,
+      "winner": "enhanced",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.40 (should be ≥0.70)"
+      ],
+      "warnings": []
+    },
+    {
+      "test_id": 3,
+      "scenario": "simple_queries",
+      "query": "Nhà phố gần trường quốc tế",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 4.76837158203125e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 5.91278076171875e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 4,
+      "scenario": "simple_queries",
+      "query": "Căn hộ có hồ bơi Thảo Điền",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 5.9604644775390625e-06,
+      "basic_quality": 0.1133333333333333,
+      "enhanced_success": true,
+      "enhanced_time": 9.393692016601562e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_3_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": -100.0,
+      "winner": "basic",
+      "bugs_detected": [
+        "Enhanced RAG WORSE than Basic! Enhanced: 0.00, Basic: 0.11",
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: -11.33% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 5,
+      "scenario": "ambiguous_queries",
+      "query": "Tìm nhà đẹp",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.106231689453125e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 9.393692016601562e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 6,
+      "scenario": "ambiguous_queries",
+      "query": "Căn hộ sang trọng",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.1133333333333333,
+      "enhanced_success": true,
+      "enhanced_time": 0.00011801719665527344,
+      "enhanced_quality": 0.4,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 252.94117647058835,
+      "winner": "enhanced",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.40 (should be ≥0.70)"
+      ],
+      "warnings": []
+    },
+    {
+      "test_id": 7,
+      "scenario": "ambiguous_queries",
+      "query": "Nhà chất lượng cao",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 3.814697265625e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 5.507469177246094e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 8,
+      "scenario": "ambiguous_queries",
+      "query": "Find nice house",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 4.76837158203125e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 5.412101745605469e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 9,
+      "scenario": "complex_queries",
+      "query": "Căn hộ 3PN gần trường quốc tế giá dưới 10 tỷ Quận 2",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 1.1920928955078125e-05,
+      "basic_quality": 0.31450000000000006,
+      "enhanced_success": true,
+      "enhanced_time": 0.011415958404541016,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_5_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": -100.0,
+      "winner": "basic",
+      "bugs_detected": [
+        "Enhanced RAG WORSE than Basic! Enhanced: 0.00, Basic: 0.31",
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: -31.45% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 10,
+      "scenario": "complex_queries",
+      "query": "Biệt thự 4PN có sân vườn garage 3 xe an ninh 24/7 Phú Mỹ Hưng",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.0001227855682373047,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 11,
+      "scenario": "complex_queries",
+      "query": "Nhà phố mặt tiền 6m 4 tầng gần chợ giá 8-12 tỷ",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.344650268554688e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.003240823745727539,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 12,
+      "scenario": "typos_queries",
+      "query": "Tim can ho Quan 2",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.298324584960938e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 9.703636169433594e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 13,
+      "scenario": "typos_queries",
+      "query": "Biet thu Phu My Hung",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 2.09808349609375e-05,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.0002968311309814453,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 14,
+      "scenario": "typos_queries",
+      "query": "Can ho co ho boi",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.00010013580322265625,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 15,
+      "scenario": "typos_queries",
+      "query": "Apartmnet District 2",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.308125,
+      "enhanced_success": true,
+      "enhanced_time": 0.00011420249938964844,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_4_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": -100.0,
+      "winner": "basic",
+      "bugs_detected": [
+        "Enhanced RAG WORSE than Basic! Enhanced: 0.00, Basic: 0.31",
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: -30.81% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 16,
+      "scenario": "user_with_history",
+      "query": "Tìm căn hộ Quận 2",
+      "user_id": "user_history_1",
+      "basic_success": true,
+      "basic_time": 4.76837158203125e-06,
+      "basic_quality": 0.31450000000000006,
+      "enhanced_success": true,
+      "enhanced_time": 0.0005309581756591797,
+      "enhanced_quality": 0.95,
+      "enhanced_operators_used": [
+        "memory_retrieval",
+        "retrieval",
+        "document_grading",
+        "filtered_3_irrelevant",
+        "reranking",
+        "memory_storage"
+      ],
+      "enhanced_memory_used": true,
+      "improvement": 202.06677265500787,
+      "winner": "enhanced",
+      "bugs_detected": [],
+      "warnings": []
+    },
+    {
+      "test_id": 17,
+      "scenario": "user_with_history",
+      "query": "Có thêm nào gần trường không?",
+      "user_id": "user_history_1",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.0027840137481689453,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "memory_retrieval",
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant",
+        "memory_storage"
+      ],
+      "enhanced_memory_used": true,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 18,
+      "scenario": "user_with_history",
+      "query": "Tìm nhà view đẹp",
+      "user_id": "user_history_1",
+      "basic_success": true,
+      "basic_time": 8.106231689453125e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.0004029273986816406,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "memory_retrieval",
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant",
+        "memory_storage"
+      ],
+      "enhanced_memory_used": true,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 19,
+      "scenario": "user_with_history",
+      "query": "Giá cao hơn một chút được",
+      "user_id": "user_history_1",
+      "basic_success": true,
+      "basic_time": 9.298324584960938e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.00042891502380371094,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "memory_retrieval",
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant",
+        "memory_storage"
+      ],
+      "enhanced_memory_used": true,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 20,
+      "scenario": "edge_cases",
+      "query": "a",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.344650268554688e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.00027298927307128906,
+      "enhanced_quality": 0.38000000000000006,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "reranking"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 38.00000000000001,
+      "winner": "enhanced",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.38 (should be ≥0.70)"
+      ],
+      "warnings": []
+    },
+    {
+      "test_id": 21,
+      "scenario": "edge_cases",
+      "query": "Nhà",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 9.059906005859375e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 9.322166442871094e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 22,
+      "scenario": "edge_cases",
+      "query": "???",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.106231689453125e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 0.00010180473327636719,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 23,
+      "scenario": "edge_cases",
+      "query": "123",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.821487426757812e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 9.179115295410156e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    },
+    {
+      "test_id": 24,
+      "scenario": "edge_cases",
+      "query": "Nhà nhà nhà",
+      "user_id": "anonymous",
+      "basic_success": true,
+      "basic_time": 8.821487426757812e-06,
+      "basic_quality": 0.0,
+      "enhanced_success": true,
+      "enhanced_time": 9.918212890625e-05,
+      "enhanced_quality": 0.0,
+      "enhanced_operators_used": [
+        "retrieval",
+        "document_grading",
+        "filtered_2_irrelevant"
+      ],
+      "enhanced_memory_used": false,
+      "improvement": 0.0,
+      "winner": "tie",
+      "bugs_detected": [
+        "Enhanced quality too low: 0.00 (should be ≥0.70)"
+      ],
+      "warnings": [
+        "Small improvement: 0.00% (expected ≥5% for Enhanced RAG)"
+      ]
+    }
+  ]
+}

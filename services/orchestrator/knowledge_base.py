@@ -154,22 +154,24 @@ class KnowledgeBase:
 
     def _expand_property_type(self, query: str) -> Optional[Dict[str, Any]]:
         """Expand property type keywords"""
+        # FIX BUG #10C: Remove property_type filters - database doesn't have this field populated
+        # Only use terms for text search expansion, not as strict filters
         expansions = {
             "căn hộ": {
                 "terms": ["apartment", "condo", "chung cư"],
-                "filters": {"property_type": "apartment"}
+                "filters": {}  # Empty - property_type not in database
             },
             "biệt thự": {
                 "terms": ["villa", "nhà vườn"],
-                "filters": {"property_type": "villa"}
+                "filters": {}
             },
             "nhà phố": {
                 "terms": ["townhouse", "nhà riêng"],
-                "filters": {"property_type": "townhouse"}
+                "filters": {}
             },
             "đất": {
                 "terms": ["land", "đất nền"],
-                "filters": {"property_type": "land"}
+                "filters": {}
             }
         }
 
@@ -193,7 +195,8 @@ class KnowledgeBase:
                     "Australian International School", "British International School",
                     "IB School", "American School", "Saigon South"
                 ],
-                "filters": {"district": {"$in": ["2", "7"]}, "distance_to_school": {"$lte": 2000}},
+                # FIX BUG #10B: District values must match OpenSearch format "Quận X" not "X"
+                "filters": {"district": {"$in": ["Quận 2", "Quận 7"]}, "distance_to_school": {"$lte": 2000}},
                 "reason": "International schools → Districts 2 & 7, AIS/BIS/SSIS/ISHCMC/VAS, 2km radius"
             },
             "gần trường quốc tế": {
@@ -202,7 +205,8 @@ class KnowledgeBase:
                     "Australian International School", "British International School",
                     "IB School", "American School", "Saigon South"
                 ],
-                "filters": {"district": {"$in": ["2", "7"]}, "distance_to_school": {"$lte": 2000}},
+                # FIX BUG #10B: District values must match OpenSearch format "Quận X" not "X"
+                "filters": {"district": {"$in": ["Quận 2", "Quận 7"]}, "distance_to_school": {"$lte": 2000}},
                 "reason": "Near international schools → Districts 2 & 7, AIS/BIS/SSIS/ISHCMC/VAS, 2km radius"
             },
             "gần trường": {
@@ -217,12 +221,14 @@ class KnowledgeBase:
             },
             "quận 2": {
                 "terms": ["District 2", "D2", "Thảo Điền", "An Phú"],
-                "filters": {"district": "2"},
+                # FIX BUG #10B: District values must match OpenSearch format "Quận 2" not "2"
+                "filters": {"district": "Quận 2"},
                 "reason": "District 2 → Include Thao Dien, An Phu areas"
             },
             "quận 7": {
                 "terms": ["District 7", "D7", "Phú Mỹ Hưng", "PMH"],
-                "filters": {"district": "7"},
+                # FIX BUG #10B: District values must match OpenSearch format "Quận 7" not "7"
+                "filters": {"district": "Quận 7"},
                 "reason": "District 7 → Include Phu My Hung area"
             }
         }

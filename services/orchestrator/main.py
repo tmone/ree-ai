@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 import httpx
 import asyncpg
 from datetime import datetime
+from fastapi.responses import StreamingResponse
 
 # HIGH PRIORITY FIX: Add retry logic and circuit breaker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -25,6 +26,18 @@ from shared.models.orchestrator import (
 from shared.models.core_gateway import LLMRequest, Message, ModelType, FileAttachment
 from shared.utils.logger import LogEmoji
 from shared.config import settings
+
+# NEW: Import ReAct components (Phase 1-3)
+# FIX BUG#2+#4: Add project root to path for module imports
+import sys
+from pathlib import Path
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from services.orchestrator.knowledge_base import KnowledgeBase
+from services.orchestrator.ambiguity_detector import AmbiguityDetector
+from services.orchestrator.reasoning_engine import ReasoningEngine
 
 
 class Orchestrator(BaseService):
@@ -74,6 +87,21 @@ class Orchestrator(BaseService):
 
         # UUID v5 namespace for generating deterministic UUIDs from string IDs
         self.uuid_namespace = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')  # DNS namespace
+
+        # NEW: Phase 1-3 components (Codex-inspired reasoning)
+        self.knowledge_base = KnowledgeBase(knowledge_dir="knowledge")
+        self.ambiguity_detector = AmbiguityDetector()
+        self.reasoning_engine = ReasoningEngine(
+            core_gateway_url=self.core_gateway_url,
+            rag_service_url="http://rag-service:8080",
+            db_gateway_url=self.db_gateway_url,
+            http_client=self.http_client,
+            logger=self.logger
+        )
+
+        self.logger.info(f"{LogEmoji.SUCCESS} ReAct Reasoning Engine Initialized (Codex-style)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Knowledge Base Loaded: PROPERTIES.md + LOCATIONS.md")
+        self.logger.info(f"{LogEmoji.SUCCESS} Ambiguity Detector Ready")
 
     def _string_to_uuid(self, string_id: str) -> uuid.UUID:
         """Convert string ID to deterministic UUID using UUID v5"""
@@ -232,6 +260,227 @@ class Orchestrator(BaseService):
                     service_used="none",
                     execution_time_ms=0.0
                 )
+
+        @self.app.post("/orchestrate/v2", response_model=OrchestrationResponse)
+        async def orchestrate_v2(request: OrchestrationRequest):
+            """
+            NEW: Enhanced orchestration with full ReAct reasoning (Codex-inspired)
+            Phase 1-3: Reasoning + Knowledge + Ambiguity Detection
+            """
+            try:
+                start_time = time.time()
+                request_id = str(uuid.uuid4())[:8]
+
+                self.logger.info(f"{LogEmoji.AI} [ReAct-v2] [{request_id}] Query: '{request.query}'")
+
+                # FIX BUG #4: Validate and truncate very long queries
+                MAX_QUERY_LENGTH = 500
+                original_query = request.query
+                if len(original_query) > MAX_QUERY_LENGTH:
+                    request.query = original_query[:MAX_QUERY_LENGTH]
+                    truncation_warning = f"Query truncated from {len(original_query)} to {MAX_QUERY_LENGTH} chars"
+                    self.logger.warning(f"{LogEmoji.WARNING} [ReAct-v2] {truncation_warning}")
+
+                # Step 0: Get conversation history
+                conversation_id = request.conversation_id or request.user_id
+                if request.metadata and request.metadata.get("from_open_webui"):
+                    history = request.metadata.get("conversation_history", [])
+                else:
+                    history = await self._get_conversation_history(request.user_id, conversation_id, limit=10)
+
+                # Step 1: Detect intent
+                intent = "chat" if request.has_files() else self._detect_intent_simple(request.query)
+                self.logger.info(f"{LogEmoji.AI} [ReAct-v2] Intent: {intent}")
+
+                # Step 2: Knowledge Expansion (Phase 2)
+                knowledge_expansion = await self.knowledge_base.expand_query(request.query)
+                if knowledge_expansion.expanded_terms:
+                    self.logger.info(
+                        f"{LogEmoji.INFO} [ReAct-v2] Expanded with domain knowledge: "
+                        f"{len(knowledge_expansion.expanded_terms)} terms, "
+                        f"{len(knowledge_expansion.filters)} filters"
+                    )
+
+                # Step 3: Ambiguity Detection (Phase 1)
+                ambiguity_result = await self.ambiguity_detector.detect_ambiguities(request.query)
+                if ambiguity_result.has_ambiguity:
+                    self.logger.warning(
+                        f"{LogEmoji.WARNING} [ReAct-v2] Ambiguities detected: "
+                        f"{len(ambiguity_result.clarifications)} questions"
+                    )
+
+                # Step 4: Execute ReAct Loop (Phase 3)
+                reasoning_chain = await self.reasoning_engine.execute_react_loop(
+                    query=request.query,
+                    intent=intent,
+                    history=history,
+                    knowledge_expansion=knowledge_expansion,
+                    ambiguity_result=ambiguity_result,
+                    files=request.files
+                )
+
+                # Step 5: Synthesize final response
+                response_text = await self.reasoning_engine.synthesize_response(reasoning_chain)
+
+                # Step 6: Save to conversation memory
+                await self._save_message(request.user_id, conversation_id, "user", request.query)
+                await self._save_message(
+                    request.user_id,
+                    conversation_id,
+                    "assistant",
+                    response_text,
+                    metadata={
+                        "intent": intent,
+                        "reasoning_steps": len(reasoning_chain.steps),
+                        "confidence": reasoning_chain.overall_confidence
+                    }
+                )
+
+                execution_time = (time.time() - start_time) * 1000
+
+                # Determine if clarification needed
+                needs_clarification = (
+                    ambiguity_result.has_ambiguity and
+                    self.ambiguity_detector.should_clarify(ambiguity_result)
+                )
+
+                return OrchestrationResponse(
+                    intent=IntentType.SEARCH if intent == "search" else IntentType.CHAT,
+                    confidence=reasoning_chain.overall_confidence,
+                    response=response_text,
+                    service_used="react_reasoning_engine_v2",
+                    execution_time_ms=execution_time,
+                    metadata={
+                        "flow": "react_codex_inspired",
+                        "request_id": request_id,
+                        "reasoning_steps": len(reasoning_chain.steps),
+                        "expanded_terms": len(knowledge_expansion.expanded_terms),
+                        "has_ambiguity": ambiguity_result.has_ambiguity
+                    },
+                    # NEW FIELDS (Phase 1-3)
+                    reasoning_chain=reasoning_chain,
+                    needs_clarification=needs_clarification,
+                    ambiguity_result=ambiguity_result if needs_clarification else None,
+                    knowledge_expansion=knowledge_expansion
+                )
+
+            except Exception as e:
+                self.logger.critical(f"{LogEmoji.ERROR} [ReAct-v2] Error: {e}", exc_info=True)
+                return OrchestrationResponse(
+                    intent=IntentType.UNKNOWN,
+                    confidence=0.0,
+                    response="Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.",
+                    service_used="react_v2_error",
+                    execution_time_ms=0.0
+                )
+
+        @self.app.post("/orchestrate/v2/stream")
+        async def orchestrate_v2_stream(request: OrchestrationRequest):
+            """
+            NEW: Streaming version of ReAct reasoning
+            Returns Server-Sent Events (SSE) for real-time reasoning transparency
+            """
+            async def event_generator():
+                try:
+                    request_id = str(uuid.uuid4())[:8]
+
+                    # Send initial event
+                    yield f"data: {json.dumps({'type': 'start', 'request_id': request_id})}\n\n"
+
+                    # Get history
+                    conversation_id = request.conversation_id or request.user_id
+                    if request.metadata and request.metadata.get("from_open_webui"):
+                        history = request.metadata.get("conversation_history", [])
+                    else:
+                        history = await self._get_conversation_history(request.user_id, conversation_id, limit=10)
+
+                    # Detect intent
+                    intent = "chat" if request.has_files() else self._detect_intent_simple(request.query)
+                    yield f"data: {json.dumps({'type': 'intent', 'intent': intent})}\n\n"
+
+                    # Knowledge expansion
+                    yield f"data: {json.dumps({'type': 'thinking', 'stage': 'knowledge_expansion', 'message': 'Expanding query with domain knowledge...'})}\n\n"
+                    knowledge_expansion = await self.knowledge_base.expand_query(request.query)
+
+                    if knowledge_expansion.expanded_terms:
+                        yield f"data: {json.dumps({'type': 'knowledge', 'expanded_terms': knowledge_expansion.expanded_terms, 'filters': knowledge_expansion.filters})}\n\n"
+
+                    # Ambiguity detection
+                    yield f"data: {json.dumps({'type': 'thinking', 'stage': 'ambiguity_check', 'message': 'Checking for ambiguities...'})}\n\n"
+                    ambiguity_result = await self.ambiguity_detector.detect_ambiguities(request.query)
+
+                    if ambiguity_result.has_ambiguity:
+                        clarifications = [{"question": c.question, "options": c.options} for c in ambiguity_result.clarifications]
+                        yield f"data: {json.dumps({'type': 'ambiguity', 'clarifications': clarifications})}\n\n"
+
+                    # Execute ReAct loop
+                    yield f"data: {json.dumps({'type': 'thinking', 'stage': 'react_execution', 'message': 'Executing ReAct reasoning loop...'})}\n\n"
+
+                    reasoning_chain = await self.reasoning_engine.execute_react_loop(
+                        query=request.query,
+                        intent=intent,
+                        history=history,
+                        knowledge_expansion=knowledge_expansion,
+                        ambiguity_result=ambiguity_result,
+                        files=request.files
+                    )
+
+                    # Stream reasoning steps
+                    for i, step in enumerate(reasoning_chain.steps):
+                        step_data = {
+                            'type': 'reasoning_step',
+                            'step_number': i + 1,
+                            'thought': step.thought.thought,
+                            'stage': step.thought.stage,
+                            'confidence': step.thought.confidence
+                        }
+
+                        if step.action:
+                            step_data['action'] = {
+                                'tool': step.action.tool_name,
+                                'reason': step.action.reason
+                            }
+
+                        if step.observation:
+                            step_data['observation'] = {
+                                'success': step.observation.success,
+                                'insight': step.observation.insight
+                            }
+
+                        yield f"data: {json.dumps(step_data)}\n\n"
+                        await asyncio.sleep(0.1)  # Small delay for better UX
+
+                    # Final response
+                    response_text = await self.reasoning_engine.synthesize_response(reasoning_chain)
+
+                    yield f"data: {json.dumps({'type': 'response', 'content': response_text, 'confidence': reasoning_chain.overall_confidence})}\n\n"
+
+                    # Summary
+                    summary = {
+                        'type': 'complete',
+                        'total_steps': len(reasoning_chain.steps),
+                        'confidence': reasoning_chain.overall_confidence,
+                        'expanded_terms': len(knowledge_expansion.expanded_terms),
+                        'has_ambiguity': ambiguity_result.has_ambiguity
+                    }
+                    yield f"data: {json.dumps(summary)}\n\n"
+
+                    # Save to memory
+                    await self._save_message(request.user_id, conversation_id, "user", request.query)
+                    await self._save_message(request.user_id, conversation_id, "assistant", response_text)
+
+                except Exception as e:
+                    self.logger.error(f"{LogEmoji.ERROR} Streaming error: {e}", exc_info=True)
+                    yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+            return StreamingResponse(
+                event_generator(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no"
+                }
+            )
 
         @self.app.get("/v1/models")
         async def list_models():

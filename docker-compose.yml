@@ -88,6 +88,12 @@ services:
       - WEBUI_NAME=REE AI - Real Estate Assistant
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-secret-key-change-me}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ree_ai_user}:${POSTGRES_PASSWORD:-ree_ai_pass_2025}@postgres:5432/${POSTGRES_DB:-ree_ai}
+      # Task Model for Auto Text Generation (Follow-ups, Title, Tags)
+      - TASK_MODEL=${TASK_MODEL:-llama3.2:latest}
+      - ENABLE_FOLLOW_UP_GENERATION=${ENABLE_FOLLOW_UP_GENERATION:-true}
+      - ENABLE_TITLE_GENERATION=${ENABLE_TITLE_GENERATION:-true}
+      - ENABLE_TAGS_GENERATION=${ENABLE_TAGS_GENERATION:-true}
+      - ENABLE_AUTOCOMPLETE_GENERATION=${ENABLE_AUTOCOMPLETE_GENERATION:-false}
     volumes:
       - open_webui_data:/app/backend/data
     depends_on:

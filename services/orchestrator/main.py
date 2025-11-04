@@ -125,11 +125,20 @@ class Orchestrator(BaseService):
                     )
 
                 # Step 0: Get conversation history (MEMORY CONTEXT)
+                # FIX BUG: Define conversation_id before conditional blocks
                 conversation_id = request.conversation_id or request.user_id
-                history = await self._get_conversation_history(request.user_id, conversation_id, limit=10)
 
-                if history:
-                    self.logger.info(f"{LogEmoji.INFO} Retrieved {len(history)} messages from conversation history")
+                # If request is from Open WebUI, use history from request metadata
+                # Open WebUI already sends full conversation history in messages
+                if request.metadata and request.metadata.get("from_open_webui"):
+                    history = request.metadata.get("conversation_history", [])
+                    if history:
+                        self.logger.info(f"{LogEmoji.INFO} Using {len(history)} messages from Open WebUI request")
+                else:
+                    # For direct API calls, fetch from PostgreSQL
+                    history = await self._get_conversation_history(request.user_id, conversation_id, limit=10)
+                    if history:
+                        self.logger.info(f"{LogEmoji.INFO} Retrieved {len(history)} messages from PostgreSQL")
 
                 # Step 1: Detect intent (simple keyword-based for now, files → chat for analysis)
                 if request.has_files():
@@ -248,6 +257,18 @@ class Orchestrator(BaseService):
                         f"{LogEmoji.AI} Multimodal request: {len(files)} file(s) attached"
                     )
 
+                # FIX BUG: Open WebUI sends FULL messages history
+                # Don't fetch from PostgreSQL again - use messages from request
+                # Extract conversation history (exclude system messages and last user message)
+                conversation_history = []
+                for msg in messages:
+                    # Skip system messages and the current user message (already in user_message)
+                    if msg.get("role") != "system" and msg.get("content", "") != user_message:
+                        conversation_history.append({
+                            "role": msg.get("role"),
+                            "content": msg.get("content", "")
+                        })
+
                 orch_request = OrchestrationRequest(
                     user_id=request.get("user", "anonymous"),
                     query=user_message,
@@ -255,7 +276,9 @@ class Orchestrator(BaseService):
                     metadata={
                         "messages": messages,
                         "has_files": len(files) > 0,
-                        "files": [f.filename for f in files]
+                        "files": [f.filename for f in files],
+                        "from_open_webui": True,  # Flag to indicate this is from Open WebUI
+                        "conversation_history": conversation_history  # Pass history from Open WebUI
                     },
                     files=files if files else None
                 )
@@ -897,20 +920,29 @@ LUÔN trả lời bằng tiếng Việt, chi tiết và chuyên nghiệp."""
                 # Text-only prompt
                 system_prompt = """Bạn là trợ lý bất động sản thông minh và chuyên nghiệp.
 
-QUAN TRỌNG - Sử dụng lịch sử hội thoại:
-1. LUÔN LUÔN đọc kỹ toàn bộ cuộc trò chuyện trước đó
-2. REFERENCE cụ thể những gì người dùng đã hỏi/nói trước đó
-3. KẾT NỐI câu trả lời hiện tại với ngữ cảnh cuộc trò chuyện
+HƯỚNG DẪN SỬ DỤNG LỊCH SỬ HỘI THOẠI:
+
+1. **Phân biệt loại câu hỏi:**
+   - Greeting/Chào hỏi (xin chào, hi, cảm ơn): TRẢ LỜI ĐƠN GIẢN, không reference context cũ
+   - Câu hỏi mới (tìm nhà ở X, giá bao nhiêu): TRẢ LỜI TRỰC TIẾP theo câu hỏi
+   - Câu hỏi follow-up (căn đó như thế nào?, còn view không?): SỬ DỤNG context trước đó
+
+2. **Khi nào KHÔNG sử dụng context:**
+   - User nói "xin chào", "hi", "hello", "cảm ơn"
+   - User bắt đầu topic hoàn toàn mới
+   - User hỏi về thứ không liên quan context cũ
+
+3. **Khi nào SỬ DỤNG context:**
+   - User hỏi "căn đó", "dự án đó", "khu vực đó"
+   - User hỏi chi tiết về property vừa tìm
+   - User hỏi follow-up rõ ràng
 
 VÍ DỤ TỐT:
-- User trước: "Tìm nhà trọ gần đại học"
-- User hiện tại: "Giá thuê bao nhiêu?"
-- Response: "Dựa trên yêu cầu trước của bạn về NHÀ TRỌ GẦN ĐẠI HỌC, giá thuê phổ biến là..."
+- User trước: "Tìm nhà ở Quận 2"
+- User hiện tại: "Xin chào" → Response: "Xin chào! Tôi là trợ lý bất động sản. Tôi có thể giúp gì cho bạn?" (KHÔNG nhắc Quận 2)
+- User hiện tại: "Căn đó có view không?" → Response: "Căn hộ ở Quận 2 mà bạn vừa hỏi..." (CÓ reference)
 
-VÍ DỤ XẤU (TRÁNH):
-- Response: "Giá thuê bao nhiêu tùy thuộc vào khu vực..." (KHÔNG đề cập context)
-
-LUÔN thể hiện rằng bạn NHỚ và HIỂU cuộc trò chuyện trước đó."""
+LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
 
             messages_data = [
                 {"role": "system", "content": system_prompt}

@@ -347,19 +347,28 @@ class ReasoningEngine:
         if not chain.steps:
             return "Xin lỗi, không thể xử lý yêu cầu của bạn."
 
-        last_step = chain.steps[-1]
+        # FIX BUG #10A: Find the last step with an observation (not just the last step)
+        # The last step is usually a "conclusion" thought without observation
+        last_step_with_obs = None
+        for step in reversed(chain.steps):
+            if step.observation:
+                last_step_with_obs = step
+                break
 
-        if not last_step.observation or not last_step.observation.success:
+        if not last_step_with_obs or not last_step_with_obs.observation:
+            return "Xin lỗi, không thể xử lý yêu cầu của bạn."
+
+        if not last_step_with_obs.observation.success:
             return "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng thử lại."
 
-        result = last_step.observation.result
+        result = last_step_with_obs.observation.result
 
         # Extract response based on service type
-        if last_step.action and "rag_service" in last_step.action.tool_name:
+        if last_step_with_obs.action and "rag_service" in last_step_with_obs.action.tool_name:
             # RAG service response
             return result.get("response", "Không tìm thấy kết quả phù hợp.")
 
-        elif last_step.action and "core_gateway" in last_step.action.tool_name:
+        elif last_step_with_obs.action and "core_gateway" in last_step_with_obs.action.tool_name:
             # LLM response
             return result.get("content", "Không có phản hồi từ hệ thống.")
 

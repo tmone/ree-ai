@@ -294,17 +294,29 @@ services:
       - real
       - all
 
-  # RAG Service (Layer 6)
+  # RAG Service (Layer 6) - Enhanced with Modular RAG + Memory + Multi-Agent
   rag-service:
     build:
       context: .
       dockerfile: services/rag_service/Dockerfile
     container_name: ree-ai-rag-service
+    # Use enhanced_main.py for advanced features (Modular RAG + Memory + Multi-Agent)
+    # To use basic RAG, change to: services.rag_service.main:app
+    command: uvicorn services.rag_service.enhanced_main:app --host 0.0.0.0 --port 8080
     environment:
+      # Core settings
       - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
       - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-false}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Enhanced RAG settings
+      - USE_ADVANCED_RAG=${USE_ADVANCED_RAG:-true}
+      - MEMORY_RETENTION_DAYS=${MEMORY_RETENTION_DAYS:-90}
+      - MEMORY_CONSOLIDATION_THRESHOLD=${MEMORY_CONSOLIDATION_THRESHOLD:-10}
+      - REFLECTION_QUALITY_THRESHOLD=${REFLECTION_QUALITY_THRESHOLD:-0.7}
+      - DOCUMENT_GRADER_THRESHOLD=${DOCUMENT_GRADER_THRESHOLD:-0.5}
+      - AGENT_TIMEOUT_SECONDS=${AGENT_TIMEOUT_SECONDS:-30}
+      - SUPERVISOR_MAX_RETRIES=${SUPERVISOR_MAX_RETRIES:-2}
     ports:
       - "8091:8080"
     depends_on:

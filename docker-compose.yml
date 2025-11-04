@@ -173,7 +173,9 @@ services:
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}  # Connect to host's Ollama
-      - DEBUG=${DEBUG:-true}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8080:8080"
@@ -196,10 +198,13 @@ services:
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
       - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
       - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ree_ai_pass_2025}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - OPENSEARCH_HOST=${OPENSEARCH_HOST:-opensearch}
       - OPENSEARCH_PORT=${OPENSEARCH_PORT:-9200}
-      - DEBUG=${DEBUG:-true}
+      - OPENSEARCH_USER=${OPENSEARCH_USER}
+      - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8081:8080"
@@ -226,7 +231,13 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-true}
       - USE_REAL_DB_GATEWAY=${USE_REAL_DB_GATEWAY:-true}
-      - DEBUG=${DEBUG:-true}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8090:8080"

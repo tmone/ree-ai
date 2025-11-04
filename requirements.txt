@@ -40,6 +40,11 @@ python-multipart==0.0.6
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 
+# HIGH PRIORITY FIX: Reliability & Performance
+tenacity==8.2.3  # Retry logic with exponential backoff
+pybreaker==1.0.2  # Circuit breaker pattern
+cachetools==5.3.2  # In-memory caching utilities
+
 # Monitoring
 prometheus-client==0.19.0
 asyncpg==0.29.0

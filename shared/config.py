@@ -36,13 +36,15 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = int(os.getenv("POSTGRES_PORT", "5432"))
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "ree_ai")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "ree_ai_user")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "ree_ai_pass_2025")
+    # SECURITY FIX: No default password - must be provided via environment variable
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "")
 
     # OpenSearch Settings (PRIMARY for property data)
     OPENSEARCH_HOST: str = os.getenv("OPENSEARCH_HOST", "opensearch")
     OPENSEARCH_PORT: int = int(os.getenv("OPENSEARCH_PORT", "9200"))
-    OPENSEARCH_USER: Optional[str] = os.getenv("OPENSEARCH_USER", "admin")
-    OPENSEARCH_PASSWORD: Optional[str] = os.getenv("OPENSEARCH_PASSWORD", "admin")
+    # SECURITY FIX: No default credentials - must be provided via environment variable
+    OPENSEARCH_USER: Optional[str] = os.getenv("OPENSEARCH_USER", "")
+    OPENSEARCH_PASSWORD: Optional[str] = os.getenv("OPENSEARCH_PASSWORD", "")
     OPENSEARCH_PROPERTIES_INDEX: str = os.getenv("OPENSEARCH_PROPERTIES_INDEX", "properties")
     OPENSEARCH_USE_SSL: bool = os.getenv("OPENSEARCH_USE_SSL", "false").lower() == "true"
     OPENSEARCH_VERIFY_CERTS: bool = os.getenv("OPENSEARCH_VERIFY_CERTS", "false").lower() == "true"
@@ -52,7 +54,8 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
 
     # Authentication
-    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    # SECURITY FIX: No default JWT secret - must be provided via environment variable
+    JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "")
     JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 
@@ -60,8 +63,32 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = os.getenv("SENTRY_DSN")
 
     # General Settings
-    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    # SECURITY FIX: DEBUG disabled by default for production safety
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+    # MEDIUM FIX Bug#13: Configurable Embedding Model
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "paraphrase-multilingual-MiniLM-L12-v2")
+
+    # MEDIUM FIX Bug#14: Configurable Timeout Values (in seconds)
+    CLASSIFICATION_TIMEOUT: int = int(os.getenv("CLASSIFICATION_TIMEOUT", "30"))
+    EXTRACTION_TIMEOUT: int = int(os.getenv("EXTRACTION_TIMEOUT", "30"))
+    LLM_TIMEOUT: int = int(os.getenv("LLM_TIMEOUT", "60"))
+    HEALTH_CHECK_TIMEOUT: int = int(os.getenv("HEALTH_CHECK_TIMEOUT", "10"))
+
+    # MEDIUM FIX Bug#15: Configurable ReAct Loop Iterations
+    MAX_REACT_ITERATIONS: int = int(os.getenv("MAX_REACT_ITERATIONS", "2"))
+
+    # MEDIUM FIX Bug#16: Configurable Vision Models
+    OLLAMA_VISION_MODELS: str = os.getenv("OLLAMA_VISION_MODELS", "qwen2-vl,llava,moondream,llama3.2-vision")
+    OLLAMA_FALLBACK_VISION: str = os.getenv("OLLAMA_FALLBACK_VISION", "qwen2-vl:7b")
+
+    # MEDIUM FIX Bug#17: Configurable Mock Statistics
+    MOCK_PROPERTIES_IN_CITY: int = int(os.getenv("MOCK_PROPERTIES_IN_CITY", "150"))
+    MOCK_PROPERTIES_IN_DISTRICT: int = int(os.getenv("MOCK_PROPERTIES_IN_DISTRICT", "50"))
+
+    # MEDIUM FIX Bug#18: Configurable Chunk Similarity Threshold
+    CHUNK_SIMILARITY_THRESHOLD: float = float(os.getenv("CHUNK_SIMILARITY_THRESHOLD", "0.75"))
 
     @property
     def postgres_url(self) -> str:
@@ -85,6 +112,29 @@ class Settings(BaseSettings):
     def get_db_gateway_url(self) -> str:
         """Get DB Gateway URL based on feature flag."""
         return self.DB_GATEWAY_URL if self.USE_REAL_DB_GATEWAY else self.MOCK_DB_GATEWAY_URL
+
+    def __init__(self, **kwargs):
+        """Validate critical security settings on initialization."""
+        super().__init__(**kwargs)
+
+        # SECURITY VALIDATION: Ensure critical credentials are provided
+        if not self.POSTGRES_PASSWORD:
+            raise ValueError(
+                "POSTGRES_PASSWORD environment variable is required. "
+                "Never use default passwords in production."
+            )
+
+        if not self.JWT_SECRET_KEY:
+            raise ValueError(
+                "JWT_SECRET_KEY environment variable is required. "
+                "Generate a secure random key: openssl rand -hex 32"
+            )
+
+        # Warn if using empty OpenSearch credentials (for development only)
+        if not self.OPENSEARCH_PASSWORD and os.getenv("ENV", "development") == "production":
+            raise ValueError(
+                "OPENSEARCH_PASSWORD must be set in production environment."
+            )
 
 
 # Global settings instance

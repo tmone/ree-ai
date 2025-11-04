@@ -1,0 +1,19 @@
+DEEP BUG HUNTER REPORT
+============================================================
+
+{'type': 'LOGIC_ERROR', 'severity': 'HIGH', 'test': 'Empty query', 'issue': 'Empty query has confidence 0.9 (should be low)', 'query': ''}
+
+{'type': 'LOGIC_ERROR', 'severity': 'HIGH', 'test': 'Only spaces', 'issue': 'Empty query has confidence 0.9 (should be low)', 'query': '   '}
+
+{'type': 'PERFORMANCE', 'severity': 'MEDIUM', 'test': 'Very long query', 'issue': 'Slow response: 9.60s', 'query': 'Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm Tìm căn hộ'}
+
+{'type': 'PERFORMANCE', 'severity': 'MEDIUM', 'test': 'Unicode emoji', 'issue': 'Slow response: 7.87s', 'query': 'Tìm nhà 🏠 đẹp 😍'}
+
+{'type': 'TIMEOUT', 'severity': 'HIGH', 'test': 'Mixed languages', 'issue': 'Request timed out', 'query': 'Find nhà house maison 家'}
+
+{'type': 'PERFORMANCE', 'severity': 'MEDIUM', 'test': 'Concurrent requests', 'issue': 'Max response time: 11.70s'}
+
+{'type': 'KNOWLEDGE_GAP', 'severity': 'MEDIUM', 'test': 'Knowledge base coverage', 'issue': "Term 'trường quốc tế' only expanded to 0 terms (expected >= 2)"}
+
+{'type': 'AMBIGUITY_MISS', 'severity': 'MEDIUM', 'test': 'Ambiguity detection', 'issue': 'Failed to detect ambiguity: Vague aesthetic', 'query': 'Tìm nhà đẹp'}
+

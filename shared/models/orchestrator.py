@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 from pydantic import BaseModel, Field
 from shared.models.core_gateway import FileAttachment
+from shared.models.reasoning import ReasoningChain, AmbiguityDetectionResult, KnowledgeExpansion
 
 
 class IntentType(str, Enum):
@@ -46,13 +47,35 @@ class ServiceRoute(BaseModel):
 
 
 class OrchestrationResponse(BaseModel):
-    """Response from orchestration."""
+    """Response from orchestration with transparent reasoning (Codex-inspired)."""
     intent: IntentType
     confidence: float
     response: str = Field(..., description="Final response to user")
     service_used: Optional[str] = Field(None, description="Backend service that handled request")
     execution_time_ms: float
     metadata: Optional[Dict[str, Any]] = None
+
+    # NEW: Reasoning transparency (Phase 1)
+    reasoning_chain: Optional[ReasoningChain] = Field(
+        None,
+        description="Complete ReAct reasoning chain showing thinking process"
+    )
+
+    # NEW: Ambiguity detection (Phase 1)
+    needs_clarification: bool = Field(
+        False,
+        description="Whether query has ambiguities requiring user clarification"
+    )
+    ambiguity_result: Optional[AmbiguityDetectionResult] = Field(
+        None,
+        description="Details about ambiguities found"
+    )
+
+    # NEW: Knowledge expansion (Phase 2)
+    knowledge_expansion: Optional[KnowledgeExpansion] = Field(
+        None,
+        description="How domain knowledge expanded the query"
+    )
 
 
 class RoutingDecision(BaseModel):

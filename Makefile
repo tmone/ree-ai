@@ -41,29 +41,29 @@ install-test:
 
 # Testing
 test:
-	pytest tests/ -v
+	python3 -m pytest tests/ -v
 
 test-quick:
-	pytest tests/ -v -m "not slow"
+	python3 -m pytest tests/ -v -m "not slow"
 
 test-critical:
-	pytest tests/ -v -m critical
+	python3 -m pytest tests/ -v -m critical
 
 test-ai:
-	pytest tests/test_ai_quality.py -v
+	python3 -m pytest tests/test_ai_quality.py -v
 
 test-failover:
-	pytest tests/test_failover_mechanism.py -v
+	python3 -m pytest tests/test_failover_mechanism.py -v
 
 test-cto:
-	pytest tests/test_cto_business_logic.py -v
+	python3 -m pytest tests/test_cto_business_logic.py -v
 
 test-integration:
 	@echo "Running integration tests..."
 	@./tests/test_comprehensive.sh
 
 test-coverage:
-	pytest tests/ --cov=services --cov=shared \
+	python3 -m pytest tests/ --cov=services --cov=shared \
 		--cov-report=html:tests/coverage \
 		--cov-report=term-missing
 
@@ -144,7 +144,8 @@ format:
 	black tests/ services/ shared/
 	@echo "✅ Code formatted"
 
+
 lint:
-	flake8 tests/ services/ shared/ --max-line-length=100
-	mypy tests/ services/ shared/ --ignore-missing-imports
+	python3 -m flake8 tests/ services/ shared/ --max-line-length=100
+	python3 -m mypy tests/ services/ shared/ --ignore-missing-imports
 	@echo "✅ Linting completed"

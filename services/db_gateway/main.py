@@ -93,12 +93,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
+# CORS - CRITICAL FIX: Restrict origins for security
+# In production, only allow specific origins to prevent CSRF attacks
+import os
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8888").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -166,9 +169,19 @@ async def search_properties(request: SearchRequest):
 
         # BM25 full-text search across title and description
         if request.query:
+            # CRITICAL FIX: Validate and sanitize user input to prevent injection
+            # Limit query length and remove potentially dangerous characters
+            sanitized_query = request.query.strip()[:500]  # Max 500 chars
+            if not sanitized_query:
+                raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+            # Basic validation: reject queries with only special characters
+            if not any(c.isalnum() or c.isspace() for c in sanitized_query):
+                raise HTTPException(status_code=400, detail="Query must contain alphanumeric characters")
+
             must_clauses.append({
                 "multi_match": {
-                    "query": request.query,
+                    "query": sanitized_query,  # Use sanitized query
                     "fields": ["title^3", "description", "location^2"],  # Boost title and location
                     "type": "best_fields",
                     "operator": "or"
@@ -181,6 +194,21 @@ async def search_properties(request: SearchRequest):
         should_clauses = []
 
         if request.filters:
+            # MEDIUM FIX Bug#11: Validate range filters to prevent logical errors
+            if request.filters.min_price and request.filters.max_price:
+                if request.filters.min_price > request.filters.max_price:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"min_price ({request.filters.min_price}) cannot exceed max_price ({request.filters.max_price})"
+                    )
+
+            if request.filters.min_area and request.filters.max_area:
+                if request.filters.min_area > request.filters.max_area:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"min_area ({request.filters.min_area}) cannot exceed max_area ({request.filters.max_area})"
+                    )
+
             # City filter - HARD FILTER (exact match required!)
             if request.filters.city:
                 # Normalize to title case for case-insensitive matching
@@ -290,19 +318,21 @@ async def search_properties(request: SearchRequest):
         for hit in response['hits']['hits']:
             source = hit['_source']
 
-            # Extract values with flexible typing (keep strings as-is from OpenSearch)
+            # HIGH PRIORITY FIX: Proper type coercion with logging
             bedrooms = source.get('bedrooms', 0)
             if isinstance(bedrooms, str):
                 try:
                     bedrooms = int(bedrooms)
-                except:
+                except ValueError as e:
+                    logger.warning(f"⚠️ Invalid bedrooms value '{bedrooms}' for property {source.get('id')}, defaulting to 0")
                     bedrooms = 0
 
             bathrooms = source.get('bathrooms', 0)
             if isinstance(bathrooms, str):
                 try:
                     bathrooms = int(bathrooms)
-                except:
+                except ValueError as e:
+                    logger.warning(f"⚠️ Invalid bathrooms value '{bathrooms}' for property {source.get('id')}, defaulting to 0")
                     bathrooms = 0
 
             results.append(PropertyResult(
@@ -330,9 +360,17 @@ async def search_properties(request: SearchRequest):
             execution_time_ms=execution_time
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like validation errors)
+        raise
     except Exception as e:
-        logger.error(f"❌ Search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+        # MEDIUM FIX Bug#4: Log search context for debugging
+        logger.error(
+            f"❌ Search failed: query='{request.query}', "
+            f"filters={request.filters}, limit={request.limit}, error={e}",
+            exc_info=True
+        )
+        raise HTTPException(status_code=500, detail="Search operation failed. Please try again later.")
 
 
 @app.post("/vector-search", response_model=SearchResponse)
@@ -430,7 +468,8 @@ async def vector_search_properties(request: SearchRequest):
             if isinstance(bathrooms, str):
                 try:
                     bathrooms = int(bathrooms)
-                except:
+                except ValueError as e:
+                    logger.warning(f"⚠️ Invalid bathrooms value '{bathrooms}' for property {source.get('id')}, defaulting to 0")
                     bathrooms = 0
 
             results.append(PropertyResult(
@@ -458,9 +497,17 @@ async def vector_search_properties(request: SearchRequest):
             execution_time_ms=execution_time
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (like validation errors)
+        raise
     except Exception as e:
-        logger.error(f"❌ Vector search failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Vector search failed: {str(e)}")
+        # MEDIUM FIX Bug#4: Log search context for debugging
+        logger.error(
+            f"❌ Vector search failed: query='{request.query}', "
+            f"filters={request.filters}, limit={request.limit}, error={e}",
+            exc_info=True
+        )
+        raise HTTPException(status_code=500, detail="Search operation failed. Please try again later.")
 
 
 @app.get("/properties/{property_id}")

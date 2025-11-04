@@ -9,6 +9,7 @@ import nltk
 
 from core.base_service import BaseService
 from shared.utils.logger import LogEmoji
+from shared.config import settings
 
 
 # Download NLTK data (run once)
@@ -39,9 +40,9 @@ class SemanticChunker(BaseService):
             port=8101
         )
 
-        # Load multilingual model (supports Vietnamese)
-        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-        self.logger.info(f"{LogEmoji.SUCCESS} Loaded SentenceTransformer model")
+        # MEDIUM FIX Bug#13: Use configurable embedding model
+        self.model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        self.logger.info(f"{LogEmoji.SUCCESS} Loaded SentenceTransformer model: {settings.EMBEDDING_MODEL}")
 
     def setup_routes(self):
         """Setup Semantic Chunking API routes"""
@@ -68,18 +69,21 @@ class SemanticChunker(BaseService):
                 "method": "6-step semantic chunking"
             }
 
-    def chunk(self, text: str, threshold: float = 0.75, overlap: int = 1) -> List[Dict[str, Any]]:
+    def chunk(self, text: str, threshold: float = None, overlap: int = 1) -> List[Dict[str, Any]]:
         """
         6-Step Semantic Chunking
 
         Args:
             text: Input text to chunk
-            threshold: Similarity threshold for combining sentences (default 0.75)
+            threshold: Similarity threshold for combining sentences (default from config)
             overlap: Number of sentences to overlap between chunks
 
         Returns:
             List of chunks with text and embeddings
         """
+        # MEDIUM FIX Bug#18: Use configurable threshold
+        if threshold is None:
+            threshold = settings.CHUNK_SIMILARITY_THRESHOLD
 
         # Step 1: Sentence Segmentation
         sentences = self._step1_segment_sentences(text)

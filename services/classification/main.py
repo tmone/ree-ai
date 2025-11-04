@@ -44,7 +44,15 @@ class ClassificationService(BaseService):
             port=8080
         )
 
-        self.http_client = httpx.AsyncClient(timeout=30.0)
+        # MEDIUM FIX Bug#23: Add connection pooling for better performance
+        self.http_client = httpx.AsyncClient(
+            timeout=30.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=10,
+                max_connections=50,
+                keepalive_expiry=30.0
+            )
+        )
         self.core_gateway_url = settings.get_core_gateway_url()
 
         self.logger.info(f"{LogEmoji.INFO} Core Gateway: {self.core_gateway_url}")

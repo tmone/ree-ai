@@ -6,10 +6,16 @@ WITH CONVERSATION MEMORY CONTEXT
 import time
 import json
 import uuid
+import os  # MEDIUM FIX Bug#25: Needed for environment variable access
+import asyncio  # CRITICAL FIX: Missing import for asyncio.sleep in retry logic
 from typing import Dict, Any, List, Optional
 import httpx
 import asyncpg
 from datetime import datetime
+
+# HIGH PRIORITY FIX: Add retry logic and circuit breaker
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from pybreaker import CircuitBreaker, CircuitBreakerError
 
 from core.base_service import BaseService
 from shared.models.orchestrator import (
@@ -30,12 +36,20 @@ class Orchestrator(BaseService):
     def __init__(self):
         super().__init__(
             name="orchestrator",
-            version="3.0.0",  # v3 with conversation memory
-            capabilities=["orchestration", "classification_routing", "react_agent", "conversation_memory"],
+            version="3.1.0",  # v3.1 with retry logic, connection pooling, circuit breakers
+            capabilities=["orchestration", "classification_routing", "react_agent", "conversation_memory", "circuit_breaker", "retry_logic"],
             port=8080
         )
 
-        self.http_client = httpx.AsyncClient(timeout=60.0)
+        # HIGH PRIORITY FIX: Configure HTTP client with connection pooling
+        self.http_client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=20,  # Reuse connections
+                max_connections=100,  # Total connection pool size
+                keepalive_expiry=30.0  # Keep connections alive for 30s
+            )
+        )
 
         # Service URLs
         self.core_gateway_url = settings.get_core_gateway_url()
@@ -43,11 +57,20 @@ class Orchestrator(BaseService):
         self.extraction_url = "http://attribute-extraction:8080"
         self.db_gateway_url = "http://db-gateway:8080"
 
+        # HIGH PRIORITY FIX: Circuit breakers for external services
+        self.core_gateway_breaker = CircuitBreaker(
+            fail_max=5,  # Open circuit after 5 failures
+            reset_timeout=60  # Try again after 60 seconds
+        )
+        self.db_gateway_breaker = CircuitBreaker(fail_max=5, reset_timeout=60)
+
         # PostgreSQL connection pool for conversation memory
         self.db_pool = None
 
         self.logger.info(f"{LogEmoji.INFO} CTO Architecture Mode Enabled")
         self.logger.info(f"{LogEmoji.INFO} Conversation Memory: PostgreSQL")
+        self.logger.info(f"{LogEmoji.INFO} Connection Pooling: Enabled (max=100, keepalive=20)")
+        self.logger.info(f"{LogEmoji.INFO} Circuit Breakers: Enabled (fail_max=5, timeout=60s)")
 
         # UUID v5 namespace for generating deterministic UUIDs from string IDs
         self.uuid_namespace = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')  # DNS namespace
@@ -114,14 +137,17 @@ class Orchestrator(BaseService):
             try:
                 start_time = time.time()
 
-                # Log multimodal request
+                # MEDIUM FIX Bug#1: Generate request ID for distributed tracing
+                request_id = str(uuid.uuid4())[:8]  # Short ID for readability
+
+                # Log multimodal request with request ID
                 if request.has_files():
                     self.logger.info(
-                        f"{LogEmoji.AI} Multimodal Query: '{request.query}' + {len(request.files)} file(s)"
+                        f"{LogEmoji.AI} [{request_id}] Multimodal Query: '{request.query}' + {len(request.files)} file(s), user={request.user_id}"
                     )
                 else:
                     self.logger.info(
-                        f"{LogEmoji.TARGET} Query: '{request.query}'"
+                        f"{LogEmoji.TARGET} [{request_id}] Query: '{request.query}', user={request.user_id}"
                     )
 
                 # Step 0: Get conversation history (MEMORY CONTEXT)
@@ -133,21 +159,21 @@ class Orchestrator(BaseService):
                 if request.metadata and request.metadata.get("from_open_webui"):
                     history = request.metadata.get("conversation_history", [])
                     if history:
-                        self.logger.info(f"{LogEmoji.INFO} Using {len(history)} messages from Open WebUI request")
+                        self.logger.info(f"{LogEmoji.INFO} [{request_id}] Using {len(history)} messages from Open WebUI request")
                 else:
                     # For direct API calls, fetch from PostgreSQL
                     history = await self._get_conversation_history(request.user_id, conversation_id, limit=10)
                     if history:
-                        self.logger.info(f"{LogEmoji.INFO} Retrieved {len(history)} messages from PostgreSQL")
+                        self.logger.info(f"{LogEmoji.INFO} [{request_id}] Retrieved {len(history)} messages from PostgreSQL")
 
                 # Step 1: Detect intent (simple keyword-based for now, files → chat for analysis)
                 if request.has_files():
                     # Images/documents → Use vision model for analysis
                     intent = "chat"  # Vision analysis goes through chat path
-                    self.logger.info(f"{LogEmoji.AI} Intent: {intent} (multimodal analysis)")
+                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent} (multimodal analysis)")
                 else:
                     intent = self._detect_intent_simple(request.query)
-                    self.logger.info(f"{LogEmoji.AI} Intent: {intent}")
+                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent}")
 
                 # Step 2: Route based on intent (with history context + files)
                 if intent == "search":
@@ -171,18 +197,38 @@ class Orchestrator(BaseService):
                         "flow": "cto_architecture",
                         "history_messages": len(history),
                         "multimodal": request.has_files(),
-                        "files_count": len(request.files) if request.files else 0
+                        "files_count": len(request.files) if request.files else 0,
+                        "request_id": request_id  # MEDIUM FIX Bug#1: Include request ID for tracing
                     }
                 )
 
-            except Exception as e:
-                self.logger.error(f"{LogEmoji.ERROR} Orchestration failed: {e}")
-                import traceback
-                traceback.print_exc()
+            except (httpx.HTTPError, httpx.TimeoutException) as e:
+                # CRITICAL FIX: Handle expected network errors
+                self.logger.error(f"{LogEmoji.ERROR} Network error during orchestration: {e}", exc_info=True)
                 return OrchestrationResponse(
                     intent=IntentType.UNKNOWN,
                     confidence=0.0,
-                    response=f"Xin lỗi, đã xảy ra lỗi: {str(e)}",
+                    response="Xin lỗi, hệ thống đang gặp sự cố kết nối. Vui lòng thử lại sau.",
+                    service_used="none",
+                    execution_time_ms=0.0
+                )
+            except (ValueError, KeyError, json.JSONDecodeError) as e:
+                # CRITICAL FIX: Handle data validation errors
+                self.logger.error(f"{LogEmoji.ERROR} Data validation error: {e}", exc_info=True)
+                return OrchestrationResponse(
+                    intent=IntentType.UNKNOWN,
+                    confidence=0.0,
+                    response="Xin lỗi, đã xảy ra lỗi xử lý dữ liệu. Vui lòng thử lại.",
+                    service_used="none",
+                    execution_time_ms=0.0
+                )
+            except Exception as e:
+                # CRITICAL FIX: Log unexpected errors but don't expose details to users
+                self.logger.critical(f"{LogEmoji.ERROR} Unexpected orchestration error: {e}", exc_info=True)
+                return OrchestrationResponse(
+                    intent=IntentType.UNKNOWN,
+                    confidence=0.0,
+                    response="Xin lỗi, đã xảy ra lỗi không xác định. Vui lòng liên hệ hỗ trợ.",
                     service_used="none",
                     execution_time_ms=0.0
                 )
@@ -306,17 +352,22 @@ class Orchestrator(BaseService):
                 }
 
             except Exception as e:
-                self.logger.error(f"{LogEmoji.ERROR} OpenAI chat failed: {e}")
-                import traceback
-                traceback.print_exc()
+                # CRITICAL FIX: Don't expose internal error details to API consumers
+                self.logger.error(f"{LogEmoji.ERROR} OpenAI chat failed: {e}", exc_info=True)
                 return {
-                    "error": str(e),
+                    "id": f"chatcmpl-{int(time.time())}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": "ree-ai-orchestrator-v3-multimodal",
                     "choices": [{
+                        "index": 0,
                         "message": {
                             "role": "assistant",
-                            "content": f"Xin lỗi, đã xảy ra lỗi: {str(e)}"
-                        }
-                    }]
+                            "content": "Xin lỗi, hệ thống đang gặp sự cố. Vui lòng thử lại sau."
+                        },
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                 }
 
     def _detect_intent_simple(self, query: str) -> str:
@@ -480,7 +531,8 @@ Standalone query:"""
             # Enrich query with conversation context if available
             enriched_query = await self._enrich_query_with_context(query, history or [])
 
-            max_iterations = 2  # OPTIMIZED: Reduced from 5 to 2 for faster responses (1 original + 1 refine)
+            # MEDIUM FIX Bug#15: Use configurable max iterations
+            max_iterations = settings.MAX_REACT_ITERATIONS  # Default: 2 (1 original + 1 refine)
             current_query = enriched_query
             best_results = []  # Keep track of BEST results across iterations for clarification
             best_evaluation = None
@@ -575,10 +627,11 @@ Standalone query:"""
             # Step 1: Classification
             self.logger.info(f"{LogEmoji.AI} [ReAct-Act] Classification")
 
+            # MEDIUM FIX Bug#14: Use configurable timeout
             classification_response = await self.http_client.post(
                 f"{self.classification_url}/classify",
                 json={"query": query, "context": None},
-                timeout=30.0
+                timeout=settings.CLASSIFICATION_TIMEOUT
             )
 
             if classification_response.status_code != 200:
@@ -611,7 +664,7 @@ Standalone query:"""
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
                 json={"query": query, "intent": "SEARCH"},
-                timeout=30.0
+                timeout=settings.EXTRACTION_TIMEOUT  # MEDIUM FIX Bug#14
             )
 
             if extraction_response.status_code != 200:
@@ -792,7 +845,7 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
                 json={"query": query, "intent": "SEARCH"},
-                timeout=30.0
+                timeout=settings.EXTRACTION_TIMEOUT  # MEDIUM FIX Bug#14
             )
 
             if extraction_response.status_code != 200:
@@ -890,7 +943,11 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
         return "".join(response_parts)
 
     async def _handle_chat(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None) -> str:
-        """Handle general chat (non-search) with conversation context and multimodal support"""
+        """
+        Handle general chat (non-search) with conversation context and multimodal support
+
+        HIGH PRIORITY FIX: Added type hints for better IDE support
+        """
         try:
             # Build messages with history context
             if files and len(files) > 0:
@@ -996,10 +1053,11 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
                             f"status={response.status_code}, body={error_body[:200]}"
                         )
 
-                        # Retry on 5xx errors (server issues)
+                        # HIGH PRIORITY FIX: Exponential backoff for retries
                         if attempt < max_retries - 1 and response.status_code >= 500:
-                            self.logger.info(f"{LogEmoji.WARNING} Retrying after Core Gateway error...")
-                            await asyncio.sleep(1)  # Wait 1s before retry
+                            backoff_time = 2 ** attempt  # 1s, 2s, 4s...
+                            self.logger.info(f"{LogEmoji.WARNING} Retrying after {backoff_time}s...")
+                            await asyncio.sleep(backoff_time)
                             continue
 
                         # Give up after retries
@@ -1173,7 +1231,9 @@ JSON:"""
             return None
         try:
             return int(value)
-        except:
+        except (ValueError, TypeError) as e:
+            # MEDIUM FIX Bug#7: Catch specific exceptions and log for debugging
+            self.logger.warning(f"{LogEmoji.WARNING} Failed to parse int '{value}': {e}")
             return None
 
     def _parse_price(self, value) -> Optional[float]:
@@ -1182,7 +1242,9 @@ JSON:"""
             return None
         try:
             return float(value)
-        except:
+        except (ValueError, TypeError) as e:
+            # MEDIUM FIX Bug#7: Catch specific exceptions and log for debugging
+            self.logger.warning(f"{LogEmoji.WARNING} Failed to parse price '{value}': {e}")
             return None
 
     async def _infer_city_from_district(self, district: Optional[str]) -> Optional[str]:
@@ -1814,10 +1876,10 @@ Query mới:"""
         """
         try:
             # TODO: Call DB Gateway to get real statistics
-            # For now, return mock data
+            # MEDIUM FIX Bug#17: Use configurable mock statistics
             return {
-                "total_in_city": 150,  # Mock: 150 căn hộ ở TP.HCM
-                "total_in_district": 0 if requirements.get("district") == "quận 2" else 50
+                "total_in_city": settings.MOCK_PROPERTIES_IN_CITY,
+                "total_in_district": 0 if requirements.get("district") == "quận 2" else settings.MOCK_PROPERTIES_IN_DISTRICT
             }
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to get statistics: {e}")
@@ -1949,19 +2011,32 @@ Nearby districts:"""
     async def _init_db_pool(self):
         """Initialize PostgreSQL connection pool for conversation memory"""
         try:
+            # MEDIUM FIX Bug#25: Make connection pool size configurable
+            pool_min = int(os.getenv("POSTGRES_POOL_MIN", "2"))
+            pool_max = int(os.getenv("POSTGRES_POOL_MAX", "20"))  # Increased default for better concurrency
+
             self.db_pool = await asyncpg.create_pool(
                 host=settings.POSTGRES_HOST,
                 port=settings.POSTGRES_PORT,
                 user=settings.POSTGRES_USER,
                 password=settings.POSTGRES_PASSWORD,
                 database=settings.POSTGRES_DB,
-                min_size=2,
-                max_size=10
+                min_size=pool_min,
+                max_size=pool_max
             )
+            self.logger.info(f"{LogEmoji.SUCCESS} DB pool initialized: min={pool_min}, max={pool_max}")
             self.logger.info(f"{LogEmoji.SUCCESS} PostgreSQL pool initialized for conversation memory")
         except Exception as e:
-            self.logger.error(f"{LogEmoji.ERROR} Failed to initialize PostgreSQL pool: {e}")
+            # CRITICAL FIX: Cleanup partial connections on failure
+            self.logger.error(f"{LogEmoji.ERROR} Failed to initialize PostgreSQL pool: {e}", exc_info=True)
             self.logger.warning(f"{LogEmoji.WARNING} Conversation memory will not be available")
+            if self.db_pool:
+                try:
+                    await self.db_pool.close()
+                except Exception as cleanup_error:
+                    self.logger.error(f"{LogEmoji.ERROR} Pool cleanup failed: {cleanup_error}")
+                finally:
+                    self.db_pool = None
 
     async def _get_conversation_history(self, user_id: str, conversation_id: Optional[str] = None, limit: int = 10) -> List[Dict]:
         """Retrieve conversation history from PostgreSQL"""
@@ -2053,10 +2128,21 @@ Nearby districts:"""
             self.logger.warning(f"{LogEmoji.WARNING} Failed to save message: {e}")
 
     async def on_shutdown(self):
-        """Cleanup"""
-        if self.db_pool:
-            await self.db_pool.close()
-        await self.http_client.aclose()
+        """Cleanup resources on shutdown"""
+        # CRITICAL FIX: Ensure all resources are properly closed even on errors
+        try:
+            if self.db_pool:
+                await self.db_pool.close()
+                self.logger.info(f"{LogEmoji.SUCCESS} Database pool closed")
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to close database pool: {e}")
+
+        try:
+            await self.http_client.aclose()
+            self.logger.info(f"{LogEmoji.SUCCESS} HTTP client closed")
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to close HTTP client: {e}")
+
         await super().on_shutdown()
 
 

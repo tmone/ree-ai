@@ -29,8 +29,15 @@ class CoreGateway(BaseService):
             port=8080
         )
 
-        # HTTP client for Ollama
-        self.http_client = httpx.AsyncClient(timeout=120.0)
+        # HIGH PRIORITY FIX: HTTP client with connection pooling
+        self.http_client = httpx.AsyncClient(
+            timeout=120.0,
+            limits=httpx.Limits(
+                max_keepalive_connections=10,
+                max_connections=50,
+                keepalive_expiry=30.0
+            )
+        )
 
         # Vision-capable models
         self.vision_models = {
@@ -114,11 +121,12 @@ class CoreGateway(BaseService):
                 start_time = time.time()
                 is_multimodal = request.is_multimodal()
 
-                # Log request type
-                if is_multimodal:
-                    self.logger.info(
-                        f"{LogEmoji.AI} Multimodal request detected with model {request.model.value}"
-                    )
+                # MEDIUM FIX Bug#3: Log comprehensive request context
+                self.logger.info(
+                    f"{LogEmoji.AI} LLM Request: model={request.model.value}, "
+                    f"messages={len(request.messages)}, multimodal={is_multimodal}, "
+                    f"max_tokens={request.max_tokens}, temp={request.temperature}"
+                )
 
                 # Route based on model type
                 if request.model.value.startswith("ollama/"):
@@ -173,9 +181,12 @@ class CoreGateway(BaseService):
 
                 return response
 
+            except HTTPException:
+                raise  # Re-raise HTTP exceptions
             except Exception as e:
-                self.logger.error(f"{LogEmoji.ERROR} All LLM providers failed: {e}")
-                raise HTTPException(status_code=500, detail=f"All LLM providers failed: {str(e)}")
+                # HIGH PRIORITY FIX: Don't expose internal error details
+                self.logger.error(f"{LogEmoji.ERROR} All LLM providers failed: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail="LLM service temporarily unavailable. Please try again later.")
 
         @self.app.post("/embeddings", response_model=EmbeddingResponse)
         async def create_embeddings(request: EmbeddingRequest):
@@ -219,9 +230,12 @@ class CoreGateway(BaseService):
                     usage=Usage(**data["usage"]) if "usage" in data else None
                 )
 
+            except HTTPException:
+                raise  # Re-raise HTTP exceptions
             except Exception as e:
-                self.logger.error(f"{LogEmoji.ERROR} Embedding request failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                # HIGH PRIORITY FIX: Don't expose internal error details
+                self.logger.error(f"{LogEmoji.ERROR} Embedding request failed: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail="Embedding service temporarily unavailable. Please try again later.")
 
     async def _call_openai(self, request: LLMRequest) -> LLMResponse:
         """
@@ -462,21 +476,22 @@ class CoreGateway(BaseService):
         if request.model.value.startswith("ollama/"):
             model_name = request.model.value.replace("ollama/", "")
         else:
-            # Failover case - use qwen2-vl for Vietnamese + vision support
-            model_name = "qwen2-vl:7b"
+            # MEDIUM FIX Bug#16: Use configurable fallback vision model
+            model_name = settings.OLLAMA_FALLBACK_VISION
             self.logger.info(
                 f"{LogEmoji.WARNING} Failover: Using Ollama {model_name} for vision"
             )
 
-        # Verify model supports vision
-        vision_models_ollama = ["qwen2-vl", "llava", "moondream", "llama3.2-vision"]
+        # MEDIUM FIX Bug#16: Use configurable vision models
+        vision_models_ollama = settings.OLLAMA_VISION_MODELS.split(",")
         if not any(vm in model_name.lower() for vm in vision_models_ollama):
-            # Auto-upgrade to qwen2-vl
+            # Auto-upgrade to fallback vision model
+            fallback_model = settings.OLLAMA_FALLBACK_VISION
             self.logger.warning(
                 f"{LogEmoji.WARNING} Model {model_name} doesn't support vision, "
-                f"upgrading to qwen2-vl:7b"
+                f"upgrading to {fallback_model}"
             )
-            model_name = "qwen2-vl:7b"
+            model_name = fallback_model
 
         self.logger.info(
             f"{LogEmoji.AI} Calling Ollama Vision API with model {model_name}"

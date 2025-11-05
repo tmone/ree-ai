@@ -29,7 +29,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
       with:
-        clean: true
+        clean: false  # Disable clean for self-hosted runner to avoid permission issues
 
     - name: Create .env file from secrets
       run: |

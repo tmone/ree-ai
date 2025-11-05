@@ -18,8 +18,8 @@ jobs:
     - name: Stop existing services
       run: |
         # Stop containers first to prevent them from creating __pycache__ files
-        cd "${GITHUB_WORKSPACE:-$PWD}" || cd /home/tmone/ree-ai || true
-        docker-compose down || true
+        # Must use production directory since checkout hasn't happened yet
+        cd /home/tmone/ree-ai && docker-compose down || true
         echo "Services stopped"
       continue-on-error: true
 

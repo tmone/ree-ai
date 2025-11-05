@@ -1,0 +1,220 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Allow manual deployment
+
+jobs:
+  # ============================================================
+  # DEPLOYMENT JOB
+  # ============================================================
+  deploy:
+    name: Deploy to Self-hosted Server
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        clean: true
+
+    - name: Create .env file from secrets
+      run: |
+        cat > .env << EOF
+        # Database Configuration
+        POSTGRES_DB=${{ secrets.POSTGRES_DB || 'ree_ai' }}
+        POSTGRES_USER=${{ secrets.POSTGRES_USER || 'ree_ai_user' }}
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+
+        # OpenAI Configuration
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+
+        # OpenSearch Configuration
+        OPENSEARCH_PASSWORD=${{ secrets.OPENSEARCH_PASSWORD || 'Admin123!@#' }}
+
+        # WebUI Configuration
+        WEBUI_SECRET_KEY=${{ secrets.WEBUI_SECRET_KEY }}
+
+        # Task Model Configuration
+        TASK_MODEL=${{ secrets.TASK_MODEL || 'llama3.2:latest' }}
+        ENABLE_FOLLOW_UP_GENERATION=true
+        ENABLE_TITLE_GENERATION=true
+        ENABLE_TAGS_GENERATION=true
+        ENABLE_AUTOCOMPLETE_GENERATION=false
+
+        # Debug Settings
+        DEBUG=false
+        LOG_LEVEL=INFO
+
+        # Feature Flags
+        USE_REAL_CORE_GATEWAY=true
+        USE_REAL_DB_GATEWAY=true
+
+        # LangSmith Monitoring (Optional)
+        LANGCHAIN_TRACING_V2=${{ secrets.LANGCHAIN_TRACING_V2 || 'false' }}
+        LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY || '' }}
+        EOF
+
+    - name: Stop existing services
+      run: |
+        docker-compose down || true
+      continue-on-error: true
+
+    - name: Pull latest images (if any external images)
+      run: |
+        docker-compose pull || true
+      continue-on-error: true
+
+    - name: Build services
+      run: |
+        docker-compose build --parallel
+
+    - name: Start infrastructure services first
+      run: |
+        docker-compose up -d postgres redis opensearch ollama
+        echo "Waiting for infrastructure services to be healthy..."
+        sleep 30
+
+    - name: Check infrastructure health
+      run: |
+        # Check PostgreSQL
+        timeout 60 bash -c 'until docker exec ree-ai-postgres pg_isready -U ree_ai_user; do sleep 2; done' || {
+          echo "PostgreSQL failed to start"
+          docker-compose logs postgres
+          exit 1
+        }
+
+        # Check Redis
+        timeout 60 bash -c 'until docker exec ree-ai-redis redis-cli ping | grep -q PONG; do sleep 2; done' || {
+          echo "Redis failed to start"
+          docker-compose logs redis
+          exit 1
+        }
+
+        # Check OpenSearch
+        timeout 120 bash -c 'until curl -f http://localhost:9200; do sleep 5; done' || {
+          echo "OpenSearch failed to start"
+          docker-compose logs opensearch
+          exit 1
+        }
+
+    - name: Start Service Registry
+      run: |
+        docker-compose up -d service-registry
+        echo "Waiting for Service Registry..."
+        sleep 15
+
+        # Wait for Service Registry to be healthy
+        timeout 60 bash -c 'until curl -f http://localhost:8000/health; do sleep 2; done' || {
+          echo "Service Registry failed to start"
+          docker-compose logs service-registry
+          exit 1
+        }
+
+    - name: Start Core Services
+      run: |
+        docker-compose up -d core-gateway db-gateway auth-service
+        echo "Waiting for core services..."
+        sleep 15
+
+    - name: Start AI Services
+      run: |
+        docker-compose up -d \
+          semantic-chunking \
+          classification \
+          attribute-extraction \
+          completeness-check \
+          price-suggestion \
+          reranking
+        echo "Waiting for AI services..."
+        sleep 15
+
+    - name: Start Orchestrator and RAG Service
+      run: |
+        docker-compose up -d orchestrator rag-service
+        echo "Waiting for orchestrator and RAG..."
+        sleep 15
+
+    - name: Start API Gateway and Frontend
+      run: |
+        docker-compose up -d api-gateway open-webui
+        echo "Waiting for gateway and frontend..."
+        sleep 10
+
+    - name: Verify all services are running
+      run: |
+        docker-compose ps
+
+        # Check critical services
+        services=(
+          "http://localhost:8000/health"  # Service Registry
+          "http://localhost:8080/health"  # Core Gateway
+          "http://localhost:8081/health"  # DB Gateway
+          "http://localhost:8090/health"  # Orchestrator
+          "http://localhost:8091/health"  # RAG Service
+        )
+
+        for service in "${services[@]}"; do
+          echo "Checking $service"
+          curl -f "$service" || {
+            echo "Service $service is not healthy"
+            exit 1
+          }
+        done
+
+    - name: Pull Ollama models
+      run: |
+        # Pull required Ollama models in background
+        docker exec ree-ai-ollama ollama pull llama3.2:latest || true
+        docker exec ree-ai-ollama ollama pull nomic-embed-text:latest || true
+      continue-on-error: true
+
+    - name: Show deployment summary
+      run: |
+        echo "=========================================="
+        echo "Deployment Summary"
+        echo "=========================================="
+        echo "Branch: main"
+        echo "Commit: ${{ github.sha }}"
+        echo "Deployed by: ${{ github.actor }}"
+        echo "Time: $(date)"
+        echo ""
+        echo "Services Status:"
+        docker-compose ps
+        echo ""
+        echo "Access URLs:"
+        echo "- Open WebUI: http://localhost:3000"
+        echo "- API Gateway: http://localhost:8888"
+        echo "- Service Registry: http://localhost:8000"
+        echo "- Orchestrator: http://localhost:8090"
+        echo "- OpenSearch: http://localhost:9200"
+        echo "=========================================="
+
+    - name: Cleanup old images
+      run: |
+        docker image prune -f
+      continue-on-error: true
+
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        echo "=== Service Registry Logs ==="
+        docker-compose logs --tail=50 service-registry
+        echo "=== Core Gateway Logs ==="
+        docker-compose logs --tail=50 core-gateway
+        echo "=== Orchestrator Logs ==="
+        docker-compose logs --tail=50 orchestrator
+        echo "=== DB Gateway Logs ==="
+        docker-compose logs --tail=50 db-gateway
+
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✅ Deployment successful!"
+        else
+          echo "❌ Deployment failed!"
+          exit 1
+        fi

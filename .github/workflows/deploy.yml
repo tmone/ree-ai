@@ -18,6 +18,10 @@ jobs:
     - name: Clean workspace
       run: |
         # Remove __pycache__ files created by Docker (requires sudo)
+        # Use absolute path to ensure we're cleaning the correct directory
+        WORKSPACE="${GITHUB_WORKSPACE:-$PWD}"
+        echo "Cleaning workspace: $WORKSPACE"
+        cd "$WORKSPACE" || true
         sudo find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
         sudo find . -type f -name "*.pyc" -delete 2>/dev/null || true
         echo "Workspace cleaned"

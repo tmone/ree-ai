@@ -298,7 +298,7 @@ class ReasoningEngine:
             self.logger.info(f"{LogEmoji.AI} Calling LLM with {len(messages)} messages")
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": messages,

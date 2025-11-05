@@ -740,7 +740,7 @@ If the query contains references to previous context (e.g., "căn đó", "dự �
 Standalone query:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
@@ -1281,7 +1281,7 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
             for attempt in range(max_retries):
                 try:
                     response = await self.http_client.post(
-                        f"{self.core_gateway_url}/chat/completions",
+                        f"{self.core_gateway_url}/v1/chat/completions",
                         json={
                             "model": model,
                             "messages": messages_data,
@@ -1451,7 +1451,7 @@ CRITICAL RULES:
 JSON:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": analysis_prompt}],
@@ -1528,7 +1528,7 @@ RULES:
 City name:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": geo_prompt}],
@@ -1795,7 +1795,7 @@ JSON:"""
 
             # Call LLM for semantic validation
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": validation_prompt}],
@@ -1873,7 +1873,7 @@ Chỉ trả về query mới, không giải thích.
 Query mới:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": refine_prompt}],
@@ -2166,7 +2166,7 @@ RULES:
 Nearby districts:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/chat/completions",
+                f"{self.core_gateway_url}/v1/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": nearby_prompt}],

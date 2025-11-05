@@ -8,10 +8,13 @@ This is the main entry point for extraction services to query master data.
 """
 
 from typing import Dict, List, Optional, Any, Set
+from .cities import CityMaster, get_city_master
+from .provinces import ProvinceMaster, get_province_master
 from .districts import DistrictMaster, get_district_master
 from .property_types import PropertyTypeMaster, get_property_type_master, AttributeDefinition
 from .amenities import AmenityMaster, get_amenity_master
 from .price_ranges import PriceRangeMaster, get_price_range_master
+from .units import UnitMaster, get_unit_master
 
 
 class AttributeSchema:
@@ -20,9 +23,10 @@ class AttributeSchema:
 
     This is the primary interface for extraction services to:
     1. Get complete attribute schema for any property type
-    2. Normalize entities (districts, property types, amenities)
+    2. Normalize entities (cities, provinces, districts, property types, amenities, units)
     3. Validate extracted data
     4. Get extraction hints and patterns
+    5. Parse values with units
 
     Usage:
         schema = AttributeSchema()
@@ -31,8 +35,13 @@ class AttributeSchema:
         attrs = schema.get_attributes_for_property_type("căn hộ")
 
         # Normalize entities
+        city = schema.normalize_city("sài gòn")  # -> "Hồ Chí Minh"
+        province = schema.normalize_province("tphcm")  # -> "Hồ Chí Minh"
         district = schema.normalize_district("q7")  # -> "Quận 7"
         prop_type = schema.normalize_property_type("apartment")  # -> "căn hộ"
+
+        # Parse units
+        value, unit = schema.parse_value_with_unit("100m²")  # -> (100.0, Unit(m²))
 
         # Validate
         is_valid, warning = schema.validate_price(3000000000, 80, "Quận 7", "APARTMENT")
@@ -40,10 +49,13 @@ class AttributeSchema:
 
     def __init__(self):
         """Initialize with all master data sources"""
+        self.cities = get_city_master()
+        self.provinces = get_province_master()
         self.districts = get_district_master()
         self.property_types = get_property_type_master()
         self.amenities = get_amenity_master()
         self.price_ranges = get_price_range_master()
+        self.units = get_unit_master()
 
     # ===== Property Type Schema Methods =====
 
@@ -105,6 +117,47 @@ class AttributeSchema:
             "gym" -> "GYM"
         """
         return self.amenities.normalize(text)
+
+    def normalize_city(self, text: str) -> Optional[str]:
+        """
+        Normalize city name to standard format.
+
+        Examples:
+            "sài gòn" -> "Hồ Chí Minh"
+            "tphcm" -> "Hồ Chí Minh"
+            "hanoi" -> "Hà Nội"
+        """
+        return self.cities.normalize(text)
+
+    def normalize_province(self, text: str) -> Optional[str]:
+        """
+        Normalize province name to standard format.
+
+        Examples:
+            "tphcm" -> "Hồ Chí Minh"
+            "da nang" -> "Đà Nẵng"
+        """
+        return self.provinces.normalize(text)
+
+    def normalize_unit(self, text: str) -> Optional[Any]:
+        """
+        Normalize unit text to Unit object.
+
+        Examples:
+            "m2" -> Unit(m²)
+            "ty" -> Unit(tỷ)
+        """
+        return self.units.normalize_unit(text)
+
+    def parse_value_with_unit(self, text: str) -> Optional[tuple]:
+        """
+        Parse text containing value and unit.
+
+        Examples:
+            "100m²" -> (100.0, Unit(m²))
+            "3 tỷ" -> (3.0, Unit(tỷ))
+        """
+        return self.units.parse_value_with_unit(text)
 
     # ===== Validation Methods =====
 

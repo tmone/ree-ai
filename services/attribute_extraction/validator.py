@@ -1,54 +1,47 @@
 """
 Attribute Validation Module
 Validates extracted entities against real-world patterns and logical consistency
+
+UPDATED: Now uses centralized master data for validation
 """
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 from shared.utils.logger import setup_logger, LogEmoji
+from shared.master_data import (
+    get_district_master,
+    get_property_type_master,
+    get_price_range_master,
+    get_attribute_schema
+)
 
 logger = setup_logger(__name__)
 
 
 class AttributeValidator:
     """
-    Validate extracted attributes against DB distribution and logical rules.
+    Validate extracted attributes using MASTER DATA.
+
+    NOW USES:
+    - DistrictMaster for district validation
+    - PropertyTypeMaster for property type and area validation
+    - PriceRangeMaster for price validation
+    - AttributeSchema for comprehensive validation
 
     This layer ensures:
-    1. Extracted values are within reasonable ranges
+    1. Extracted values are within reasonable ranges (from master data)
     2. Logical consistency between attributes
     3. Conformity with known patterns from RAG context
     """
 
-    # Reasonable ranges for HCMC real estate (can be configured per city)
-    PRICE_PER_M2_RANGES = {
-        # District: (min_price_per_m2, max_price_per_m2) in VND
-        "Quận 1": (100_000_000, 300_000_000),
-        "Quận 2": (60_000_000, 200_000_000),
-        "Quận 3": (80_000_000, 250_000_000),
-        "Quận 4": (50_000_000, 150_000_000),
-        "Quận 5": (60_000_000, 180_000_000),
-        "Quận 7": (50_000_000, 180_000_000),
-        "Quận 8": (30_000_000, 100_000_000),
-        "Quận Bình Thạnh": (50_000_000, 150_000_000),
-        "Quận Tân Bình": (50_000_000, 150_000_000),
-        "Quận Phú Nhuận": (60_000_000, 180_000_000),
-        "Thành phố Thủ Đức": (40_000_000, 120_000_000),
-        "default": (30_000_000, 300_000_000)
-    }
-
-    AREA_RANGES = {
-        # Property type: (min_area, max_area) in m²
-        "căn hộ": (20, 500),
-        "chung cư": (20, 500),
-        "nhà phố": (40, 400),
-        "biệt thự": (100, 1500),
-        "đất": (50, 10000),
-        "văn phòng": (30, 2000),
-        "default": (20, 10000)
-    }
-
     def __init__(self):
-        """Initialize validator"""
-        logger.info(f"{LogEmoji.INFO} Attribute Validator initialized")
+        """Initialize validator with master data"""
+        # Load master data
+        self.district_master = get_district_master()
+        self.property_type_master = get_property_type_master()
+        self.price_range_master = get_price_range_master()
+        self.schema = get_attribute_schema()
+
+        logger.info(f"{LogEmoji.INFO} Attribute Validator initialized with Master Data")
+        logger.info(f"{LogEmoji.INFO} Using centralized validation rules from master data")
 
     def validate(
         self,
@@ -191,14 +184,14 @@ class AttributeValidator:
         entities: Dict[str, Any],
         rag_context: Dict[str, Any]
     ) -> List[str]:
-        """Validate price reasonableness"""
+        """Validate price reasonableness using PriceRangeMaster"""
         warnings = []
 
         price = entities.get("price")
         if not price:
             return warnings
 
-        # Check against RAG value ranges
+        # Check against RAG value ranges first (if available)
         value_ranges = rag_context.get("value_ranges", {})
         if "price" in value_ranges:
             price_range = value_ranges["price"]
@@ -218,59 +211,44 @@ class AttributeValidator:
                     f"Similar properties: {min_price:,.0f} - {max_price:,.0f} VND (avg: {avg_price:,.0f})"
                 )
 
-        # Check price per m² if area is available
-        area = entities.get("area")
+        # Use PriceRangeMaster for validation
+        area = entities.get("area") or entities.get("land_area")
         district = entities.get("district")
-        if area and area > 0:
-            price_per_m2 = price / area
+        property_type = entities.get("property_type")
 
-            # Get expected range for district
-            expected_range = self.PRICE_PER_M2_RANGES.get(
-                district,
-                self.PRICE_PER_M2_RANGES["default"]
-            )
-            min_expected, max_expected = expected_range
+        if district and property_type:
+            # Get property type code
+            prop_type_obj = self.property_type_master.get_property_type(property_type)
+            if prop_type_obj:
+                # Validate using master data
+                is_valid, warning = self.price_range_master.validate_price(
+                    price=price,
+                    area=area,
+                    district=district,
+                    property_type_code=prop_type_obj.code,
+                    tolerance=2.0
+                )
 
-            if price_per_m2 < min_expected * 0.5:
-                warnings.append(
-                    f"Price/m² {price_per_m2:,.0f} VND/m² very low for {district or 'area'}. "
-                    f"Expected: {min_expected:,.0f} - {max_expected:,.0f} VND/m²"
-                )
-            elif price_per_m2 > max_expected * 2:
-                warnings.append(
-                    f"Price/m² {price_per_m2:,.0f} VND/m² very high for {district or 'area'}. "
-                    f"Expected: {min_expected:,.0f} - {max_expected:,.0f} VND/m²"
-                )
+                if not is_valid and warning:
+                    warnings.append(warning)
 
         return warnings
 
     def _validate_area(self, entities: Dict[str, Any]) -> List[str]:
-        """Validate area reasonableness"""
+        """Validate area reasonableness using PropertyTypeMaster"""
         warnings = []
 
-        area = entities.get("area")
+        area = entities.get("area") or entities.get("land_area")
         property_type = entities.get("property_type")
 
-        if not area:
+        if not area or not property_type:
             return warnings
 
-        # Get expected range for property type
-        expected_range = self.AREA_RANGES.get(
-            property_type,
-            self.AREA_RANGES["default"]
-        )
-        min_area, max_area = expected_range
+        # Use AttributeSchema for validation
+        is_valid, warning = self.schema.validate_area(area, property_type)
 
-        if area < min_area:
-            warnings.append(
-                f"Area {area}m² unusually small for {property_type}. "
-                f"Typical range: {min_area}-{max_area}m²"
-            )
-        elif area > max_area:
-            warnings.append(
-                f"Area {area}m² unusually large for {property_type}. "
-                f"Typical range: {min_area}-{max_area}m²"
-            )
+        if not is_valid and warning:
+            warnings.append(warning)
 
         return warnings
 

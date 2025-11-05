@@ -1,10 +1,13 @@
 """
 Vietnamese NLP Pre-processing for Property Attribute Extraction
-Uses rule-based extraction + regex patterns for high-accuracy entity detection
+Uses rule-based extraction + regex patterns + MASTER DATA for high-accuracy entity detection
+
+UPDATED: Now uses centralized master data instead of hard-coded values
 """
 import re
 from typing import Dict, Any, List, Optional, Tuple
 from shared.utils.logger import setup_logger, LogEmoji
+from shared.master_data import get_district_master, get_property_type_master, get_amenity_master
 
 logger = setup_logger(__name__)
 
@@ -13,50 +16,26 @@ class VietnameseNLPProcessor:
     """
     Pre-process Vietnamese property queries with rule-based extraction.
 
+    NOW USES MASTER DATA for:
+    - District normalization (from DistrictMaster)
+    - Property type normalization (from PropertyTypeMaster)
+    - Amenity extraction (from AmenityMaster)
+
     This layer extracts obvious entities using regex patterns and normalization rules,
     providing high-confidence hints to the LLM layer.
     """
 
-    # Location normalization mappings
-    DISTRICT_PATTERNS = {
-        r'\bq\.?\s*(\d+)\b': r'Quận \1',
-        r'\bquận\s*(\d+)\b': r'Quận \1',
-        r'\bquận\s+bình\s+thạnh\b': 'Quận Bình Thạnh',
-        r'\bbình\s+thạnh\b': 'Quận Bình Thạnh',
-        r'\bthủ\s+đức\b': 'Thành phố Thủ Đức',
-        r'\btân\s+bình\b': 'Quận Tân Bình',
-        r'\btân\s+phú\b': 'Quận Tân Phú',
-        r'\bgò\s+vấp\b': 'Quận Gò Vấp',
-        r'\bphú\s+nhuận\b': 'Quận Phú Nhuận',
-    }
-
-    # Property type mappings
-    PROPERTY_TYPES = {
-        r'\bcăn\s+hộ\b': 'căn hộ',
-        r'\bchung\s+cư\b': 'chung cư',
-        r'\bapartment\b': 'căn hộ',
-        r'\bnhà\s+phố\b': 'nhà phố',
-        r'\btownhouse\b': 'nhà phố',
-        r'\bbiệt\s+thự\b': 'biệt thự',
-        r'\bvilla\b': 'biệt thự',
-        r'\bđất\b': 'đất',
-        r'\bđất\s+nền\b': 'đất',
-        r'\boffice\b': 'văn phòng',
-        r'\bvăn\s+phòng\b': 'văn phòng',
-        r'\bmặt\s+bằng\b': 'mặt bằng',
-    }
-
-    # Project name patterns
-    KNOWN_PROJECTS = [
-        'vinhomes', 'masteri', 'the manor', 'the sun avenue',
-        'estella heights', 'gateway', 'sala', 'sarimi',
-        'park riverside', 'diamond island', 'vista verde',
-        'feliz en vista', 'palm heights', 'eco green'
-    ]
-
     def __init__(self):
-        """Initialize NLP processor"""
-        logger.info(f"{LogEmoji.INFO} Initialized Vietnamese NLP Processor")
+        """Initialize NLP processor with master data"""
+        # Load master data
+        self.district_master = get_district_master()
+        self.property_type_master = get_property_type_master()
+        self.amenity_master = get_amenity_master()
+
+        logger.info(f"{LogEmoji.INFO} Initialized Vietnamese NLP Processor with Master Data")
+        logger.info(f"{LogEmoji.INFO} Loaded {len(self.district_master.districts)} districts")
+        logger.info(f"{LogEmoji.INFO} Loaded {len(self.property_type_master.PROPERTY_TYPES)} property types")
+        logger.info(f"{LogEmoji.INFO} Loaded {len(self.amenity_master.AMENITIES)} amenities")
 
     def extract_entities(self, text: str) -> Dict[str, Any]:
         """
@@ -86,22 +65,22 @@ class VietnameseNLPProcessor:
         return entities
 
     def _extract_location(self, text: str, text_lower: str) -> Dict[str, Any]:
-        """Extract and normalize location entities (district, ward, street)"""
+        """Extract and normalize location entities using DistrictMaster"""
         location = {}
 
-        # Extract district with normalization
-        for pattern, replacement in self.DISTRICT_PATTERNS.items():
-            match = re.search(pattern, text_lower)
-            if match:
-                if '\\1' in replacement:
-                    # Pattern with capture group
-                    district = re.sub(pattern, replacement, match.group(0))
-                else:
-                    # Direct replacement
-                    district = replacement
-                location['district'] = district
-                logger.debug(f"Extracted district: {district}")
-                break
+        # Use DistrictMaster for extraction
+        district_match = self.district_master.extract_from_text(text)
+        if district_match:
+            matched_text, district_obj = district_match
+            location['district'] = district_obj.standard_name
+            logger.debug(f"Extracted district: {district_obj.standard_name} (from: {matched_text})")
+
+            # Also extract popular area if mentioned
+            for popular_area in district_obj.popular_areas:
+                if popular_area.lower() in text_lower:
+                    location['area'] = popular_area
+                    logger.debug(f"Extracted popular area: {popular_area}")
+                    break
 
         # Extract ward (phường)
         ward_patterns = [
@@ -131,11 +110,20 @@ class VietnameseNLPProcessor:
         return location
 
     def _extract_property_type(self, text_lower: str) -> Dict[str, str]:
-        """Extract property type"""
-        for pattern, prop_type in self.PROPERTY_TYPES.items():
-            if re.search(pattern, text_lower):
-                logger.debug(f"Extracted property_type: {prop_type}")
-                return {'property_type': prop_type}
+        """Extract property type using PropertyTypeMaster"""
+        # Try each property type from master data
+        for prop_type_obj in self.property_type_master.PROPERTY_TYPES:
+            # Check standard name
+            if prop_type_obj.standard_name in text_lower:
+                logger.debug(f"Extracted property_type: {prop_type_obj.standard_name}")
+                return {'property_type': prop_type_obj.standard_name}
+
+            # Check aliases
+            for alias in prop_type_obj.aliases:
+                if re.search(rf'\b{re.escape(alias)}\b', text_lower):
+                    logger.debug(f"Extracted property_type: {prop_type_obj.standard_name} (from alias: {alias})")
+                    return {'property_type': prop_type_obj.standard_name}
+
         return {}
 
     def _extract_numbers(self, text: str, text_lower: str) -> Dict[str, Any]:
@@ -250,25 +238,12 @@ class VietnameseNLPProcessor:
         return price_info
 
     def _extract_amenities(self, text_lower: str) -> Dict[str, bool]:
-        """Extract boolean amenities"""
-        amenities = {}
+        """Extract boolean amenities using AmenityMaster"""
+        # Use AmenityMaster's extract_from_text method
+        amenities = self.amenity_master.extract_from_text(text_lower)
 
-        amenity_patterns = {
-            'parking': [r'chỗ\s+đậu\s+xe', r'garage', r'bãi\s+xe', r'parking'],
-            'elevator': [r'thang\s+máy', r'elevator', r'lift'],
-            'swimming_pool': [r'hồ\s+bơi', r'pool', r'bể\s+bơi'],
-            'gym': [r'phòng\s+gym', r'gym', r'fitness'],
-            'security': [r'bảo\s+vệ\s+24/7', r'security', r'an\s+ninh'],
-            'balcony': [r'ban\s+công', r'balcony'],
-            'garden': [r'sân\s+vườn', r'vườn', r'garden'],
-        }
-
-        for amenity, patterns in amenity_patterns.items():
-            for pattern in patterns:
-                if re.search(pattern, text_lower):
-                    amenities[amenity] = True
-                    logger.debug(f"Extracted amenity: {amenity}")
-                    break
+        if amenities:
+            logger.debug(f"Extracted amenities: {list(amenities.keys())}")
 
         return amenities
 

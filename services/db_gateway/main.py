@@ -9,7 +9,7 @@ import time
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from opensearchpy import AsyncOpenSearch
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer  # Commented out - not needed, using OpenAI embeddings instead
 
 from shared.models.db_gateway import SearchRequest, SearchResponse, PropertyResult, SearchFilters
 from shared.config import settings
@@ -18,7 +18,7 @@ from shared.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 # Global embedding model for semantic search
-embedding_model: Optional[SentenceTransformer] = None
+embedding_model: Optional[Any] = None  # Changed from SentenceTransformer to Any since import is disabled
 
 # Global OpenSearch client
 opensearch_client: Optional[AsyncOpenSearch] = None

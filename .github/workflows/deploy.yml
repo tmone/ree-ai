@@ -15,6 +15,14 @@ jobs:
     timeout-minutes: 30
 
     steps:
+    - name: Stop existing services
+      run: |
+        # Stop containers first to prevent them from creating __pycache__ files
+        cd "${GITHUB_WORKSPACE:-$PWD}" || cd /home/tmone/ree-ai || true
+        docker-compose down || true
+        echo "Services stopped"
+      continue-on-error: true
+
     - name: Clean workspace
       run: |
         # Remove __pycache__ files created by Docker (requires sudo)
@@ -67,11 +75,6 @@ jobs:
         LANGCHAIN_TRACING_V2=${{ secrets.LANGCHAIN_TRACING_V2 || 'false' }}
         LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY || '' }}
         EOF
-
-    - name: Stop existing services
-      run: |
-        docker-compose down || true
-      continue-on-error: true
 
     - name: Pull latest images (if any external images)
       run: |

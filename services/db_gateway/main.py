@@ -2,18 +2,31 @@
 DB Gateway Service - OpenSearch Integration
 Central gateway for all database operations using OpenSearch for flexible property data
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from opensearchpy import AsyncOpenSearch
+import asyncpg
 # from sentence_transformers import SentenceTransformer  # Commented out - not needed, using OpenAI embeddings instead
 
 from shared.models.db_gateway import SearchRequest, SearchResponse, PropertyResult, SearchFilters
+from shared.models.properties import (
+    PropertyCreate, PropertyUpdate, PropertyStatusUpdate, ImageUploadRequest
+)
+from shared.models.favorites import FavoriteCreate, FavoriteUpdate
+from shared.models.saved_searches import SavedSearchCreate, SavedSearchUpdate
+from shared.models.inquiries import InquiryCreate, InquiryResponse, InquiryStatusUpdate
 from shared.config import settings
 from shared.utils.logger import setup_logger
+
+# Import all modules
+from services.db_gateway import property_management
+from services.db_gateway import favorites_module
+from services.db_gateway import saved_searches_module
+from services.db_gateway import inquiries_module
 
 logger = setup_logger(__name__)
 
@@ -23,15 +36,19 @@ embedding_model: Optional[Any] = None  # Changed from SentenceTransformer to Any
 # Global OpenSearch client
 opensearch_client: Optional[AsyncOpenSearch] = None
 
+# Global PostgreSQL connection pool
+db_pool: Optional[asyncpg.Pool] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    global opensearch_client
+    global opensearch_client, db_pool
 
-    logger.info("🚀 DB Gateway starting up (OpenSearch Mode)...")
+    logger.info("🚀 DB Gateway starting up (OpenSearch + PostgreSQL Mode)...")
     logger.info(f"OpenSearch: {settings.OPENSEARCH_HOST}:{settings.OPENSEARCH_PORT}")
     logger.info(f"Properties Index: {settings.OPENSEARCH_PROPERTIES_INDEX}")
+    logger.info(f"PostgreSQL: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
 
     # Load embedding model for semantic search
     global embedding_model
@@ -77,6 +94,27 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Failed to connect to OpenSearch: {e}")
         logger.warning("⚠️  Continuing with limited functionality")
 
+    # Initialize PostgreSQL connection pool
+    try:
+        db_pool = await asyncpg.create_pool(
+            host=settings.POSTGRES_HOST,
+            port=settings.POSTGRES_PORT,
+            user=settings.POSTGRES_USER,
+            password=settings.POSTGRES_PASSWORD,
+            database=settings.POSTGRES_DB,
+            min_size=5,
+            max_size=20
+        )
+        logger.info("✅ Connected to PostgreSQL database")
+
+        # Test connection
+        async with db_pool.acquire() as conn:
+            version = await conn.fetchval('SELECT version()')
+            logger.info(f"PostgreSQL version: {version[:50]}...")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to PostgreSQL: {e}")
+        logger.warning("⚠️  User features (favorites, inquiries) will not be available")
+
     yield
 
     # Cleanup
@@ -84,6 +122,9 @@ async def lifespan(app: FastAPI):
     if opensearch_client:
         await opensearch_client.close()
         logger.info("Closed OpenSearch connection")
+    if db_pool:
+        await db_pool.close()
+        logger.info("Closed PostgreSQL connection pool")
 
 
 app = FastAPI(
@@ -769,3 +810,432 @@ async def get_stats():
     except Exception as e:
         logger.error(f"❌ Get stats failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PROPERTY MANAGEMENT ENDPOINTS (Seller Operations)
+# ============================================================================
+
+@app.post("/properties")
+async def create_property(
+    property_data: PropertyCreate,
+    authorization: str = Header(None)
+):
+    """Create new property (draft or published) - Seller only"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.create_property(
+        property_data,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.get("/properties/my-listings")
+async def get_my_properties(
+    authorization: str = Header(None),
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20
+):
+    """Get seller's own properties"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.get_my_properties(
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX,
+        status_filter,
+        page,
+        page_size
+    )
+
+
+@app.put("/properties/{property_id}")
+async def update_property(
+    property_id: str,
+    update_data: PropertyUpdate,
+    authorization: str = Header(None)
+):
+    """Update property details - Owner only"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.update_property(
+        property_id,
+        update_data,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.put("/properties/{property_id}/status")
+async def update_property_status(
+    property_id: str,
+    status_update: PropertyStatusUpdate,
+    authorization: str = Header(None)
+):
+    """Update property status (publish, pause, mark as sold, etc.)"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.update_property_status(
+        property_id,
+        status_update,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.delete("/properties/{property_id}")
+async def delete_property(
+    property_id: str,
+    authorization: str = Header(None)
+):
+    """Delete property - Owner only"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.delete_property(
+        property_id,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.post("/properties/{property_id}/images")
+async def upload_images(
+    upload_request: ImageUploadRequest,
+    authorization: str = Header(None)
+):
+    """Upload images to property"""
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.upload_images(
+        upload_request,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+# ============================================================================
+# FAVORITES ENDPOINTS (Buyer Operations)
+# ============================================================================
+
+@app.post("/favorites")
+async def add_favorite(
+    favorite_data: FavoriteCreate,
+    authorization: str = Header(None)
+):
+    """Add property to favorites"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    # Extract user_id from token
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await favorites_module.add_favorite(favorite_data, user_id, db_pool)
+
+
+@app.get("/favorites")
+async def get_favorites(
+    authorization: str = Header(None),
+    page: int = 1,
+    page_size: int = 20
+):
+    """Get user's favorite properties"""
+    if not db_pool or not opensearch_client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await favorites_module.get_favorites(
+        user_id,
+        db_pool,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX,
+        page,
+        page_size
+    )
+
+
+@app.delete("/favorites/{property_id}")
+async def remove_favorite(
+    property_id: str,
+    authorization: str = Header(None)
+):
+    """Remove property from favorites"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await favorites_module.remove_favorite(property_id, user_id, db_pool)
+
+
+@app.put("/favorites/{property_id}")
+async def update_favorite_notes(
+    property_id: str,
+    update_data: FavoriteUpdate,
+    authorization: str = Header(None)
+):
+    """Update notes on a favorite property"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await favorites_module.update_favorite_notes(
+        property_id,
+        update_data,
+        user_id,
+        db_pool
+    )
+
+
+# ============================================================================
+# SAVED SEARCHES ENDPOINTS (Buyer Operations)
+# ============================================================================
+
+@app.post("/saved-searches")
+async def create_saved_search(
+    search_data: SavedSearchCreate,
+    authorization: str = Header(None)
+):
+    """Save search criteria for notifications"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await saved_searches_module.create_saved_search(search_data, user_id, db_pool)
+
+
+@app.get("/saved-searches")
+async def get_saved_searches(
+    authorization: str = Header(None),
+    page: int = 1,
+    page_size: int = 20
+):
+    """Get user's saved searches"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await saved_searches_module.get_saved_searches(user_id, db_pool, page, page_size)
+
+
+@app.get("/saved-searches/{search_id}/new-matches")
+async def find_new_matches(
+    search_id: str,
+    authorization: str = Header(None)
+):
+    """Find new properties matching saved search"""
+    if not db_pool or not opensearch_client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await saved_searches_module.find_new_matches(
+        search_id,
+        user_id,
+        db_pool,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.put("/saved-searches/{search_id}")
+async def update_saved_search(
+    search_id: str,
+    update_data: SavedSearchUpdate,
+    authorization: str = Header(None)
+):
+    """Update saved search"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await saved_searches_module.update_saved_search(
+        search_id,
+        update_data,
+        user_id,
+        db_pool
+    )
+
+
+@app.delete("/saved-searches/{search_id}")
+async def delete_saved_search(
+    search_id: str,
+    authorization: str = Header(None)
+):
+    """Delete saved search"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await saved_searches_module.delete_saved_search(search_id, user_id, db_pool)
+
+
+# ============================================================================
+# INQUIRIES ENDPOINTS (Buyer-Seller Communication)
+# ============================================================================
+
+@app.post("/inquiries")
+async def send_inquiry(
+    inquiry_data: InquiryCreate,
+    authorization: str = Header(None)
+):
+    """Send inquiry from buyer to seller"""
+    if not db_pool or not opensearch_client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.send_inquiry(
+        inquiry_data,
+        user_id,
+        db_pool,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.get("/inquiries/sent")
+async def get_sent_inquiries(
+    authorization: str = Header(None),
+    page: int = 1,
+    page_size: int = 20
+):
+    """Get inquiries sent by buyer"""
+    if not db_pool or not opensearch_client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.get_sent_inquiries(
+        user_id,
+        db_pool,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX,
+        page,
+        page_size
+    )
+
+
+@app.get("/inquiries/received")
+async def get_received_inquiries(
+    authorization: str = Header(None),
+    status_filter: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20
+):
+    """Get inquiries received by seller"""
+    if not db_pool or not opensearch_client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.get_received_inquiries(
+        user_id,
+        db_pool,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX,
+        status_filter,
+        page,
+        page_size
+    )
+
+
+@app.put("/inquiries/{inquiry_id}/respond")
+async def respond_to_inquiry(
+    inquiry_id: str,
+    response_data: InquiryResponse,
+    authorization: str = Header(None)
+):
+    """Seller responds to inquiry"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.respond_to_inquiry(
+        inquiry_id,
+        response_data,
+        user_id,
+        db_pool
+    )
+
+
+@app.put("/inquiries/{inquiry_id}/status")
+async def update_inquiry_status(
+    inquiry_id: str,
+    status_update: InquiryStatusUpdate,
+    authorization: str = Header(None)
+):
+    """Update inquiry status"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.update_inquiry_status(
+        inquiry_id,
+        status_update,
+        user_id,
+        db_pool
+    )
+
+
+@app.get("/inquiries/stats")
+async def get_inquiry_stats(
+    authorization: str = Header(None)
+):
+    """Get inquiry statistics for seller"""
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    user_id = property_management._extract_user_id_from_token(authorization)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    return await inquiries_module.get_inquiry_stats(user_id, db_pool)

@@ -4,3 +4,6 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 opensearch-py==2.4.2
 sentence-transformers==3.0.1
+asyncpg==0.29.0
+pyjwt==2.8.0
+bcrypt==4.1.2

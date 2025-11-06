@@ -20,6 +20,7 @@ from services.attribute_extraction.rag_enhancer import RAGContextEnhancer
 from services.attribute_extraction.validator import AttributeValidator
 from shared.config import settings
 from shared.utils.logger import LogEmoji
+from shared.i18n import get_multilingual_mapper
 
 
 class QueryExtractionRequest(BaseModel):
@@ -68,10 +69,12 @@ class AttributeExtractionService(BaseService):
         self.nlp_processor = VietnameseNLPProcessor()
         self.rag_enhancer = RAGContextEnhancer(self.db_gateway_url)
         self.validator = AttributeValidator()
+        self.multilingual_mapper = get_multilingual_mapper()
 
         self.logger.info(f"{LogEmoji.INFO} Using Core Gateway at: {self.core_gateway_url}")
         self.logger.info(f"{LogEmoji.INFO} Using DB Gateway at: {self.db_gateway_url}")
         self.logger.info(f"{LogEmoji.SUCCESS} Enhanced NLP + RAG pipeline initialized")
+        self.logger.info(f"{LogEmoji.SUCCESS} Multilingual mapper initialized (vi/en/zh → English)")
 
     def setup_routes(self):
         """Setup API routes"""
@@ -129,13 +132,24 @@ class AttributeExtractionService(BaseService):
                 warnings = validation_result["warnings"]
                 validation_details = validation_result["validation_details"]
 
+                # CRITICAL: Normalize entities to English master data standard
+                # This converts multilingual input (vi/zh) → English for database storage
+                self.logger.info(f"{LogEmoji.AI} Normalizing entities to English master data...")
+                normalized_entities = self.multilingual_mapper.normalize_entities(
+                    validated_entities,
+                    source_lang="vi"  # Default to Vietnamese, can be auto-detected
+                )
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Entities normalized to English: {normalized_entities}"
+                )
+
                 self.logger.info(
                     f"{LogEmoji.SUCCESS} Extraction complete! "
                     f"Confidence: {confidence:.2f}, Warnings: {len(warnings)}"
                 )
 
                 return EnhancedExtractionResponse(
-                    entities=validated_entities,
+                    entities=normalized_entities,  # Return English-normalized entities
                     confidence=confidence,
                     extracted_from="enhanced_pipeline",
                     nlp_entities=nlp_entities,
@@ -163,12 +177,19 @@ class AttributeExtractionService(BaseService):
                 # Call LLM via Core Gateway
                 entities = await self._call_llm_for_extraction(prompt)
 
-                confidence = self._calculate_confidence(entities)
+                # Normalize to English master data
+                self.logger.info(f"{LogEmoji.AI} Normalizing query entities to English...")
+                normalized_entities = self.multilingual_mapper.normalize_entities(
+                    entities,
+                    source_lang="vi"
+                )
 
-                self.logger.info(f"{LogEmoji.SUCCESS} Extracted entities: {entities}")
+                confidence = self._calculate_confidence(normalized_entities)
+
+                self.logger.info(f"{LogEmoji.SUCCESS} Extracted entities (normalized): {normalized_entities}")
 
                 return QueryExtractionResponse(
-                    entities=entities,
+                    entities=normalized_entities,
                     confidence=confidence,
                     extracted_from="query"
                 )

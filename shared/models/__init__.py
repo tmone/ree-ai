@@ -22,9 +22,12 @@ from shared.models.db_gateway import (
 )
 
 from shared.models.orchestrator import (
-    ChatRequest,
-    ChatResponse,
-    Intent,
+    IntentType,
+    OrchestrationRequest,
+    OrchestrationResponse,
+    IntentDetectionResult,
+    ServiceRoute,
+    RoutingDecision,
 )
 
 # New user type models
@@ -115,9 +118,12 @@ __all__ = [
     "IndexDocumentRequest",
     "IndexDocumentResponse",
     # Orchestrator
-    "ChatRequest",
-    "ChatResponse",
-    "Intent",
+    "IntentType",
+    "OrchestrationRequest",
+    "OrchestrationResponse",
+    "IntentDetectionResult",
+    "ServiceRoute",
+    "RoutingDecision",
     # Users
     "User",
     "UserType",

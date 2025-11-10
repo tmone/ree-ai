@@ -6,7 +6,7 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 # HTTP clients
-httpx==0.26.0
+httpx[http2]==0.26.0
 requests==2.31.0
 
 # Database
@@ -33,7 +33,6 @@ langchain-community==0.0.20
 pytest==7.4.4
 pytest-asyncio==0.21.1
 pytest-cov==4.1.0
-httpx==0.26.0
 
 # Utilities
 python-multipart==0.0.6

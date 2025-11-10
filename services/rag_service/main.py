@@ -93,7 +93,7 @@ class RAGService(BaseService):
                 "agentic_memory",
                 "multi_agent"
             ],
-            port=8091
+            port=8080
         )
 
         # REFACTORED: Use shared HTTP client factory with RAG-optimized timeout

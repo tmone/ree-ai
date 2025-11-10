@@ -151,6 +151,12 @@ services:
     environment:
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
     ports:
       - "8000:8000"
     networks:
@@ -300,9 +306,8 @@ services:
       context: .
       dockerfile: services/rag_service/Dockerfile
     container_name: ree-ai-rag-service
-    # Use enhanced_main.py for advanced features (Modular RAG + Memory + Multi-Agent)
-    # To use basic RAG, change to: services.rag_service.main:app
-    command: uvicorn services.rag_service.enhanced_main:app --host 0.0.0.0 --port 8080
+    # Unified RAG service - use USE_ADVANCED_RAG env var to enable advanced features
+    command: uvicorn services.rag_service.main:app --host 0.0.0.0 --port 8080
     environment:
       # Core settings
       - OPENAI_API_KEY=${OPENAI_API_KEY}

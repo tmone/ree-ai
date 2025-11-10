@@ -78,6 +78,9 @@ test-results/
 junit.xml
 coverage.xml
 
+# Tests
+tests/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb

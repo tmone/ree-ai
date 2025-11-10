@@ -90,6 +90,26 @@ class Settings(BaseSettings):
     # MEDIUM FIX Bug#18: Configurable Chunk Similarity Threshold
     CHUNK_SIMILARITY_THRESHOLD: float = float(os.getenv("CHUNK_SIMILARITY_THRESHOLD", "0.75"))
 
+    # HTTP Client Configuration (for shared/utils/http_client.py)
+    HTTP_TIMEOUT_DEFAULT: int = int(os.getenv("HTTP_TIMEOUT_DEFAULT", "60"))
+    HTTP_TIMEOUT_RAG: int = int(os.getenv("HTTP_TIMEOUT_RAG", "90"))
+    HTTP_TIMEOUT_CLASSIFICATION: int = int(os.getenv("HTTP_TIMEOUT_CLASSIFICATION", "30"))
+    HTTP_MAX_CONNECTIONS: int = int(os.getenv("HTTP_MAX_CONNECTIONS", "100"))
+    HTTP_MAX_KEEPALIVE: int = int(os.getenv("HTTP_MAX_KEEPALIVE", "20"))
+
+    # Query/Search Limits
+    CONVERSATION_HISTORY_LIMIT: int = int(os.getenv("CONVERSATION_HISTORY_LIMIT", "10"))
+    SEARCH_RESULTS_DEFAULT_LIMIT: int = int(os.getenv("SEARCH_RESULTS_DEFAULT_LIMIT", "5"))
+    TOP_SOURCES_LIMIT: int = int(os.getenv("TOP_SOURCES_LIMIT", "3"))
+
+    # Retry Configuration
+    RETRY_MAX_ATTEMPTS: int = int(os.getenv("RETRY_MAX_ATTEMPTS", "3"))
+    RETRY_BACKOFF_MULTIPLIER: float = float(os.getenv("RETRY_BACKOFF_MULTIPLIER", "2.0"))
+
+    # Circuit Breaker Configuration
+    CIRCUIT_BREAKER_FAIL_MAX: int = int(os.getenv("CIRCUIT_BREAKER_FAIL_MAX", "5"))
+    CIRCUIT_BREAKER_RESET_TIMEOUT: int = int(os.getenv("CIRCUIT_BREAKER_RESET_TIMEOUT", "60"))
+
     @property
     def postgres_url(self) -> str:
         """Get PostgreSQL connection URL."""

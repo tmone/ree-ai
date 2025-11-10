@@ -1,20 +1,45 @@
 """
-RAG Service - Layer 6
-Retrieval-Augmented Generation for Real Estate Queries
+RAG Service - Unified Basic + Advanced Pipeline
+Layer 6 - Production-Ready with Feature Flag
 
-Architecture Flow:
-1. RETRIEVE: Get relevant properties from DB Gateway (via search)
-2. AUGMENT: Build rich context from retrieved data
-3. GENERATE: Use Core Gateway (LLM) to generate natural language response with context
+FEATURES:
+- BASIC Mode: Simple retrieve → augment → generate (default)
+- ADVANCED Mode: Modular RAG + Memory + Multi-Agent (via USE_ADVANCED_RAG=true)
+
+BACKWARD COMPATIBLE: Falls back to basic pipeline if advanced components unavailable
 """
-import httpx
+import os
+import uuid
+import time
 from typing import Dict, Any, List, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel
 
 from core.base_service import BaseService
 from shared.config import settings
-from shared.utils.logger import LogEmoji
+from shared.utils.logger import LogEmoji, StructuredLogger, setup_logger
+from shared.utils.http_client import HTTPClientFactory
+from shared.utils.retry import retry_on_http_error
+from shared.exceptions import ServiceUnavailableError, RAGPipelineError
+
+# Try importing advanced RAG components
+try:
+    from shared.rag_operators.operators import (
+        HybridRetrievalOperator,
+        DocumentGraderOperator,
+        RerankOperator,
+        QueryRewriterOperator,
+        GenerationOperator
+    )
+    from shared.rag_operators.operators.hyde import HyDEOperator
+    from shared.rag_operators.operators.query_decomposition import QueryDecompositionOperator
+    from shared.rag_operators.operators.reflection import ReflectionOperator
+    from shared.memory import MemoryManager
+    from shared.agents import SupervisorAgent
+    ADVANCED_FEATURES_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️  Advanced features not available: {e}")
+    ADVANCED_FEATURES_AVAILABLE = False
 
 
 class RAGQueryRequest(BaseModel):
@@ -22,6 +47,8 @@ class RAGQueryRequest(BaseModel):
     query: str
     filters: Optional[Dict[str, Any]] = None
     limit: int = 5
+    user_id: Optional[str] = None  # For memory personalization
+    use_advanced_rag: bool = True  # Enable/disable advanced features per request
 
 
 class RAGQueryResponse(BaseModel):
@@ -30,32 +57,100 @@ class RAGQueryResponse(BaseModel):
     retrieved_count: int
     confidence: float
     sources: List[Dict[str, Any]] = []
+    # Advanced metadata (populated only in advanced mode)
+    pipeline_used: Optional[str] = None
+    quality_score: Optional[float] = None
+    operators_executed: Optional[List[str]] = None
+    memory_context_used: Optional[bool] = None
 
 
 class RAGService(BaseService):
     """
-    RAG Service - Layer 6 (CTO Architecture)
+    RAG Service - Unified Basic + Advanced Pipeline
 
-    Implements full Retrieval-Augmented Generation pipeline:
-    - Retrieve relevant properties from DB Gateway
-    - Augment context with property data
-    - Generate natural language response with Core Gateway
+    BASIC Pipeline (default):
+        1. RETRIEVE: Get relevant properties from DB Gateway
+        2. AUGMENT: Build rich context from retrieved data
+        3. GENERATE: Use Core Gateway (LLM) to generate natural language response
+
+    ADVANCED Pipeline (USE_ADVANCED_RAG=true):
+        1. Memory retrieval (episodic, semantic, procedural)
+        2. Query enhancement (rewriting, HyDE, decomposition)
+        3. Multi-agent search (supervisor + specialists)
+        4. Document grading and reranking
+        5. LLM generation with reflection
+        6. Memory storage for future personalization
     """
 
     def __init__(self):
         super().__init__(
             name="rag_service",
-            version="1.0.0",
-            capabilities=["retrieval_augmented_generation", "context_building", "semantic_search"],
+            version="2.0.0",  # Unified version
+            capabilities=[
+                "retrieval_augmented_generation",
+                "basic_rag",
+                "modular_rag",
+                "agentic_memory",
+                "multi_agent"
+            ],
             port=8091
         )
 
-        self.http_client = httpx.AsyncClient(timeout=60.0)
+        # REFACTORED: Use shared HTTP client factory with RAG-optimized timeout
+        self.http_client = HTTPClientFactory.create_rag_client()
+
+        # Service URLs
         self.db_gateway_url = settings.get_db_gateway_url()
         self.core_gateway_url = settings.get_core_gateway_url()
 
+        # REFACTORED: Use structured logging
+        raw_logger = setup_logger("rag_service", level=settings.LOG_LEVEL)
+        self.structured_logger = StructuredLogger(raw_logger, "RAG")
+
+        # Feature flag: Enable advanced features based on env var
+        self.advanced_enabled = (
+            ADVANCED_FEATURES_AVAILABLE and
+            os.getenv("USE_ADVANCED_RAG", "false").lower() == "true"
+        )
+
+        if self.advanced_enabled:
+            self.logger.info(f"{LogEmoji.SUCCESS} Advanced RAG mode enabled")
+            self._init_advanced_components()
+        else:
+            self.logger.info(f"{LogEmoji.INFO} Basic RAG mode (set USE_ADVANCED_RAG=true for advanced)")
+            self.memory_manager = None
+            self.supervisor = None
+
         self.logger.info(f"{LogEmoji.INFO} DB Gateway: {self.db_gateway_url}")
         self.logger.info(f"{LogEmoji.INFO} Core Gateway: {self.core_gateway_url}")
+
+    def _init_advanced_components(self):
+        """Initialize advanced RAG components (modular operators, memory, agents)"""
+        try:
+            # Memory system
+            self.memory_manager = MemoryManager()
+            self.logger.info(f"{LogEmoji.SUCCESS} Memory system initialized")
+
+            # Multi-agent system
+            self.supervisor = SupervisorAgent()
+            self.logger.info(f"{LogEmoji.SUCCESS} Multi-agent system initialized")
+
+            # Individual operators for custom pipelines
+            self.query_rewriter = QueryRewriterOperator(core_gateway_url=self.core_gateway_url)
+            self.hyde_operator = HyDEOperator(core_gateway_url=self.core_gateway_url)
+            self.decomposition_operator = QueryDecompositionOperator(core_gateway_url=self.core_gateway_url)
+            self.document_grader = DocumentGraderOperator()
+            self.reranker = RerankOperator()
+            self.reflection_operator = ReflectionOperator(core_gateway_url=self.core_gateway_url)
+            self.generation_operator = GenerationOperator(core_gateway_url=self.core_gateway_url)
+
+            self.logger.info(f"{LogEmoji.SUCCESS} All modular operators initialized")
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to setup advanced components: {e}")
+            self.advanced_enabled = False
+            self.memory_manager = None
+            self.supervisor = None
 
     def setup_routes(self):
         """Setup RAG API routes"""
@@ -63,89 +158,259 @@ class RAGService(BaseService):
         @self.app.post("/query", response_model=RAGQueryResponse)
         async def rag_query(request: RAGQueryRequest):
             """
-            Main RAG endpoint - Full Retrieval-Augmented Generation
+            Main RAG endpoint - Intelligent Retrieval-Augmented Generation
 
-            This is what Orchestrator should call for SEARCH intent!
+            Automatically selects best pipeline:
+            - Advanced: Modular RAG + Memory + Multi-Agent (if enabled)
+            - Basic: Simple retrieve → augment → generate (fallback)
             """
             try:
                 self.logger.info(f"{LogEmoji.TARGET} RAG Query: '{request.query}'")
-                self.logger.info(f"{LogEmoji.INFO} Filters: {request.filters}")
 
-                # STEP 1: RETRIEVE - Get relevant properties from DB Gateway
-                retrieved_properties = await self._retrieve(request.query, request.filters, request.limit)
+                # Decide pipeline based on availability and request
+                use_advanced = self.advanced_enabled and request.use_advanced_rag
 
-                self.logger.info(f"{LogEmoji.SUCCESS} Retrieved {len(retrieved_properties)} properties")
-
-                if not retrieved_properties:
-                    return RAGQueryResponse(
-                        response="Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn.",
-                        retrieved_count=0,
-                        confidence=0.0,
-                        sources=[]
-                    )
-
-                # STEP 2: AUGMENT - Build rich context from retrieved data
-                context = self._build_context(retrieved_properties, request.query)
-
-                self.logger.info(f"{LogEmoji.AI} Built context (length: {len(context)} chars)")
-
-                # STEP 3: GENERATE - Use LLM to generate natural language response
-                generated_response = await self._generate_response(
-                    query=request.query,
-                    context=context,
-                    retrieved_properties=retrieved_properties
-                )
-
-                return RAGQueryResponse(
-                    response=generated_response,
-                    retrieved_count=len(retrieved_properties),
-                    confidence=0.9,  # High confidence since we have retrieved data
-                    sources=[
-                        {
-                            "property_id": prop.get("property_id"),
-                            "title": prop.get("title"),
-                            "price": prop.get("price")
-                        }
-                        for prop in retrieved_properties[:3]  # Top 3 sources
-                    ]
-                )
+                if use_advanced:
+                    self.logger.info(f"{LogEmoji.AI} Using ADVANCED pipeline (Modular RAG + Memory + Agents)")
+                    return await self._advanced_pipeline(request)
+                else:
+                    self.logger.info(f"{LogEmoji.INFO} Using BASIC pipeline (Simple RAG)")
+                    return await self._basic_pipeline(request)
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} RAG query failed: {e}")
                 raise HTTPException(status_code=500, detail=f"RAG query failed: {str(e)}")
 
+        @self.app.get("/stats")
+        async def get_stats():
+            """Get RAG service statistics"""
+            if not self.advanced_enabled:
+                return {
+                    "advanced_features": False,
+                    "pipeline": "basic",
+                    "message": "Set USE_ADVANCED_RAG=true to enable advanced features"
+                }
+
+            stats = {
+                "advanced_features": True,
+                "pipeline": "advanced",
+                "memory_stats": self.memory_manager.get_memory_stats() if self.memory_manager else {},
+                "agent_stats": self.supervisor.get_all_agent_stats() if self.supervisor else {}
+            }
+            return stats
+
+    # ==================== ADVANCED PIPELINE ====================
+
+    async def _advanced_pipeline(self, request: RAGQueryRequest) -> RAGQueryResponse:
+        """
+        ADVANCED PIPELINE: Full Modular RAG + Memory + Multi-Agent
+
+        Flow:
+        1. Retrieve memory context (if user_id provided)
+        2. Check procedural memory for applicable skills
+        3. Query enhancement (rewrite/HyDE/decomposition if needed)
+        4. Multi-agent search (supervisor delegates to specialists)
+        5. Reflection and quality check
+        6. Record interaction in memory
+        """
+        operators_executed = []
+        memory_context_used = False
+
+        # STEP 1: Memory retrieval
+        if request.user_id and self.memory_manager:
+            self.logger.info(f"{LogEmoji.AI} Retrieving memory context for user: {request.user_id}")
+            memory_context = await self.memory_manager.retrieve_context_for_query(
+                request.user_id,
+                request.query
+            )
+            memory_context_used = True
+            operators_executed.append("memory_retrieval")
+
+            # Log memory insights
+            if memory_context.get("user_preferences"):
+                self.logger.info(f"{LogEmoji.INFO} User preferences: {memory_context['user_preferences']}")
+            if memory_context.get("applicable_skills"):
+                self.logger.info(f"{LogEmoji.SUCCESS} Found {len(memory_context['applicable_skills'])} applicable skills")
+
+        # STEP 2: Query enhancement
+        enhanced_query = request.query
+
+        if self._is_complex_query(request.query):
+            self.logger.info(f"{LogEmoji.AI} Complex query detected, using decomposition")
+            decomp_result = await self.decomposition_operator.execute({"query": request.query})
+            if decomp_result.success:
+                sub_queries = decomp_result.data.sub_queries
+                self.logger.info(f"{LogEmoji.SUCCESS} Decomposed into {len(sub_queries)} sub-queries")
+                operators_executed.append("query_decomposition")
+                enhanced_query = sub_queries[0] if sub_queries else request.query
+
+        # STEP 3: Multi-agent search
+        self.logger.info(f"{LogEmoji.AI} Executing multi-agent search pipeline")
+        search_task = {
+            "query": enhanced_query,
+            "filters": request.filters or {},
+            "limit": request.limit
+        }
+
+        supervisor_result = await self.supervisor.execute(search_task)
+        operators_executed.append("multi_agent_search")
+
+        if not supervisor_result.success or not supervisor_result.data:
+            self.logger.warning(f"{LogEmoji.WARNING} Multi-agent search failed, falling back to basic")
+            return await self._basic_pipeline(request)
+
+        retrieved_properties = supervisor_result.data
+        self.logger.info(f"{LogEmoji.SUCCESS} Retrieved {len(retrieved_properties)} properties")
+
+        # STEP 4: Generate response
+        context = self._build_context(retrieved_properties, request.query)
+        generation_result = await self.generation_operator.execute({
+            "query": request.query,
+            "documents": [{"content": context}],
+            "system_prompt": "Bạn là chuyên gia tư vấn bất động sản REE AI. Hãy tạo câu trả lời tự nhiên, hữu ích."
+        })
+        operators_executed.append("generation")
+
+        if not generation_result.success:
+            self.logger.error(f"{LogEmoji.ERROR} Generation failed")
+            return await self._basic_pipeline(request)
+
+        generated_response = generation_result.data.response
+
+        # STEP 5: Reflection (quality check)
+        self.logger.info(f"{LogEmoji.AI} Performing self-reflection")
+        reflection_result = await self.reflection_operator.execute({
+            "query": request.query,
+            "response": generated_response,
+            "sources": retrieved_properties
+        })
+        operators_executed.append("reflection")
+
+        quality_score = 0.8  # Default
+        if reflection_result.success:
+            quality_score = reflection_result.data.quality_score
+            self.logger.info(f"{LogEmoji.SUCCESS} Quality score: {quality_score:.2f}")
+
+        # STEP 6: Record in memory
+        if request.user_id and self.memory_manager:
+            await self.memory_manager.record_interaction(
+                user_id=request.user_id,
+                query=request.query,
+                results=retrieved_properties,
+                success=True,
+                applied_skills=[],
+                metadata={"confidence": supervisor_result.confidence, "quality_score": quality_score}
+            )
+            operators_executed.append("memory_storage")
+
+        return RAGQueryResponse(
+            response=generated_response,
+            retrieved_count=len(retrieved_properties),
+            confidence=supervisor_result.confidence,
+            sources=[
+                {"property_id": p.get("property_id"), "title": p.get("title"), "price": p.get("price")}
+                for p in retrieved_properties[:3]
+            ],
+            pipeline_used="advanced",
+            quality_score=quality_score,
+            operators_executed=operators_executed,
+            memory_context_used=memory_context_used
+        )
+
+    # ==================== BASIC PIPELINE ====================
+
+    async def _basic_pipeline(self, request: RAGQueryRequest) -> RAGQueryResponse:
+        """
+        BASIC PIPELINE: Simple retrieve → augment → generate
+
+        This is the default fallback pipeline that always works.
+        No dependencies on advanced components.
+        """
+        # STEP 1: RETRIEVE
+        retrieved_properties = await self._retrieve(
+            request.query,
+            request.filters,
+            request.limit
+        )
+
+        if not retrieved_properties:
+            return RAGQueryResponse(
+                response="Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn.",
+                retrieved_count=0,
+                confidence=0.0,
+                sources=[],
+                pipeline_used="basic"
+            )
+
+        self.logger.info(f"{LogEmoji.SUCCESS} Retrieved {len(retrieved_properties)} properties")
+
+        # STEP 2: AUGMENT - Build rich context
+        context = self._build_context(retrieved_properties, request.query)
+
+        # STEP 3: GENERATE - Use LLM to create natural response
+        generated_response = await self._generate(
+            query=request.query,
+            context=context,
+            retrieved_properties=retrieved_properties
+        )
+
+        return RAGQueryResponse(
+            response=generated_response,
+            retrieved_count=len(retrieved_properties),
+            confidence=0.9,
+            sources=[
+                {"property_id": p.get("property_id"), "title": p.get("title"), "price": p.get("price")}
+                for p in retrieved_properties[:3]
+            ],
+            pipeline_used="basic"
+        )
+
+    # ==================== SHARED UTILITIES ====================
+
+    @retry_on_http_error  # REFACTORED: Automatic retry on network errors
     async def _retrieve(self, query: str, filters: Optional[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
         """
         STEP 1: RETRIEVE
         Get relevant properties from DB Gateway using search
+
+        Automatically retries on network errors and 5xx responses (via @retry_on_http_error)
         """
+        import httpx  # Import for exception handling
+
+        search_request = {
+            "query": query,
+            "filters": filters or {},
+            "limit": limit
+        }
+
+        self.logger.info(f"{LogEmoji.TARGET} Calling DB Gateway /search")
+
         try:
-            search_request = {
-                "query": query,
-                "filters": filters or {},
-                "limit": limit
-            }
-
-            self.logger.info(f"{LogEmoji.TARGET} Calling DB Gateway /search with filters: {filters}")
-
             response = await self.http_client.post(
                 f"{self.db_gateway_url}/search",
                 json=search_request,
                 timeout=30.0
             )
+            response.raise_for_status()  # Raise on 4xx/5xx
 
-            if response.status_code == 200:
-                data = response.json()
-                results = data.get("results", [])
-                self.logger.info(f"{LogEmoji.SUCCESS} DB Gateway returned {len(results)} results")
-                return results
+            data = response.json()
+            results = data.get("results", [])
+            return results
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code >= 500:
+                # 5xx errors will be retried by decorator
+                self.logger.warning(f"{LogEmoji.WARNING} DB Gateway returned {e.response.status_code}, will retry")
+                raise  # Re-raise for retry
             else:
-                self.logger.warning(f"{LogEmoji.WARNING} DB Gateway returned {response.status_code}")
+                # 4xx errors should not be retried
+                self.logger.warning(f"{LogEmoji.WARNING} DB Gateway returned {e.response.status_code} (client error)")
                 return []
 
-        except Exception as e:
-            self.logger.error(f"{LogEmoji.ERROR} Retrieval failed: {e}")
-            return []
+        except httpx.RequestError as e:
+            # Network errors will be retried by decorator
+            self.logger.error(f"{LogEmoji.ERROR} Network error: {e}, will retry")
+            raise ServiceUnavailableError("db_gateway", {"original_error": str(e)})
 
     def _build_context(self, properties: List[Dict[str, Any]], query: str) -> str:
         """
@@ -169,11 +434,8 @@ class RAGService(BaseService):
             if price_display:
                 context_parts.append(f"- **Giá**: {price_display}\n")
             else:
-                # Fallback to old logic for backward compatibility
                 price = prop.get('price', 0)
-                if isinstance(price, str):
-                    context_parts.append(f"- **Giá**: {price}\n")
-                elif isinstance(price, (int, float)) and price > 0:
+                if isinstance(price, (int, float)) and price > 0:
                     price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
                     context_parts.append(f"- **Giá**: {price_str}\n")
 
@@ -181,13 +443,8 @@ class RAGService(BaseService):
             city = prop.get('city', '')
             district = prop.get('district', '')
             ward = prop.get('ward', '')
-
-            if district or city:
-                location_parts = [p for p in [ward, district, city] if p]
-                location_str = ', '.join(location_parts)
-            else:
-                location_str = prop.get('location', 'N/A')
-
+            location_parts = [p for p in [ward, district, city] if p]
+            location_str = ', '.join(location_parts) if location_parts else prop.get('location', 'N/A')
             context_parts.append(f"- **Vị trí**: {location_str}\n")
 
             # Attributes
@@ -214,25 +471,20 @@ class RAGService(BaseService):
 
         return "".join(context_parts)
 
-    async def _generate_response(self, query: str, context: str, retrieved_properties: List[Dict[str, Any]]) -> str:
+    async def _generate(self, query: str, context: str, retrieved_properties: List[Dict[str, Any]]) -> str:
         """
         STEP 3: GENERATE
         Use Core Gateway (LLM) to generate natural language response with augmented context
-
-        NOTE: Now using OpenAI-compliant prompts from openai_compliant_prompts.py
         """
         try:
-            # Import OpenAI-compliant prompts
+            # Import OpenAI-compliant prompts (if available)
             try:
                 from services.rag_service.openai_compliant_prompts import (
                     SYSTEM_PROMPT_OPENAI_COMPLIANT,
-                    build_user_prompt_openai_compliant,
-                    validate_response_compliance,
-                    FALLBACK_NO_RESULTS
+                    build_user_prompt_openai_compliant
                 )
             except ImportError:
-                self.logger.warning(f"{LogEmoji.WARNING} Could not import OpenAI-compliant prompts, using fallback")
-                # Fallback to original prompt if import fails
+                # Fallback to inline prompts
                 SYSTEM_PROMPT_OPENAI_COMPLIANT = """Bạn là chuyên gia tư vấn bất động sản REE AI.
 
 NHIỆM VỤ:
@@ -249,14 +501,13 @@ PHONG CÁCH:
 - Thân thiện, chuyên nghiệp
 - Sử dụng tiếng Việt tự nhiên
 - Không copy nguyên văn dữ liệu, hãy diễn đạt lại"""
+
                 def build_user_prompt_openai_compliant(q, c):
                     return f"""Câu hỏi của khách hàng: {q}
 
 {c}
 
 Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên dữ liệu trên."""
-                def validate_response_compliance(r):
-                    return (True, [])
 
             # Build prompt for LLM with retrieved context
             system_prompt = SYSTEM_PROMPT_OPENAI_COMPLIANT
@@ -268,7 +519,7 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                "max_tokens": 500,  # OpenAI Compliance: Force conciseness
+                "max_tokens": 500,
                 "temperature": 0.7
             }
 
@@ -283,25 +534,14 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
             if response.status_code == 200:
                 data = response.json()
                 generated_text = data.get("content", "").strip()
-                self.logger.info(f"{LogEmoji.SUCCESS} Generated response (length: {len(generated_text)} chars)")
-
-                # OpenAI Compliance: Validate response
-                is_valid, violations = validate_response_compliance(generated_text)
-                if not is_valid:
-                    self.logger.warning(f"{LogEmoji.WARNING} Response violates OpenAI standards: {violations}")
-                    # Log violations but still return the response (in production, consider more strict handling)
-                else:
-                    self.logger.info(f"{LogEmoji.SUCCESS} Response passes OpenAI compliance check")
-
+                self.logger.info(f"{LogEmoji.SUCCESS} Generated response ({len(generated_text)} chars)")
                 return generated_text
             else:
                 self.logger.warning(f"{LogEmoji.WARNING} Core Gateway returned {response.status_code}")
-                # Fallback to simple formatting
                 return self._format_simple_response(retrieved_properties)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Generation failed: {e}")
-            # Fallback to simple formatting
             return self._format_simple_response(retrieved_properties)
 
     def _format_simple_response(self, properties: List[Dict[str, Any]]) -> str:
@@ -315,11 +555,8 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
             # Use price_display if available (normalized format)
             price_str = prop.get('price_display')
             if not price_str:
-                # Fallback to old logic
                 price = prop.get('price', 0)
-                if isinstance(price, str):
-                    price_str = price
-                elif isinstance(price, (int, float)) and price > 0:
+                if isinstance(price, (int, float)) and price > 0:
                     price_str = f"{price/1_000_000_000:.1f} tỷ"
                 else:
                     price_str = "Giá thỏa thuận"
@@ -347,9 +584,24 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
 
         return "".join(response_parts)
 
+    def _is_complex_query(self, query: str) -> bool:
+        """Check if query is complex enough for decomposition"""
+        constraint_keywords = ["và", "gần", "giá", "dưới", "trên", "có", "với"]
+        count = sum(1 for kw in constraint_keywords if kw in query.lower())
+        return count >= 2
+
     async def on_shutdown(self):
         """Cleanup on shutdown"""
         await self.http_client.aclose()
+
+        # Cleanup advanced operators if initialized
+        if self.advanced_enabled:
+            for operator_name in ['query_rewriter', 'hyde_operator', 'decomposition_operator', 'reflection_operator']:
+                if hasattr(self, operator_name):
+                    operator = getattr(self, operator_name)
+                    if hasattr(operator, 'cleanup'):
+                        await operator.cleanup()
+
         await super().on_shutdown()
 
 

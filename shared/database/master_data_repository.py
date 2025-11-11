@@ -520,6 +520,235 @@ class MasterDataRepository:
 
         return normalized
 
+    # ============================================================
+    # COUNTRY OPERATIONS
+    # ============================================================
+
+    async def get_all_countries(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get all countries"""
+        query = "SELECT * FROM master_countries"
+        if active_only:
+            query += " WHERE active = TRUE"
+        query += " ORDER BY popularity_rank, sort_order"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query)
+            return [dict(row) for row in rows]
+
+    async def get_country_by_code(self, country_code: str) -> Optional[Dict[str, Any]]:
+        """Get country by code (2-letter or 3-letter code)"""
+        query = """
+        SELECT * FROM master_countries
+        WHERE active = TRUE AND (UPPER(code) = UPPER($1) OR UPPER(code_2) = UPPER($1))
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, country_code)
+            if row:
+                return dict(row)
+        return None
+
+    async def normalize_country(self, input_text: str) -> Optional[NormalizedEntity]:
+        """Normalize country name using aliases"""
+        input_text = input_text.strip().lower()
+
+        # Try exact match on code or code_2
+        query = """
+        SELECT code, name_vi, name_en
+        FROM master_countries
+        WHERE active = TRUE AND (LOWER(code) = $1 OR LOWER(code_2) = $1)
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, input_text)
+            if row:
+                return NormalizedEntity(
+                    original_value=input_text,
+                    normalized_code=row['code'],
+                    normalized_name_vi=row['name_vi'],
+                    normalized_name_en=row['name_en'],
+                    confidence=1.0,
+                    match_type="exact"
+                )
+
+        # Try alias match
+        query = """
+        SELECT code, name_vi, name_en
+        FROM master_countries
+        WHERE active = TRUE AND $1 = ANY(SELECT LOWER(unnest(aliases)))
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, input_text)
+            if row:
+                return NormalizedEntity(
+                    original_value=input_text,
+                    normalized_code=row['code'],
+                    normalized_name_vi=row['name_vi'],
+                    normalized_name_en=row['name_en'],
+                    confidence=0.95,
+                    match_type="alias"
+                )
+
+        return None
+
+    # ============================================================
+    # CURRENCY OPERATIONS
+    # ============================================================
+
+    async def get_all_currencies(self, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get all currencies"""
+        query = "SELECT * FROM master_currencies"
+        if active_only:
+            query += " WHERE active = TRUE"
+        query += " ORDER BY sort_order, code"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query)
+            return [dict(row) for row in rows]
+
+    async def get_currency_by_code(self, currency_code: str) -> Optional[Dict[str, Any]]:
+        """Get currency by code"""
+        query = """
+        SELECT * FROM master_currencies
+        WHERE active = TRUE AND UPPER(code) = UPPER($1)
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, currency_code)
+            if row:
+                return dict(row)
+        return None
+
+    async def normalize_currency(self, input_text: str) -> Optional[NormalizedEntity]:
+        """Normalize currency using aliases"""
+        input_text = input_text.strip().lower()
+
+        # Try exact match on code
+        query = """
+        SELECT code, name_vi, name_en
+        FROM master_currencies
+        WHERE active = TRUE AND LOWER(code) = $1
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, input_text)
+            if row:
+                return NormalizedEntity(
+                    original_value=input_text,
+                    normalized_code=row['code'],
+                    normalized_name_vi=row['name_vi'],
+                    normalized_name_en=row['name_en'],
+                    confidence=1.0,
+                    match_type="exact"
+                )
+
+        # Try alias match
+        query = """
+        SELECT code, name_vi, name_en
+        FROM master_currencies
+        WHERE active = TRUE AND $1 = ANY(SELECT LOWER(unnest(aliases)))
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, input_text)
+            if row:
+                return NormalizedEntity(
+                    original_value=input_text,
+                    normalized_code=row['code'],
+                    normalized_name_vi=row['name_vi'],
+                    normalized_name_en=row['name_en'],
+                    confidence=0.95,
+                    match_type="alias"
+                )
+
+        return None
+
+    # ============================================================
+    # COUNTRY-FILTERED OPERATIONS
+    # ============================================================
+
+    async def get_districts_by_country(self, country_code: str, active_only: bool = True) -> List[MasterDistrict]:
+        """Get districts (cities) filtered by country"""
+        query = """
+        SELECT d.* FROM master_districts d
+        JOIN master_countries c ON d.country_id = c.id
+        WHERE (UPPER(c.code) = UPPER($1) OR UPPER(c.code_2) = UPPER($1))
+        """
+        if active_only:
+            query += " AND d.active = TRUE"
+        query += " ORDER BY d.city, d.name_en"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, country_code)
+            return [MasterDistrict(**dict(row)) for row in rows]
+
+    async def get_property_types_by_country(self, country_code: str, active_only: bool = True) -> List[MasterPropertyType]:
+        """Get property types filtered by country (includes global types + country-specific)"""
+        query = """
+        SELECT pt.* FROM master_property_types pt
+        LEFT JOIN master_countries c ON pt.country_id = c.id
+        WHERE (pt.is_global = TRUE OR UPPER(c.code) = UPPER($1) OR UPPER(c.code_2) = UPPER($1))
+        """
+        if active_only:
+            query += " AND pt.active = TRUE"
+        query += " ORDER BY pt.sort_order, pt.name_en"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, country_code)
+            return [MasterPropertyType(**dict(row)) for row in rows]
+
+    async def get_legal_statuses_by_country(self, country_code: str, active_only: bool = True) -> List[MasterLegalStatus]:
+        """Get legal statuses filtered by country"""
+        query = """
+        SELECT ls.* FROM master_legal_status ls
+        LEFT JOIN master_countries c ON ls.country_id = c.id
+        WHERE (ls.country_id IS NULL OR UPPER(c.code) = UPPER($1) OR UPPER(c.code_2) = UPPER($1))
+        """
+        if active_only:
+            query += " AND ls.active = TRUE"
+        query += " ORDER BY ls.trust_level DESC, ls.name_en"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, country_code)
+            return [MasterLegalStatus(**dict(row)) for row in rows]
+
+    async def get_developers_by_country(self, country_code: str, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get developers filtered by country"""
+        query = """
+        SELECT d.* FROM master_developers d
+        JOIN master_countries c ON d.country_id = c.id
+        WHERE (UPPER(c.code) = UPPER($1) OR UPPER(c.code_2) = UPPER($1))
+        """
+        if active_only:
+            query += " AND d.active = TRUE"
+        query += " ORDER BY d.reputation_score DESC, d.total_projects DESC"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, country_code)
+            return [dict(row) for row in rows]
+
+    async def get_country_features(self, country_code: str, active_only: bool = True) -> List[Dict[str, Any]]:
+        """Get country-specific features"""
+        query = """
+        SELECT cf.* FROM master_country_features cf
+        JOIN master_countries c ON cf.country_id = c.id
+        WHERE (UPPER(c.code) = UPPER($1) OR UPPER(c.code_2) = UPPER($1))
+        """
+        if active_only:
+            query += " AND cf.active = TRUE"
+        query += " ORDER BY cf.value_impact_percent DESC, cf.name_en"
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, country_code)
+            return [dict(row) for row in rows]
+
+    async def convert_unit(self, value: float, from_unit: str, to_unit: str, unit_type: str = 'area') -> Optional[float]:
+        """Convert units (area or currency) using master data"""
+        query = """
+        SELECT conversion_factor FROM master_unit_conversions
+        WHERE active = TRUE AND unit_type = $1 AND from_unit = $2 AND to_unit = $3
+        """
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(query, unit_type, from_unit.lower(), to_unit.lower())
+            if row:
+                return value * float(row['conversion_factor'])
+        return None
+
 
 # Singleton instance
 _master_data_repo: Optional[MasterDataRepository] = None

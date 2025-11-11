@@ -30,6 +30,12 @@ class QueryExtractionRequest(BaseModel):
     intent: Optional[str] = None  # SEARCH, COMPARE, etc.
 
 
+class ImageExtractionRequest(BaseModel):
+    """Request to extract entities from property images"""
+    images: List[str]  # Base64 encoded images
+    text_context: Optional[str] = None  # Optional text context to enhance extraction
+
+
 class QueryExtractionResponse(BaseModel):
     """Response with extracted entities"""
     entities: Dict[str, Any]
@@ -46,6 +52,10 @@ class EnhancedExtractionResponse(BaseModel):
     rag_retrieved_count: int  # Number of similar properties used for context
     warnings: list[str]  # Validation warnings
     validation_details: Dict[str, Any]  # Detailed validation info
+    # NEW: Confidence-based clarification
+    needs_clarification: bool = False  # True if confidence too low
+    clarification_questions: Optional[List[str]] = None  # Questions to ask user
+    suggestions: Optional[List[Dict[str, Any]]] = None  # Suggested values
 
 
 class AttributeExtractionService(BaseService):
@@ -194,6 +204,23 @@ class AttributeExtractionService(BaseService):
                     f"Final confidence: {final_confidence:.2f}, Total warnings: {len(all_warnings)}"
                 )
 
+                # NEW: Confidence-based clarification
+                # If confidence too low, generate clarification questions
+                needs_clarification = final_confidence < 0.7
+                clarification_questions = []
+                suggestions = []
+
+                if needs_clarification:
+                    self.logger.info(f"{LogEmoji.WARNING} Low confidence! Generating clarification questions...")
+                    clarification_result = self._generate_clarification(
+                        query=request.query,
+                        entities=normalized_entities,
+                        confidence=final_confidence,
+                        rag_context=rag_context
+                    )
+                    clarification_questions = clarification_result["questions"]
+                    suggestions = clarification_result["suggestions"]
+
                 return EnhancedExtractionResponse(
                     entities=normalized_entities,  # Return master-data-normalized entities
                     confidence=final_confidence,
@@ -201,7 +228,10 @@ class AttributeExtractionService(BaseService):
                     nlp_entities=nlp_entities,
                     rag_retrieved_count=rag_count,
                     warnings=all_warnings,
-                    validation_details=validation_details
+                    validation_details=validation_details,
+                    needs_clarification=needs_clarification,
+                    clarification_questions=clarification_questions if needs_clarification else None,
+                    suggestions=suggestions if needs_clarification else None
                 )
 
             except Exception as e:
@@ -267,6 +297,60 @@ class AttributeExtractionService(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Property extraction failed: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/extract-from-images", response_model=QueryExtractionResponse)
+        async def extract_from_images(request: ImageExtractionRequest):
+            """
+            NEW ENDPOINT: Extract property attributes from images using GPT-4o Vision
+
+            This enables users to upload property photos and automatically extract:
+            - Property type (apartment, house, villa)
+            - Room count (bedrooms, bathrooms)
+            - Amenities (pool, gym, parking, garden)
+            - Style (modern, classic, luxury)
+            - Condition (new, renovated, needs work)
+
+            Example use cases:
+            - User uploads property photos → auto-populate listing
+            - User uploads photos while searching → find similar properties
+            - Agent uploads photos → AI suggests price range
+            """
+            try:
+                self.logger.info(
+                    f"{LogEmoji.TARGET} Extracting from {len(request.images)} images "
+                    f"(with context: {bool(request.text_context)})"
+                )
+
+                # Build vision prompt for property analysis
+                vision_prompt = self._build_vision_extraction_prompt(request.text_context)
+
+                # Call GPT-4o Vision via Core Gateway
+                entities = await self._call_vision_for_extraction(
+                    images=request.images,
+                    prompt=vision_prompt
+                )
+
+                # Merge with text context if provided
+                if request.text_context:
+                    self.logger.info(f"{LogEmoji.AI} Merging vision extraction with text context...")
+                    text_entities = await self._call_llm_for_extraction(
+                        self._build_query_extraction_prompt(request.text_context)
+                    )
+                    # Merge entities (vision takes precedence for visual attributes)
+                    entities = {**text_entities, **entities}
+
+                confidence = self._calculate_confidence(entities)
+                self.logger.info(f"{LogEmoji.SUCCESS} Extracted {len(entities)} entities from images")
+
+                return QueryExtractionResponse(
+                    entities=entities,
+                    confidence=confidence,
+                    extracted_from="images_vision"
+                )
+
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Image extraction failed: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
     def _build_query_extraction_prompt(self, query: str, intent: Optional[str] = None) -> str:
@@ -545,6 +629,336 @@ Intent: {intent or "SEARCH"}
 📤 OUTPUT (chỉ JSON, không giải thích):
 """
         return prompt
+
+    def _build_vision_extraction_prompt(self, text_context: Optional[str] = None) -> str:
+        """
+        Build prompt for GPT-4o Vision to extract property attributes from images.
+
+        Args:
+            text_context: Optional text context to enhance extraction
+
+        Returns:
+            Vision prompt
+        """
+        prompt = """Bạn là chuyên gia phân tích hình ảnh bất động sản.
+
+🎯 NHIỆM VỤ: Phân tích ảnh property và trích xuất thông tin thành JSON.
+
+📊 ENTITIES CẦN TRÍCH XUẤT (chỉ trích xuất những gì THẤY ĐƯỢC trong ảnh):
+
+**1. PROPERTY TYPE (quan trọng nhất)**
+- property_type: căn hộ | nhà phố | biệt thự | đất | studio | penthouse
+  * Nhìn vào: Cấu trúc, quy mô, kiến trúc
+  * Căn hộ: Trong chung cư, có ban công nhỏ
+  * Nhà phố: Nhiều tầng, mặt tiền hẹp
+  * Biệt thự: Rộng rãi, có sân vườn
+
+**2. ROOMS & SPACES**
+- bedrooms: Số phòng ngủ (đếm từ ảnh - giường, tủ quần áo)
+- bathrooms: Số phòng tắm (nhìn thấy toilet, bồn tắm)
+- living_rooms: Số phòng khách
+- kitchens: Có bếp không
+- balconies: Có ban công không
+
+**3. AMENITIES (Tiện ích nhìn thấy)**
+- swimming_pool: true nếu thấy hồ bơi
+- gym: true nếu thấy phòng gym
+- parking: true nếu thấy chỗ đậu xe/garage
+- garden: true nếu thấy sân vườn
+- elevator: true nếu thấy thang máy
+- security: Có hệ thống bảo vệ không (camera, cổng bảo vệ)
+
+**4. STYLE & CONDITION**
+- style: modern | classic | luxury | minimalist | industrial
+  * Modern: Đường nét sạch sẽ, tối giản, màu trắng/ghi
+  * Classic: Gỗ, họa tiết cổ điển
+  * Luxury: Sang trọng, đèn chùm, đá marble
+- condition: new | excellent | good | needs_renovation
+  * New: Mới tinh, sạch sẽ
+  * Excellent: Tốt, được maintain tốt
+  * Good: Ổn, có dấu hiệu sử dụng nhẹ
+  * Needs renovation: Cũ, cần sửa chữa
+- furnished: full | basic | unfurnished
+  * Full: Đầy đủ nội thất (giường, bàn, ghế, TV, tủ lạnh)
+  * Basic: Có một số nội thất cơ bản
+  * Unfurnished: Trống, không nội thất
+
+**5. VISUAL FEATURES**
+- view: sea | city | garden | mountain | river (nếu thấy qua cửa sổ)
+- direction: Hướng ban công/cửa sổ chính
+- natural_light: high | medium | low (lượng ánh sáng tự nhiên)
+- floor_material: wood | tile | marble | carpet (vật liệu sàn nhà)
+
+**6. ESTIMATE (Ước lượng từ ảnh)**
+- estimated_area_m2: Ước lượng diện tích (nếu có thể)
+- estimated_floors: Số tầng (nếu thấy)
+
+🔍 EXTRACTION RULES:
+
+1. **CHỈ trích xuất thông tin THẤY RÕ TRONG ẢNH** - đừng đoán
+2. **Ưu tiên độ chính xác** hơn là extract nhiều
+3. **Nếu không chắc → không đưa vào JSON** (omit field, don't guess)
+4. **Đếm phòng cẩn thận** - đừng nhầm lẫn
+5. **Phân tích tất cả các ảnh** nếu có nhiều ảnh
+
+📝 EXAMPLES:
+
+Example 1 (Luxury apartment):
+Input: Ảnh căn hộ cao cấp, phòng khách rộng, sofa trắng, view thành phố
+Output: {
+  "property_type": "căn hộ",
+  "living_rooms": 1,
+  "style": "luxury",
+  "furnished": "full",
+  "view": "city",
+  "natural_light": "high",
+  "floor_material": "marble",
+  "condition": "excellent"
+}
+
+Example 2 (Villa with pool):
+Input: Ảnh biệt thự 2 tầng, hồ bơi ngoài trời, sân vườn rộng
+Output: {
+  "property_type": "biệt thự",
+  "swimming_pool": true,
+  "garden": true,
+  "estimated_floors": 2,
+  "style": "modern",
+  "natural_light": "high",
+  "condition": "new"
+}
+
+Example 3 (Simple bedroom):
+Input: Ảnh phòng ngủ đơn giản, giường đơn, tủ quần áo
+Output: {
+  "bedrooms": 1,
+  "furnished": "basic",
+  "style": "minimalist",
+  "condition": "good",
+  "floor_material": "wood"
+}
+"""
+
+        if text_context:
+            prompt += f"\n\n📝 TEXT CONTEXT (from user):\n{text_context}\n\nUse this context to enhance extraction, but PRIORITIZE what you SEE in images.\n"
+
+        prompt += "\n📤 OUTPUT (chỉ JSON, không giải thích):"
+
+        return prompt
+
+    async def _call_vision_for_extraction(
+        self,
+        images: List[str],
+        prompt: str
+    ) -> Dict[str, Any]:
+        """
+        Call GPT-4o Vision via Core Gateway to extract entities from images.
+
+        Args:
+            images: List of base64-encoded images
+            prompt: Extraction prompt
+
+        Returns:
+            Extracted entities dict
+        """
+        try:
+            from shared.models.core_gateway import FileAttachment
+
+            # Build vision request
+            files = [
+                FileAttachment(
+                    filename=f"property_{i}.jpg",
+                    mime_type="image/jpeg",
+                    base64_data=img
+                )
+                for i, img in enumerate(images)
+            ]
+
+            # Use Core Gateway's vision endpoint
+            llm_request = {
+                "model": "gpt-4o",  # GPT-4o for vision
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a property image analysis expert. Always return valid JSON."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt,
+                        "files": [f.dict() for f in files]
+                    }
+                ],
+                "max_tokens": 1000,
+                "temperature": 0.2
+            }
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json=llm_request,
+                timeout=60.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                content = data.get("content", "").strip()
+
+                # Clean up markdown code blocks
+                import re
+                content = re.sub(r'^```(?:json)?\s*\n?', '', content)
+                content = re.sub(r'\n?```\s*$', '', content)
+                content = content.strip()
+
+                # Parse JSON
+                import json
+                entities = json.loads(content)
+                return entities
+            else:
+                self.logger.warning(f"{LogEmoji.WARNING} Vision API returned {response.status_code}")
+                return {}
+
+        except json.JSONDecodeError as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to parse vision response: {e}")
+            return {}
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Vision call failed: {e}")
+            return {}
+
+    def _generate_clarification(
+        self,
+        query: str,
+        entities: Dict[str, Any],
+        confidence: float,
+        rag_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Generate clarification questions and suggestions when confidence is low.
+
+        Args:
+            query: User query
+            entities: Extracted entities
+            confidence: Confidence score
+            rag_context: RAG context with similar properties
+
+        Returns:
+            Dict with clarification questions and suggestions
+        """
+        questions = []
+        suggestions = []
+
+        # Check what's missing or unclear
+        has_property_type = "property_type" in entities
+        has_location = "district" in entities or "ward" in entities
+        has_price = "price" in entities or "min_price" in entities or "max_price" in entities
+        has_bedrooms = "bedrooms" in entities
+
+        # Generate questions based on missing info
+        if not has_property_type:
+            questions.append("Bạn muốn tìm loại bất động sản nào? (căn hộ, nhà phố, biệt thự)")
+            # Get suggestions from RAG
+            if rag_context.get("patterns", {}).get("common_property_types"):
+                property_type_suggestions = [
+                    {
+                        "value": pt["value"],
+                        "count": pt["count"],
+                        "label": f"{pt['value']} ({pt['count']} căn)"
+                    }
+                    for pt in rag_context["patterns"]["common_property_types"][:3]
+                ]
+                suggestions.append({
+                    "field": "property_type",
+                    "question": "Loại bất động sản",
+                    "options": property_type_suggestions
+                })
+
+        if not has_location:
+            questions.append("Bạn muốn tìm ở khu vực nào? (Quận/Huyện)")
+            # Get suggestions from RAG
+            if rag_context.get("patterns", {}).get("common_districts"):
+                district_suggestions = [
+                    {
+                        "value": d["value"],
+                        "count": d["count"],
+                        "label": f"{d['value']} ({d['count']} căn)"
+                    }
+                    for d in rag_context["patterns"]["common_districts"][:5]
+                ]
+                suggestions.append({
+                    "field": "district",
+                    "question": "Khu vực",
+                    "options": district_suggestions
+                })
+
+        if not has_price:
+            questions.append("Ngân sách của bạn là bao nhiêu?")
+            # Get price range from RAG
+            if rag_context.get("value_ranges", {}).get("price"):
+                price_range = rag_context["value_ranges"]["price"]
+                price_suggestions = [
+                    {
+                        "value": "low",
+                        "min": price_range["min"],
+                        "max": price_range["avg"] * 0.7,
+                        "label": f"Dưới {price_range['avg'] * 0.7 / 1_000_000_000:.1f} tỷ"
+                    },
+                    {
+                        "value": "medium",
+                        "min": price_range["avg"] * 0.7,
+                        "max": price_range["avg"] * 1.3,
+                        "label": f"{price_range['avg'] * 0.7 / 1_000_000_000:.1f} - {price_range['avg'] * 1.3 / 1_000_000_000:.1f} tỷ"
+                    },
+                    {
+                        "value": "high",
+                        "min": price_range["avg"] * 1.3,
+                        "max": price_range["max"],
+                        "label": f"Trên {price_range['avg'] * 1.3 / 1_000_000_000:.1f} tỷ"
+                    }
+                ]
+                suggestions.append({
+                    "field": "price",
+                    "question": "Ngân sách",
+                    "options": price_suggestions
+                })
+
+        if not has_bedrooms:
+            questions.append("Bạn cần bao nhiêu phòng ngủ?")
+            suggestions.append({
+                "field": "bedrooms",
+                "question": "Số phòng ngủ",
+                "options": [
+                    {"value": 1, "label": "1 phòng ngủ (Studio)"},
+                    {"value": 2, "label": "2 phòng ngủ"},
+                    {"value": 3, "label": "3 phòng ngủ"},
+                    {"value": 4, "label": "4+ phòng ngủ"}
+                ]
+            })
+
+        # If entities were extracted but confidence still low, ask for confirmation
+        if entities and confidence < 0.6:
+            questions.append(
+                f"Tôi hiểu bạn đang tìm: {self._format_entities_for_display(entities)}. Đúng không?"
+            )
+
+        return {
+            "questions": questions,
+            "suggestions": suggestions,
+            "reason": f"Confidence thấp ({confidence:.2f}), cần làm rõ thêm thông tin"
+        }
+
+    def _format_entities_for_display(self, entities: Dict[str, Any]) -> str:
+        """Format entities for user-friendly display."""
+        parts = []
+        if "property_type" in entities:
+            parts.append(entities["property_type"])
+        if "bedrooms" in entities:
+            parts.append(f"{entities['bedrooms']} phòng ngủ")
+        if "district" in entities:
+            parts.append(f"tại {entities['district']}")
+        if "max_price" in entities:
+            parts.append(f"dưới {entities['max_price'] / 1_000_000_000:.1f} tỷ")
+        elif "price" in entities:
+            parts.append(f"khoảng {entities['price'] / 1_000_000_000:.1f} tỷ")
+
+        return " ".join(parts) if parts else "bất động sản"
 
     async def on_shutdown(self):
         """Cleanup on shutdown"""

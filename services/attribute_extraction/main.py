@@ -18,6 +18,7 @@ from services.attribute_extraction.prompts import AttributeExtractionPrompts, Pr
 from services.attribute_extraction.nlp_processor import VietnameseNLPProcessor
 from services.attribute_extraction.rag_enhancer import RAGContextEnhancer
 from services.attribute_extraction.validator import AttributeValidator
+from services.attribute_extraction.master_data_validator import MasterDataValidator
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.i18n import get_multilingual_mapper
@@ -70,14 +71,46 @@ class AttributeExtractionService(BaseService):
         self.rag_enhancer = RAGContextEnhancer(self.db_gateway_url)
         self.validator = AttributeValidator()
         self.multilingual_mapper = get_multilingual_mapper()
+        self.master_data_validator = MasterDataValidator()
 
         self.logger.info(f"{LogEmoji.INFO} Using Core Gateway at: {self.core_gateway_url}")
         self.logger.info(f"{LogEmoji.INFO} Using DB Gateway at: {self.db_gateway_url}")
         self.logger.info(f"{LogEmoji.SUCCESS} Enhanced NLP + RAG pipeline initialized")
         self.logger.info(f"{LogEmoji.SUCCESS} Multilingual mapper initialized (vi/en/zh → English)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Master data validator initialized (PostgreSQL)")
 
     def setup_routes(self):
         """Setup API routes"""
+
+        @self.app.get("/master-data/districts")
+        async def get_districts():
+            """Get list of all districts from master data"""
+            try:
+                districts = await self.master_data_validator.get_districts_list()
+                return {"districts": districts, "count": len(districts)}
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to get districts: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/master-data/property-types")
+        async def get_property_types():
+            """Get list of all property types from master data"""
+            try:
+                property_types = await self.master_data_validator.get_property_types_list()
+                return {"property_types": property_types, "count": len(property_types)}
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to get property types: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/master-data/amenities")
+        async def get_amenities(category: Optional[str] = None):
+            """Get list of all amenities from master data"""
+            try:
+                amenities = await self.master_data_validator.get_amenities_list(category=category)
+                return {"amenities": amenities, "count": len(amenities)}
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to get amenities: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.post("/extract-query-enhanced", response_model=EnhancedExtractionResponse)
         async def extract_from_query_enhanced(request: QueryExtractionRequest):
@@ -132,29 +165,42 @@ class AttributeExtractionService(BaseService):
                 warnings = validation_result["warnings"]
                 validation_details = validation_result["validation_details"]
 
-                # CRITICAL: Normalize entities to English master data standard
+                # CRITICAL: Normalize entities to English master data standard using PostgreSQL
                 # This converts multilingual input (vi/zh) → English for database storage
-                self.logger.info(f"{LogEmoji.AI} Normalizing entities to English master data...")
-                normalized_entities = self.multilingual_mapper.normalize_entities(
-                    validated_entities,
-                    source_lang="vi"  # Default to Vietnamese, can be auto-detected
+                self.logger.info(f"{LogEmoji.AI} Normalizing entities using PostgreSQL master data...")
+                master_data_result = await self.master_data_validator.normalize_and_validate(
+                    validated_entities
+                )
+                normalized_entities = master_data_result["normalized_entities"]
+                master_data_warnings = master_data_result["warnings"]
+                master_data_confidence = master_data_result["confidence"]
+
+                # Combine warnings from both validators
+                all_warnings = warnings + master_data_warnings
+
+                # Update confidence (weighted average)
+                final_confidence = (confidence * 0.5) + (master_data_confidence * 0.5)
+
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Entities normalized using master data: {normalized_entities}"
                 )
                 self.logger.info(
-                    f"{LogEmoji.SUCCESS} Entities normalized to English: {normalized_entities}"
+                    f"{LogEmoji.INFO} Master data confidence: {master_data_confidence:.2f}, "
+                    f"Final confidence: {final_confidence:.2f}"
                 )
 
                 self.logger.info(
                     f"{LogEmoji.SUCCESS} Extraction complete! "
-                    f"Confidence: {confidence:.2f}, Warnings: {len(warnings)}"
+                    f"Final confidence: {final_confidence:.2f}, Total warnings: {len(all_warnings)}"
                 )
 
                 return EnhancedExtractionResponse(
-                    entities=normalized_entities,  # Return English-normalized entities
-                    confidence=confidence,
-                    extracted_from="enhanced_pipeline",
+                    entities=normalized_entities,  # Return master-data-normalized entities
+                    confidence=final_confidence,
+                    extracted_from="enhanced_pipeline_with_master_data",
                     nlp_entities=nlp_entities,
                     rag_retrieved_count=rag_count,
-                    warnings=warnings,
+                    warnings=all_warnings,
                     validation_details=validation_details
                 )
 
@@ -504,6 +550,7 @@ Intent: {intent or "SEARCH"}
         """Cleanup on shutdown"""
         await self.http_client.aclose()
         await self.rag_enhancer.close()
+        await self.master_data_validator.close()
         await super().on_shutdown()
 
 

@@ -64,6 +64,7 @@ docs/backup/
 # Scripts here are for development only, NOT committed to repo
 temp/
 tmp/
+tests/
 
 # Summary and documentation duplicates
 *SUMMARY*.md
@@ -78,9 +79,6 @@ test-results/
 junit.xml
 coverage.xml
 
-# Tests
-tests/
-
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
@@ -89,3 +87,6 @@ tests/
 monitoring/data/
 grafana/data/
 prometheus/data/
+
+# Personal notes
+CLAUDE.md

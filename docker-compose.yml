@@ -254,6 +254,9 @@ services:
     depends_on:
       - core-gateway
       - db-gateway
+      - classification
+      - completeness
+      - attribute-extraction
     networks:
       - ree-ai-network
     profiles:
@@ -290,8 +293,31 @@ services:
       - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
     ports:
       - "8083:8080"
+    depends_on:
+      - core-gateway
+      - redis
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Completeness Feedback Service (Layer 3) - NEW
+  completeness:
+    build:
+      context: .
+      dockerfile: services/completeness/Dockerfile
+    container_name: ree-ai-completeness
+    environment:
+      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8089:8080"
     depends_on:
       - core-gateway
     networks:

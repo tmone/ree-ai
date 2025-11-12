@@ -170,11 +170,12 @@ services:
     container_name: ree-ai-core-gateway
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}  # Connect to host's Ollama
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}  # Empty in production, fallback to OpenAI
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - PRODUCTION_MODE=${PRODUCTION_MODE:-true}  # Enable production optimizations
     ports:
       - "8080:8080"
     # depends_on:

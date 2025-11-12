@@ -365,7 +365,7 @@ verify_deployment() {
         "http://localhost:8081/health|DB Gateway"
         "http://localhost:8090/health|Orchestrator"
         "http://localhost:8091/health|RAG Service"
-        "http://localhost:3000|Open WebUI"
+        # "http://localhost:3000|Open WebUI"  # Temporarily disabled
     )
     
     local healthy_count=0

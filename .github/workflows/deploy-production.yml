@@ -109,7 +109,7 @@ jobs:
 
     - name: Setup deployment environment
       run: |
-        echo "� Setting up deployment environment..."
+        echo "🛠️ Setting up deployment environment..."
         
         # Make deployment script executable
         chmod +x scripts/deploy-production.sh

@@ -385,32 +385,6 @@ services:
       - real
       - all
 
-  # API Gateway (Layer 0)
-  api-gateway:
-    build:
-      context: .
-      dockerfile: services/api_gateway/Dockerfile
-    container_name: ree-ai-api-gateway
-    environment:
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-secret-key-change-in-production}
-      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
-      - DEBUG=${DEBUG:-true}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    ports:
-      - "8888:8080"
-    depends_on:
-      - auth-service
-      - orchestrator
-      - rag-service
-      - classification
-      - semantic-chunking
-      - db-gateway
-    networks:
-      - ree-ai-network
-    profiles:
-      - real
-      - all
-
   # Attribute Extraction Service (Layer 3)
   attribute-extraction:
     build:

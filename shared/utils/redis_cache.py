@@ -9,9 +9,9 @@ from typing import Optional, Any, Dict, List
 from datetime import timedelta
 import redis.asyncio as redis
 from shared.config import settings
-from shared.utils.logger import get_logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
-logger = get_logger("redis_cache")
+logger = setup_logger("redis_cache")
 
 
 class RedisCache:

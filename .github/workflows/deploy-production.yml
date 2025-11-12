@@ -1,4 +1,4 @@
-name: Deploy to Production
+~name: Deploy to Production
 
 on:
   push:
@@ -96,6 +96,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Setup SSH for production server
+      run: |
+        echo "🔑 Setting up SSH for production server..."
+        mkdir -p ~/.ssh
+        echo "${{ secrets.PRODUCTION_SSH_KEY }}" > ~/.ssh/ree_ai_production_key
+        chmod 600 ~/.ssh/ree_ai_production_key
+        
+        # Add production server to known hosts
+        ssh-keyscan -H 192.168.1.12 >> ~/.ssh/known_hosts
+        echo "✅ SSH setup completed"
+
     - name: Setup deployment environment
       run: |
         echo "� Setting up deployment environment..."
@@ -119,11 +130,16 @@ jobs:
             echo "❌ WEBUI_SECRET_KEY secret not configured"
             exit 1
           fi
+          
+          if [ -z "${{ secrets.PRODUCTION_SSH_KEY }}" ]; then
+            echo "❌ PRODUCTION_SSH_KEY secret not configured"
+            exit 1
+          fi
         fi
         
         echo "✅ Environment setup completed"
 
-    - name: Run deployment
+    - name: Deploy to Production Server
       env:
         DEPLOYMENT_ENV: ${{ needs.pre-deploy-checks.outputs.deployment_env }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -133,75 +149,176 @@ jobs:
         OPENSEARCH_PASSWORD: ${{ secrets.OPENSEARCH_PASSWORD || 'Admin123!@#' }}
         PROJECT_NAME: ree-ai
         LOG_LEVEL: INFO
+        PRODUCTION_SERVER_IP: "192.168.1.12"
+        PRODUCTION_SERVER_USER: "tmone"
       run: |
-        echo "� Starting deployment..."
-        ./scripts/deploy-production.sh \
-          --env "$DEPLOYMENT_ENV" \
-          --project-dir "$(pwd)" \
-          --log-level "$LOG_LEVEL"
+        echo "🚀 Starting remote deployment to production server..."
+        echo "Target: $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP"
+        
+        # Test SSH connectivity
+        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP "echo 'SSH connection successful'"
+        
+        # Create deployment package
+        echo "📦 Preparing deployment package..."
+        tar -czf ree-ai-deployment.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
+          --exclude='temp' \
+          .
+        
+        # Copy deployment package to production server
+        echo "📤 Copying files to production server..."
+        scp -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no ree-ai-deployment.tar.gz $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP:~/
+        
+        # Execute deployment on production server
+        echo "🚀 Executing deployment on production server..."
+        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP << 'EOF'
+          set -e
+          
+          echo "🔄 Extracting deployment package..."
+          cd ~
+          rm -rf ree-ai-production-deploy
+          mkdir -p ree-ai-production-deploy
+          tar -xzf ree-ai-deployment.tar.gz -C ree-ai-production-deploy
+          cd ree-ai-production-deploy
+          
+          echo "⚙️ Setting up environment..."
+          cat > .env << 'ENVEOF'
+        # REE AI Production Environment Configuration
+        POSTGRES_DB=ree_ai
+        POSTGRES_USER=ree_ai_user
+        POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD || 'ree_ai_pass_2025' }}
+        POSTGRES_HOST=postgres
+        POSTGRES_PORT=5432
+        
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        
+        OPENSEARCH_HOST=opensearch
+        OPENSEARCH_PORT=9200
+        OPENSEARCH_PASSWORD=${{ secrets.OPENSEARCH_PASSWORD || 'Admin123!@#' }}
+        
+        WEBUI_SECRET_KEY=${{ secrets.WEBUI_SECRET_KEY }}
+        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+        JWT_ALGORITHM=HS256
+        JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+        
+        PRODUCTION_MODE=true
+        USE_REAL_CORE_GATEWAY=true
+        USE_REAL_DB_GATEWAY=true
+        USE_ADVANCED_RAG=true
+        
+        DEBUG=false
+        LOG_LEVEL=INFO
+        
+        ENABLE_FOLLOW_UP_GENERATION=true
+        ENABLE_TITLE_GENERATION=true
+        ENABLE_TAGS_GENERATION=true
+        ENABLE_AUTOCOMPLETE_GENERATION=false
+        
+        MEMORY_RETENTION_DAYS=90
+        MEMORY_CONSOLIDATION_THRESHOLD=10
+        REFLECTION_QUALITY_THRESHOLD=0.7
+        DOCUMENT_GRADER_THRESHOLD=0.5
+        AGENT_TIMEOUT_SECONDS=30
+        SUPERVISOR_MAX_RETRIES=2
+        
+        PROJECT_NAME=ree-ai
+        ENVEOF
+          
+          echo "🐳 Running deployment with Docker Compose..."
+          export COMPOSE_PROFILES="real"
+          
+          # Stop existing services if any
+          sudo docker-compose down --remove-orphans || true
+          
+          # Pull latest images and start services
+          sudo docker-compose pull --ignore-pull-failures || true
+          sudo docker-compose up -d --build --remove-orphans
+          
+          echo "✅ Deployment completed on production server!"
+          
+          # Show running services
+          echo "📊 Running services:"
+          sudo docker-compose ps
+          
+          # Cleanup
+          cd ~
+          rm -f ree-ai-deployment.tar.gz
+        EOF
 
     - name: Post-deployment verification
+      env:
+        PRODUCTION_SERVER_IP: "192.168.1.12"
+        PRODUCTION_SERVER_USER: "tmone"
       run: |
         echo "🧪 Running post-deployment verification..."
         
         # Wait for services to stabilize
         sleep 30
         
-        # Advanced health checks
-        services=(
-          "localhost:8000/health|Service Registry"
-          "localhost:8080/health|Core Gateway"
-          "localhost:8081/health|DB Gateway"
-          "localhost:8090/health|Orchestrator"
-          "localhost:8091/health|RAG Service"
-          "localhost:3000|Open WebUI"
-        )
-        
-        failed_services=()
-        
-        for service_info in "${services[@]}"; do
-          IFS='|' read -r endpoint name <<< "$service_info"
+        echo "🔍 Testing services on production server..."
+        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP << 'EOF'
+          cd ~/ree-ai-production-deploy
           
-          echo "Testing $name..."
-          if timeout 10 curl -f "http://$endpoint" >/dev/null 2>&1; then
-            echo "✅ $name: OK"
-          else
-            echo "❌ $name: FAILED"
-            failed_services+=("$name")
-          fi
-        done
-        
-        if [ ${#failed_services[@]} -eq 0 ]; then
-          echo "✅ All services are healthy"
-        else
-          echo "⚠️ Failed services: ${failed_services[*]}"
-          echo "📋 Service status:"
-          docker-compose ps
+          # Advanced health checks
+          services=(
+            "localhost:8000/health|Service Registry"
+            "localhost:8080/health|Core Gateway"
+            "localhost:8081/health|DB Gateway"
+            "localhost:8090/health|Orchestrator"
+            "localhost:8091/health|RAG Service"
+            "localhost:3000|Open WebUI"
+          )
           
-          # Don't fail deployment for non-critical services
-          echo "🔍 Checking critical services only..."
-          critical_services=("Service Registry" "Core Gateway" "Open WebUI")
-          critical_failed=()
+          failed_services=()
           
-          for service in "${critical_services[@]}"; do
-            if [[ " ${failed_services[*]} " =~ " ${service} " ]]; then
-              critical_failed+=("$service")
+          for service_info in "${services[@]}"; do
+            IFS='|' read -r endpoint name <<< "$service_info"
+            
+            echo "Testing $name..."
+            if timeout 10 curl -f "http://$endpoint" >/dev/null 2>&1; then
+              echo "✅ $name: OK"
+            else
+              echo "❌ $name: FAILED"
+              failed_services+=("$name")
             fi
           done
           
-          if [ ${#critical_failed[@]} -gt 0 ]; then
-            echo "❌ Critical services failed: ${critical_failed[*]}"
-            exit 1
+          if [ ${#failed_services[@]} -eq 0 ]; then
+            echo "✅ All services are healthy"
           else
-            echo "✅ Critical services are healthy"
+            echo "⚠️ Failed services: ${failed_services[*]}"
+            echo "📋 Service status:"
+            sudo docker-compose ps
+            
+            # Don't fail deployment for non-critical services
+            echo "🔍 Checking critical services only..."
+            critical_services=("Service Registry" "Core Gateway")
+            critical_failed=()
+            
+            for service in "${critical_services[@]}"; do
+              if [[ " ${failed_services[*]} " =~ " ${service} " ]]; then
+                critical_failed+=("$service")
+              fi
+            done
+            
+            if [ ${#critical_failed[@]} -gt 0 ]; then
+              echo "❌ Critical services failed: ${critical_failed[*]}"
+              exit 1
+            else
+              echo "✅ Critical services are healthy"
+            fi
           fi
-        fi
+        EOF
 
     - name: Deployment summary
       if: always()
+      env:
+        PRODUCTION_SERVER_IP: "192.168.1.12"
       run: |
-        # Get server information
-        SERVER_IP=$(hostname -I | awk '{print $1}' || echo "localhost")
+        # Get deployment information
         DEPLOYMENT_TIME=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
         
         cat << EOF
@@ -215,24 +332,26 @@ jobs:
         Environment: ${{ needs.pre-deploy-checks.outputs.deployment_env }}
         Deployed by: ${{ github.actor }}
         Timestamp: $DEPLOYMENT_TIME
-        Server: $SERVER_IP
+        Production Server: $PRODUCTION_SERVER_IP
         
         🌐 Access URLs:
-          - Open WebUI: http://$SERVER_IP:3000
-          - Core Gateway: http://$SERVER_IP:8080
-          - Service Registry: http://$SERVER_IP:8000
-          - Orchestrator: http://$SERVER_IP:8090
-          - RAG Service: http://$SERVER_IP:8091
+          - Open WebUI: http://$PRODUCTION_SERVER_IP:3000
+          - Core Gateway: http://$PRODUCTION_SERVER_IP:8080
+          - Service Registry: http://$PRODUCTION_SERVER_IP:8000
+          - Orchestrator: http://$PRODUCTION_SERVER_IP:8090
+          - RAG Service: http://$PRODUCTION_SERVER_IP:8091
+          - Admin Dashboard: http://$PRODUCTION_SERVER_IP:3002
         
         📊 Infrastructure:
-          - PostgreSQL: port 5432
-          - Redis: port 6379  
-          - OpenSearch: port 9200
+          - PostgreSQL: $PRODUCTION_SERVER_IP:5432
+          - Redis: $PRODUCTION_SERVER_IP:6379  
+          - OpenSearch: $PRODUCTION_SERVER_IP:9200
         
-        📋 Management:
-          - View logs: docker-compose logs [service]
-          - Stop services: docker-compose down
-          - Service status: docker-compose ps
+        📋 Remote Management:
+          - SSH: ssh tmone@$PRODUCTION_SERVER_IP
+          - View logs: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose logs [service]'
+          - Stop services: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose down'
+          - Service status: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose ps'
         
         Status: ${{ job.status == 'success' && '✅ SUCCESS' || '❌ FAILED' }}
         ==========================================

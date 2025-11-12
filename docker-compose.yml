@@ -60,16 +60,8 @@ services:
     networks:
       - ree-ai-network
 
-  # Ollama (Local LLM)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ree-ai-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - ree-ai-network
+  # NOTE: Ollama runs on host system (not containerized)
+  # Services connect via host.docker.internal:11434
 
   # Open WebUI (Layer 1 - Frontend) - Custom build from source
   open-webui:
@@ -561,8 +553,7 @@ volumes:
     driver: local
   opensearch_data:
     driver: local
-  ollama_data:
-    driver: local
+  # ollama_data: Removed - Ollama runs on host
   open_webui_data:
     driver: local
 

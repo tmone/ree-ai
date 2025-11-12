@@ -68,6 +68,7 @@ class Orchestrator(BaseService):
         self.core_gateway_url = settings.get_core_gateway_url()
         self.classification_url = "http://classification:8080"
         self.extraction_url = "http://attribute-extraction:8080"
+        self.completeness_url = "http://completeness:8080"
         self.db_gateway_url = "http://db-gateway:8080"
 
         # HIGH PRIORITY FIX: Circuit breakers for external services
@@ -194,17 +195,37 @@ class Orchestrator(BaseService):
                     if history:
                         self.logger.info(f"{LogEmoji.INFO} [{request_id}] Retrieved {len(history)} messages from PostgreSQL")
 
-                # Step 1: Detect intent (simple keyword-based for now, files → chat for analysis)
+                # Step 1: Enhanced intent detection using classification service
                 if request.has_files():
                     # Images/documents → Use vision model for analysis
                     intent = "chat"  # Vision analysis goes through chat path
+                    primary_intent = "CHAT"
                     self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent} (multimodal analysis)")
                 else:
-                    intent = self._detect_intent_simple(request.query)
-                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent}")
+                    # Use classification service for intelligent intent detection
+                    classification_result = await self._classify_query(request.query)
+                    primary_intent = classification_result.get("primary_intent", "SEARCH_BUY")
+                    all_intents = classification_result.get("intents", [primary_intent])
+
+                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Primary Intent: {primary_intent}, All: {all_intents}")
+
+                    # Map primary intent to routing decision
+                    if primary_intent in ["POST_SALE", "POST_RENT"]:
+                        intent = "post_property"
+                    elif primary_intent in ["SEARCH_BUY", "SEARCH_RENT"]:
+                        intent = "search"
+                    else:
+                        intent = "chat"
 
                 # Step 2: Route based on intent (with history context + files)
-                if intent == "search":
+                if intent == "post_property":
+                    # NEW: Handle property posting workflow
+                    response_text = await self._handle_property_posting(
+                        request.query,
+                        primary_intent=primary_intent,
+                        history=history
+                    )
+                elif intent == "search":
                     response_text = await self._handle_search(request.query, history=history, files=request.files)
                 else:
                     response_text = await self._handle_chat(request.query, history=history, files=request.files)
@@ -1324,6 +1345,197 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
             import traceback
             traceback.print_exc()
             return f"Xin lỗi, đã xảy ra lỗi: {str(e)}"
+
+    # ========================================
+    # Classification & Property Posting Methods
+    # ========================================
+
+    async def _classify_query(self, query: str) -> Dict:
+        """
+        Call classification service for intelligent intent detection
+
+        Returns dict with:
+        - mode: "filter" | "semantic" | "both"
+        - primary_intent: "POST_SALE" | "POST_RENT" | "SEARCH_BUY" | "SEARCH_RENT" | etc.
+        - intents: List of all detected intents
+        - confidence: float
+        - reasoning: str
+        """
+        try:
+            self.logger.info(f"{LogEmoji.AI} Calling classification service...")
+
+            response = await self.http_client.post(
+                f"{self.classification_url}/classify",
+                json={"query": query, "context": None},
+                timeout=10.0
+            )
+
+            if response.status_code != 200:
+                self.logger.warning(f"{LogEmoji.WARNING} Classification service error: {response.text}")
+                # Fallback to simple detection
+                return {
+                    "mode": "semantic",
+                    "primary_intent": "SEARCH_BUY",
+                    "intents": ["SEARCH_BUY"],
+                    "confidence": 0.5,
+                    "reasoning": "Fallback (classification service unavailable)"
+                }
+
+            result = response.json()
+            self.logger.info(
+                f"{LogEmoji.SUCCESS} Classification: {result.get('primary_intent')} "
+                f"(mode: {result.get('mode')}, confidence: {result.get('confidence', 0):.2f})"
+            )
+            return result
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Classification failed: {e}")
+            # Fallback
+            return {
+                "mode": "semantic",
+                "primary_intent": "SEARCH_BUY",
+                "intents": ["SEARCH_BUY"],
+                "confidence": 0.5,
+                "reasoning": f"Fallback (error: {str(e)})"
+            }
+
+    async def _handle_property_posting(
+        self,
+        query: str,
+        primary_intent: str,
+        history: List[Dict] = None
+    ) -> str:
+        """
+        Handle property posting workflow:
+        1. Extract property attributes from query
+        2. Assess completeness
+        3. Provide feedback and request missing information
+
+        Args:
+            query: User query (e.g., "Tôi có nhà cần bán ở Q7, 2PN, 5 tỷ")
+            primary_intent: "POST_SALE" or "POST_RENT"
+            history: Conversation history
+
+        Returns:
+            Response text with completeness feedback
+        """
+        try:
+            self.logger.info(f"{LogEmoji.AI} [Property Posting] Intent: {primary_intent}")
+
+            # Determine transaction type from intent
+            transaction_type = "bán" if primary_intent == "POST_SALE" else "cho thuê"
+
+            # Step 1: Extract property attributes from query
+            self.logger.info(f"{LogEmoji.AI} [Step 1/3] Extracting property attributes...")
+
+            extraction_response = await self.http_client.post(
+                f"{self.extraction_url}/extract-query",
+                json={"query": query, "intent": "POST"},
+                timeout=30.0
+            )
+
+            if extraction_response.status_code != 200:
+                return f"Xin lỗi, tôi gặp sự cố khi xử lý thông tin. Bạn có thể mô tả lại chi tiết hơn về {transaction_type} không?"
+
+            extraction_data = extraction_response.json()
+            entities = extraction_data.get("entities", {})
+            confidence = extraction_data.get("confidence", 0.0)
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [Step 1/3] Extracted {len(entities)} attributes (confidence: {confidence:.1%})")
+
+            # Add transaction type to property data
+            property_data = {
+                "transaction_type": transaction_type,
+                **entities
+            }
+
+            # Step 2: Assess completeness
+            self.logger.info(f"{LogEmoji.AI} [Step 2/3] Assessing completeness...")
+
+            completeness_response = await self.http_client.post(
+                f"{self.completeness_url}/assess",
+                json={"property_data": property_data, "include_examples": False},
+                timeout=30.0
+            )
+
+            if completeness_response.status_code != 200:
+                return f"Xin lỗi, tôi gặp sự cố khi đánh giá thông tin. Bạn có thể cung cấp thêm chi tiết về {transaction_type} không?"
+
+            completeness_data = completeness_response.json()
+
+            overall_score = completeness_data.get("overall_score", 0)
+            interpretation = completeness_data.get("interpretation", "")
+            missing_fields = completeness_data.get("missing_fields", [])
+            suggestions = completeness_data.get("suggestions", [])
+            strengths = completeness_data.get("strengths", [])
+            priority_actions = completeness_data.get("priority_actions", [])
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [Step 2/3] Completeness score: {overall_score:.0f}/100 ({interpretation})")
+
+            # Step 3: Generate response with feedback
+            self.logger.info(f"{LogEmoji.AI} [Step 3/3] Generating feedback response...")
+
+            response_parts = []
+
+            # Greeting and acknowledgment
+            response_parts.append(f"Cảm ơn bạn đã muốn đăng tin {transaction_type} bất động sản! 🏠\n")
+
+            # Show what we understood
+            response_parts.append(f"**Tôi đã hiểu về bất động sản của bạn:**\n")
+            if entities.get("property_type"):
+                response_parts.append(f"- Loại: {entities['property_type']}\n")
+            if entities.get("district"):
+                response_parts.append(f"- Khu vực: {entities['district']}\n")
+            if entities.get("bedrooms"):
+                response_parts.append(f"- Phòng ngủ: {entities['bedrooms']}PN\n")
+            if entities.get("area"):
+                response_parts.append(f"- Diện tích: {entities['area']} m²\n")
+            if entities.get("price"):
+                response_parts.append(f"- Giá: {entities['price']:,.0f} VNĐ\n")
+
+            response_parts.append(f"\n**Đánh giá độ đầy đủ: {overall_score:.0f}/100 - {interpretation}**\n")
+
+            # Show strengths if any
+            if strengths and overall_score >= 60:
+                response_parts.append("\n**Điểm mạnh:**\n")
+                for strength in strengths[:3]:
+                    response_parts.append(f"{strength}\n")
+
+            # Show missing fields
+            if missing_fields:
+                response_parts.append(f"\n**Thông tin còn thiếu ({len(missing_fields)} mục):**\n")
+                for field in missing_fields[:5]:
+                    response_parts.append(f"❌ {field}\n")
+
+            # Show suggestions
+            if suggestions:
+                response_parts.append("\n**Đề xuất cải thiện:**\n")
+                for suggestion in suggestions[:5]:
+                    response_parts.append(f"{suggestion}\n")
+
+            # Show priority actions if score is low
+            if overall_score < 70 and priority_actions:
+                response_parts.append("\n**Cần làm gấp:**\n")
+                for action in priority_actions[:3]:
+                    response_parts.append(f"{action}\n")
+
+            # Call to action based on score
+            if overall_score >= 80:
+                response_parts.append("\n✅ **Tin đăng của bạn đã khá đầy đủ!** Bạn có thể bổ sung thêm một vài thông tin nhỏ rồi đăng được ngay.")
+            elif overall_score >= 60:
+                response_parts.append("\n📝 **Bạn cần bổ sung thêm một số thông tin quan trọng** để tin đăng hấp dẫn hơn.")
+            else:
+                response_parts.append("\n⚠️ **Tin đăng còn thiếu nhiều thông tin quan trọng.** Vui lòng bổ sung để tôi có thể giúp bạn đăng tin.")
+
+            response_parts.append("\n\n💬 Bạn có thể cung cấp thêm thông tin còn thiếu không?")
+
+            return "".join(response_parts)
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} [Property Posting] Failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Xin lỗi, đã xảy ra lỗi khi xử lý thông tin đăng tin {transaction_type}. Vui lòng thử lại."
 
     # ========================================
     # ReAct Agent Pattern Methods

@@ -113,7 +113,12 @@ jobs:
       run: |
         echo "📥 Manual checkout of repository..."
         cd /home/tmone/actions-runner-production/_work/ree-ai/
-        git clone https://github.com/tmone/ree-ai.git ree-ai || true
+        
+        # Remove any existing directory
+        rm -rf ree-ai || true
+        
+        # Clone fresh repository
+        git clone https://github.com/tmone/ree-ai.git ree-ai
         cd ree-ai
         git checkout release
         git pull origin release

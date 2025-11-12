@@ -1,0 +1,183 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Case 2: Property Search" id="case2">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="Case 2: Property Search (SEARCH_BUY / SEARCH_RENT)" style="text;fontSize=18;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="600" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Entry -->
+        <mxCell id="user" value="USER" style="shape=actor;fillColor=#90EE90;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="140" width="40" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="webui" value="Open WebUI" style="rounded=1;fillColor=#90EE90;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="180" y="150" width="120" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Orchestrator -->
+        <mxCell id="orch" value="Orchestrator&#xa;ReAct Agent" style="rounded=1;fillColor=#FFD700;strokeColor=#333333;strokeWidth=3;fontStyle=1;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="380" y="140" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Services -->
+        <mxCell id="service_label" value="Layer 3 Services" style="text;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="100" width="150" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="classification" value="Classification Service&#xa;:8083" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="140" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="extraction" value="Extraction Service&#xa;:8084" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="320" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dbgw" value="DB Gateway&#xa;:8081" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="800" y="400" width="180" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="opensearch" value="OpenSearch&#xa;Vector + BM25" style="shape=cylinder;fillColor=#B0E0B0;strokeColor=#333333;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="400" width="120" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Internal ReAct Loop Box -->
+        <mxCell id="loop_box" value="" style="rounded=1;fillColor=none;strokeColor=#E74C3C;strokeWidth=3;dashed=1;dashPattern=5 5;" vertex="1" parent="1">
+          <mxGeometry x="330" y="260" width="280" height="370" as="geometry" />
+        </mxCell>
+
+        <mxCell id="loop_label" value="REACT REASONING LOOP&#xa;(within single request - max 2 iterations)" style="text;fontSize=12;fontStyle=1;fontColor=#E74C3C;" vertex="1" parent="1">
+          <mxGeometry x="340" y="270" width="260" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- ReAct Steps -->
+        <mxCell id="step1" value="REASONING:&#xa;Analyze requirements" style="rounded=1;fillColor=#E8F4F8;strokeColor=#4A90E2;strokeWidth=2;dashed=1;dashPattern=3 3;" vertex="1" parent="1">
+          <mxGeometry x="370" y="320" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="step2" value="ACT:&#xa;Execute search" style="rounded=1;fillColor=#E8F4F8;strokeColor=#4A90E2;strokeWidth=2;dashed=1;dashPattern=3 3;" vertex="1" parent="1">
+          <mxGeometry x="370" y="400" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="step3" value="EVALUATE:&#xa;Check quality" style="rounded=1;fillColor=#E8F4F8;strokeColor=#4A90E2;strokeWidth=2;dashed=1;dashPattern=3 3;" vertex="1" parent="1">
+          <mxGeometry x="370" y="480" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="decision" value="Quality OK?&#xa;Score &gt;= 0.7&#xa;OR max iter" style="rhombus;fillColor=#FFE6CC;strokeColor=#D79B00;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="410" y="560" width="120" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Exit strategies -->
+        <mxCell id="step4_relax" value="Progressive Relaxation:&#xa;1. Location only&#xa;2. Semantic fallback&#xa;3. Give up gracefully" style="rounded=1;fillColor=#FFE6E6;strokeColor=#E74C3C;strokeWidth=2;dashed=1;dashPattern=3 3;" vertex="1" parent="1">
+          <mxGeometry x="340" y="680" width="260" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="response" value="Response:&#xa;N properties found" style="rounded=1;fillColor=#90EE90;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="390" y="800" width="160" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Connections -->
+        <mxCell id="e1" value="" edge="1" parent="1" source="user" target="webui">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" value="" edge="1" parent="1" source="webui" target="orch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e3" value="1. Classify" edge="1" parent="1" source="orch" target="classification" style="strokeWidth=2;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" value="2. Extract&#xa;(loop N times)" edge="1" parent="1" source="step2" target="extraction" style="strokeWidth=2;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" value="3. Search&#xa;(loop N times)" edge="1" parent="1" source="step2" target="dbgw" style="strokeWidth=2;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" value="" edge="1" parent="1" source="dbgw" target="opensearch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" value="Start ReAct" edge="1" parent="1" source="orch" target="step1" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" value="requirements" edge="1" parent="1" source="step1" target="step2" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e9" value="results" edge="1" parent="1" source="step2" target="step3" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e10" value="evaluation" edge="1" parent="1" source="step3" target="decision" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e11" value="NO: Refine" edge="1" parent="1" source="decision" target="step1" style="dashed=1;dashPattern=5 5;strokeWidth=3;strokeColor=#E74C3C;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="600" />
+              <mxPoint x="260" y="345" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <mxCell id="e12" value="YES: Exit loop" edge="1" parent="1" source="decision" target="response" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e13" value="After 2 fails&#xa;Try relaxation" edge="1" parent="1" source="decision" target="step4_relax" style="dashed=1;dashPattern=3 3;strokeWidth=2;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e14" value="" edge="1" parent="1" source="step4_relax" target="response" style="dashed=1;dashPattern=3 3;strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e15" value="" edge="1" parent="1" source="response" target="webui" style="strokeWidth=2;edgeStyle=orthogonalEdgeStyle;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="240" y="825" />
+              <mxPoint x="240" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Notes -->
+        <mxCell id="note1" value="ReAct Loop:&#xa;Max 2 iterations&#xa;Reasoning + Refinement&#xa;Within single request" style="rounded=0;fillColor=#FFF9C4;strokeColor=#F57C00;strokeWidth=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="320" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note2" value="Quality Metrics:&#xa;1. Result count &gt;= 1&#xa;2. Relevance score&#xa;3. Diversity check" style="rounded=0;fillColor=#FFF9C4;strokeColor=#F57C00;strokeWidth=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="440" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note3" value="Exit Conditions:&#xa;1. Quality &gt;= 0.7&#xa;2. Max 2 iterations&#xa;3. Progressive relaxation" style="rounded=0;fillColor=#FFF9C4;strokeColor=#F57C00;strokeWidth=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="560" width="190" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Example -->
+        <mxCell id="example" value="Example Single Request:&#xa;User: Tim can ho 2PN Q2 5-7ty&#xa;&#xa;Iter 1: Search strict - 0 results&#xa;Quality: 0.0 - NOT OK&#xa;&#xa;Iter 2: Relax price - 3 results&#xa;Quality: 0.6 - NOT OK&#xa;&#xa;Strategy 1: Location only - 8 results&#xa;Quality: 0.75 - OK&#xa;&#xa;Response: Tim thay 8 can ho Q2..." style="rounded=0;fillColor=#E1F5E1;strokeColor=#4CAF50;strokeWidth=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="680" width="240" height="220" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Legend:&#xa;Solid: Service call&#xa;Dashed: Internal step&#xa;Red Loop: ReAct iteration" style="rounded=0;fillColor=#FFF;strokeColor=#333;strokeWidth=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="800" y="560" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="key_point" value="KEY: ReAct loop happens&#xa;WITHIN 1 request&#xa;Multiple search attempts&#xa;before response" style="rounded=0;fillColor=#FFE6E6;strokeColor=#E74C3C;strokeWidth=2;align=center;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="680" width="200" height="90" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

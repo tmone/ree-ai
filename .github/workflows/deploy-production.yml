@@ -112,16 +112,20 @@ jobs:
     - name: Manual checkout
       run: |
         echo "📥 Manual checkout of repository..."
-        cd /home/tmone/actions-runner-production/_work/ree-ai/
+        # Use a unique temporary directory to avoid conflicts
+        TEMP_DIR="/home/tmone/actions-runner-production/_work/ree-ai/ree-ai-$(date +%s)"
         
-        # Remove any existing directory with sudo
-        sudo rm -rf ree-ai || true
-        
-        # Clone fresh repository
-        git clone https://github.com/tmone/ree-ai.git ree-ai
-        cd ree-ai
+        # Clone fresh repository to temp directory
+        git clone https://github.com/tmone/ree-ai.git "$TEMP_DIR"
+        cd "$TEMP_DIR"
         git checkout release
         git pull origin release
+        
+        # Move to expected location
+        if [ -d "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai" ]; then
+          mv "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai" "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai-old-$(date +%s)" || true
+        fi
+        mv "$TEMP_DIR" "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai"
         echo "✅ Repository checked out successfully"
 
     - name: Setup SSH for production server

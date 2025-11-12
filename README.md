@@ -483,3 +483,4 @@ cp -r services/semantic_chunking services/my_service
 
 
 
+# Test trigger deployment

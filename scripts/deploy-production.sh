@@ -215,9 +215,9 @@ build_services() {
         log_warning "Some external images failed to pull"
     }
     
-    # Build application services
+    # Build application services  
     log "🏗️ Building application services..."
-    docker-compose build --parallel || {
+    docker-compose build --parallel postgres redis opensearch service-registry core-gateway db-gateway auth-service classification attribute-extraction completeness semantic-chunking orchestrator rag-service admin-dashboard reranking price-suggestion || {
         log_error "Service build failed"
         exit 1
     }

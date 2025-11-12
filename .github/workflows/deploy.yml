@@ -95,8 +95,9 @@ jobs:
 
     - name: Start infrastructure services first
       run: |
-        docker-compose up -d postgres redis opensearch ollama
+        docker-compose up -d postgres redis opensearch
         echo "Waiting for infrastructure services to be healthy..."
+        echo "Note: Ollama runs on host system (port 11434)"
         sleep 30
 
     - name: Check infrastructure health

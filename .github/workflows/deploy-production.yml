@@ -265,17 +265,17 @@ jobs:
           export COMPOSE_PROFILES="real"
           
           # Stop existing services if any
-          sudo docker-compose down --remove-orphans || true
+          docker-compose down --remove-orphans || true
           
           # Pull latest images and start services
-          sudo docker-compose pull --ignore-pull-failures || true
-          sudo docker-compose up -d --build --remove-orphans
+          docker-compose pull --ignore-pull-failures || true
+          docker-compose up -d --build --remove-orphans
           
           echo "✅ Deployment completed on production server!"
           
           # Show running services
           echo "📊 Running services:"
-          sudo docker-compose ps
+          docker-compose ps
           
           # Cleanup
           cd ~

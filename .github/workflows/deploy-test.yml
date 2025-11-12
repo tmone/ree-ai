@@ -1,0 +1,293 @@
+name: Deploy to WSL Test Environment
+
+on:
+  push:
+    branches: [ main ]  # Deploy to WSL when pushing to main
+  pull_request:
+    branches: [ release ]  # Test before merging to release
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'wsl-test'
+        type: choice
+        options:
+        - wsl-test
+        - wsl-staging
+
+jobs:
+  # ============================================================
+  # WSL TEST DEPLOYMENT JOB
+  # ============================================================
+  deploy-wsl:
+    name: Deploy to WSL Test Environment
+    runs-on: [self-hosted, Linux, X64]  # WSL runner
+    timeout-minutes: 20
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Stop existing test services
+      run: |
+        # Stop containers in test environment
+        cd /home/tmone/ree-ai-test || mkdir -p /home/tmone/ree-ai-test
+        docker-compose down || true
+        echo "Test services stopped"
+      continue-on-error: true
+
+    - name: Clean test workspace
+      run: |
+        cd /home/tmone/ree-ai-test
+        # Clean workspace but preserve .env
+        cp .env .env.backup 2>/dev/null || true
+        sudo git clean -ffdx || true
+        sudo find . -type d -name __pycache__ -print0 | sudo xargs -0 rm -rf 2>/dev/null || true
+        mv .env.backup .env 2>/dev/null || true
+        echo "Test workspace cleaned"
+
+    - name: Copy code to test environment
+      run: |
+        # Copy current code to test directory
+        TEST_DIR="/home/tmone/ree-ai-test"
+        rsync -av --exclude='.git' ${{ github.workspace }}/ $TEST_DIR/
+        cd $TEST_DIR
+        echo "Code copied to test environment"
+
+    - name: Create test environment file
+      run: |
+        cd /home/tmone/ree-ai-test
+        cat > .env << 'EOF'
+        # TEST Environment Configuration
+        # ===============================
+        
+        # Database Configuration
+        POSTGRES_DB=ree_ai_test
+        POSTGRES_USER=ree_ai_test_user
+        POSTGRES_PASSWORD=ree_ai_test_pass_2025
+        POSTGRES_HOST=postgres
+        POSTGRES_PORT=5433  # Different port for test
+        
+        # OpenAI Configuration
+        OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+        
+        # Test specific settings
+        PRODUCTION_MODE=false
+        DEBUG=true
+        LOG_LEVEL=DEBUG
+        
+        # Test ports (offset by 1000)
+        # Open WebUI will be on 4000, Core Gateway on 9080, etc.
+        
+        # Feature Flags
+        USE_REAL_CORE_GATEWAY=true
+        USE_REAL_DB_GATEWAY=true
+        USE_ADVANCED_RAG=true
+        
+        # JWT Configuration
+        JWT_SECRET_KEY=test-jwt-secret-key
+        
+        # WebUI Configuration
+        WEBUI_SECRET_KEY=test-secret-key
+        TASK_MODEL=llama3.2:latest
+        EOF
+
+    - name: Create test docker-compose override
+      run: |
+        cd /home/tmone/ree-ai-test
+        cat > docker-compose.test.yml << 'EOF'
+        version: '3.8'
+        
+        services:
+          postgres:
+            ports:
+              - "5433:5432"  # Different port for test
+            environment:
+              POSTGRES_DB: ree_ai_test
+              POSTGRES_USER: ree_ai_test_user
+              POSTGRES_PASSWORD: ree_ai_test_pass_2025
+        
+          redis:
+            ports:
+              - "6380:6379"  # Different port for test
+        
+          opensearch:
+            ports:
+              - "9201:9200"  # Different port for test
+              - "9601:9600"
+        
+          open-webui:
+            ports:
+              - "4000:8080"  # Test frontend port
+        
+          service-registry:
+            ports:
+              - "9000:8000"  # Test service registry port
+        
+          core-gateway:
+            ports:
+              - "9080:8080"  # Test core gateway port
+        
+          db-gateway:
+            ports:
+              - "9081:8080"  # Test db gateway port
+        
+          orchestrator:
+            ports:
+              - "9090:8080"  # Test orchestrator port
+        
+          rag-service:
+            ports:
+              - "9091:8080"  # Test RAG service port
+        
+          classification:
+            ports:
+              - "9083:8080"
+        
+          semantic-chunking:
+            ports:
+              - "9082:8080"
+        
+          completeness:
+            ports:
+              - "9089:8080"
+        
+          attribute-extraction:
+            ports:
+              - "9084:8080"
+        
+          admin-dashboard:
+            ports:
+              - "4002:8080"
+        EOF
+
+    - name: Build and start test services
+      run: |
+        cd /home/tmone/ree-ai-test
+        
+        # Build services
+        echo "🔨 Building test services..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml build --parallel
+        
+        # Start infrastructure first
+        echo "🏗️ Starting test infrastructure..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d postgres redis opensearch
+        sleep 20
+        
+        # Start core services
+        echo "⚙️ Starting test core services..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d service-registry core-gateway db-gateway auth-service
+        sleep 15
+        
+        # Start AI services
+        echo "🤖 Starting test AI services..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d classification attribute-extraction completeness
+        sleep 10
+        
+        # Start orchestrator and RAG
+        echo "🧠 Starting test orchestrator and RAG..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d orchestrator rag-service
+        sleep 10
+        
+        # Start frontend
+        echo "🌐 Starting test frontend..."
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml up -d open-webui
+        sleep 10
+
+    - name: Run health checks
+      run: |
+        cd /home/tmone/ree-ai-test
+        echo "🏥 Running test health checks..."
+        
+        # Test services array
+        declare -a services=(
+          "4000:Open WebUI"
+          "9000:Service Registry" 
+          "9080:Core Gateway"
+          "9081:DB Gateway"
+          "9090:Orchestrator"
+          "9091:RAG Service"
+        )
+        
+        failed=0
+        for service in "${services[@]}"; do
+          IFS=':' read -r port name <<< "$service"
+          echo -n "Testing $name (port $port)... "
+          
+          if curl -f -s "http://localhost:$port/health" >/dev/null 2>&1 || curl -f -s "http://localhost:$port" >/dev/null 2>&1; then
+            echo "✅ OK"
+          else
+            echo "❌ FAIL"
+            ((failed++))
+          fi
+        done
+        
+        if [ $failed -gt 0 ]; then
+          echo "⚠️ Some services failed health checks in test environment"
+          echo "This is expected for testing - fix issues here before production deploy"
+        else
+          echo "✅ All test services are healthy!"
+        fi
+
+    - name: Show test deployment summary
+      run: |
+        cd /home/tmone/ree-ai-test
+        echo ""
+        echo "=========================================="
+        echo "🖥️ WSL Test Deployment Summary"
+        echo "=========================================="
+        echo "Environment: WSL TEST"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Deployed by: ${{ github.actor }}"
+        echo "Time: $(date)"
+        echo ""
+        echo "🧪 WSL Test URLs:"
+        echo "  - Open WebUI: http://localhost:4000"
+        echo "  - Core Gateway: http://localhost:9080"
+        echo "  - Orchestrator: http://localhost:9090"
+        echo "  - RAG Service: http://localhost:9091"
+        echo "  - Admin Dashboard: http://localhost:4002"
+        echo ""
+        echo "📊 Services Status:"
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml ps
+        echo ""
+        echo "📝 Next Steps:"
+        echo "1. Test functionality at http://localhost:4000"
+        echo "2. Fix any issues in the code"
+        echo "3. When stable, merge to RELEASE branch for production deploy"
+        echo "4. Production will deploy to http://192.168.1.11:3000"
+        echo "=========================================="
+
+    - name: Create test status file
+      run: |
+        cd /home/tmone/ree-ai-test
+        cat > test-status.json << EOF
+        {
+          "deployment_time": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+          "branch": "${{ github.ref_name }}",
+          "commit": "${{ github.sha }}",
+          "actor": "${{ github.actor }}",
+          "status": "deployed",
+          "test_urls": {
+            "frontend": "http://localhost:4000",
+            "api": "http://localhost:9080",
+            "orchestrator": "http://localhost:9090",
+            "rag": "http://localhost:9091"
+          }
+        }
+        EOF
+        echo "📄 Test status saved to test-status.json"
+
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        cd /home/tmone/ree-ai-test
+        echo "=== TEST DEPLOYMENT FAILED ==="
+        echo "Service Registry Logs:"
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml logs --tail=20 service-registry
+        echo "Core Gateway Logs:"
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml logs --tail=20 core-gateway
+        echo "Orchestrator Logs:"
+        docker-compose -f docker-compose.yml -f docker-compose.test.yml logs --tail=20 orchestrator

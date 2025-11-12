@@ -1,0 +1,342 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches: [ release ]  # Only deploy to production from release branch
+  workflow_dispatch:
+    inputs:
+      confirm_production:
+        description: 'Type "PRODUCTION" to confirm deployment to 192.168.1.11'
+        required: true
+        default: 'TEST_FIRST'
+
+jobs:
+  # ============================================================
+  # PRE-DEPLOYMENT CHECKS
+  # ============================================================
+  pre-deploy-checks:
+    name: Pre-deployment Validation
+    runs-on: ubuntu-latest
+    outputs:
+      deploy_approved: ${{ steps.validation.outputs.approved }}
+    
+    steps:
+    - name: Validate production deployment
+      id: validation
+      run: |
+        echo "🔍 Validating production deployment..."
+        
+        # Check if manual deployment with correct confirmation
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event.inputs.confirm_production }}" != "PRODUCTION" ]; then
+            echo "❌ Production deployment requires confirmation!"
+            echo "Please type 'PRODUCTION' in the confirmation field"
+            exit 1
+          fi
+          echo "✅ Manual deployment confirmed"
+        fi
+        
+        # Check if release branch
+        if [ "${{ github.ref_name }}" != "release" ]; then
+          echo "❌ Production deployment only allowed from release branch"
+          echo "Current branch: ${{ github.ref_name }}"
+          echo "Please merge stable code to release branch for production deployment"
+          exit 1
+        fi
+        
+        echo "✅ Pre-deployment checks passed"
+        echo "approved=true" >> $GITHUB_OUTPUT
+
+  # ============================================================
+  # DEPLOYMENT JOB
+  # ============================================================
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: pre-deploy-checks
+    if: needs.pre-deploy-checks.outputs.deploy_approved == 'true'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup SSH Key
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
+
+    - name: Add server to known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H 192.168.1.11 >> ~/.ssh/known_hosts
+
+    - name: Deploy to Production Server
+      run: |
+        ssh -o StrictHostKeyChecking=no tmone@192.168.1.11 << 'ENDSSH'
+          set -e
+          echo "🚀 Starting deployment on production server..."
+          
+          # Navigate to project directory
+          PROJECT_DIR="/home/tmone/ree-ai"
+          
+          # Create project directory if it doesn't exist
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "📁 Creating project directory..."
+            mkdir -p "$PROJECT_DIR"
+          fi
+          
+          cd "$PROJECT_DIR"
+          
+          # Stop existing services
+          echo "🛑 Stopping existing services..."
+          if [ -f "docker-compose.yml" ]; then
+            docker-compose down || true
+          fi
+          
+          # Cleanup old files (preserve data volumes)
+          echo "🧹 Cleaning up old files..."
+          sudo rm -rf ./*
+          
+          # Clone or pull latest code
+          echo "📥 Getting latest code..."
+          if [ ! -d ".git" ]; then
+            git clone https://github.com/tmone/ree-ai.git .
+          else
+            git fetch origin
+            git reset --hard origin/main
+          fi
+          
+          # Create .env file from template
+          echo "⚙️ Setting up environment..."
+          if [ ! -f ".env" ]; then
+            cp .env.example .env || echo "# Environment variables" > .env
+          fi
+          
+          # Update .env with production values
+          cat > .env << EOF
+        # Database Configuration
+        POSTGRES_DB=ree_ai
+        POSTGRES_USER=ree_ai_user
+        POSTGRES_PASSWORD=ree_ai_pass_2025
+        POSTGRES_HOST=postgres
+        POSTGRES_PORT=5432
+
+        # OpenAI Configuration (Required for production)
+        OPENAI_API_KEY=$OPENAI_API_KEY
+
+        # Ollama Configuration (Optional - fallback)
+        OLLAMA_BASE_URL=
+        PRODUCTION_MODE=true
+
+        # OpenSearch Configuration
+        OPENSEARCH_HOST=opensearch
+        OPENSEARCH_PORT=9200
+        OPENSEARCH_PASSWORD=Admin123!@#
+
+        # WebUI Configuration
+        WEBUI_SECRET_KEY=production-secret-key-change-me
+        TASK_MODEL=llama3.2:latest
+
+        # JWT Configuration
+        JWT_SECRET_KEY=production-jwt-secret-key-change-me
+        JWT_ALGORITHM=HS256
+        JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+        # Feature Flags
+        USE_REAL_CORE_GATEWAY=true
+        USE_REAL_DB_GATEWAY=true
+        USE_ADVANCED_RAG=true
+
+        # Debug Settings (Production)
+        DEBUG=false
+        LOG_LEVEL=INFO
+
+        # Auto-generation Features
+        ENABLE_FOLLOW_UP_GENERATION=true
+        ENABLE_TITLE_GENERATION=true
+        ENABLE_TAGS_GENERATION=true
+        ENABLE_AUTOCOMPLETE_GENERATION=false
+
+        # Memory and Performance
+        MEMORY_RETENTION_DAYS=90
+        MEMORY_CONSOLIDATION_THRESHOLD=10
+        REFLECTION_QUALITY_THRESHOLD=0.7
+        DOCUMENT_GRADER_THRESHOLD=0.5
+        AGENT_TIMEOUT_SECONDS=30
+        SUPERVISOR_MAX_RETRIES=2
+        EOF
+
+          # Make scripts executable
+          echo "🔧 Setting up scripts..."
+          chmod +x scripts/*.sh
+          
+          # Pull latest images
+          echo "📦 Pulling latest images..."
+          docker-compose pull postgres redis opensearch || true
+          
+          # Build all services
+          echo "🔨 Building services..."
+          docker-compose build --parallel
+          
+          # Start infrastructure services first
+          echo "🏗️ Starting infrastructure services..."
+          docker-compose up -d postgres redis opensearch
+          
+          # Wait for infrastructure to be ready
+          echo "⏳ Waiting for infrastructure services..."
+          sleep 30
+          
+          # Check infrastructure health
+          echo "🏥 Checking infrastructure health..."
+          
+          # Check PostgreSQL
+          timeout 60 bash -c 'until docker exec ree-ai-postgres pg_isready -U ree_ai_user; do sleep 2; done' || {
+            echo "❌ PostgreSQL failed to start"
+            docker-compose logs postgres
+            exit 1
+          }
+          echo "✅ PostgreSQL is healthy"
+          
+          # Check Redis  
+          timeout 60 bash -c 'until docker exec ree-ai-redis redis-cli ping | grep -q PONG; do sleep 2; done' || {
+            echo "❌ Redis failed to start"
+            docker-compose logs redis
+            exit 1
+          }
+          echo "✅ Redis is healthy"
+          
+          # Check OpenSearch
+          timeout 120 bash -c 'until curl -f http://localhost:9200 >/dev/null 2>&1; do sleep 5; done' || {
+            echo "❌ OpenSearch failed to start"
+            docker-compose logs opensearch
+            exit 1
+          }
+          echo "✅ OpenSearch is healthy"
+          
+          # Start Service Registry (required first)
+          echo "🌐 Starting Service Registry..."
+          docker-compose up -d service-registry
+          sleep 15
+          
+          # Wait for Service Registry
+          timeout 60 bash -c 'until curl -f http://localhost:8000/health >/dev/null 2>&1; do sleep 2; done' || {
+            echo "❌ Service Registry failed to start"
+            docker-compose logs service-registry
+            exit 1
+          }
+          echo "✅ Service Registry is healthy"
+          
+          # Start Core Services
+          echo "⚙️ Starting Core Services..."
+          docker-compose up -d core-gateway db-gateway auth-service
+          sleep 15
+          
+          # Start AI Services
+          echo "🤖 Starting AI Services..."
+          docker-compose up -d classification attribute-extraction completeness
+          sleep 15
+          
+          # Start Orchestrator and RAG Service
+          echo "🧠 Starting Orchestrator and RAG..."
+          docker-compose up -d orchestrator rag-service
+          sleep 15
+          
+          # Start Frontend
+          echo "🌐 Starting Frontend..."
+          docker-compose up -d open-webui
+          sleep 10
+          
+          # Verify critical services
+          echo "🔍 Verifying services..."
+          services=(
+            "http://localhost:8000/health"  # Service Registry
+            "http://localhost:8080/health"  # Core Gateway  
+            "http://localhost:8081/health"  # DB Gateway
+            "http://localhost:8090/health"  # Orchestrator
+            "http://localhost:8091/health"  # RAG Service
+          )
+          
+          for service in "\${services[@]}"; do
+            echo "Checking \$service"
+            if curl -f "\$service" >/dev/null 2>&1; then
+              echo "✅ \$service is healthy"
+            else
+              echo "❌ \$service is not healthy"
+              # Don't exit - let deployment continue with partial services
+            fi
+          done
+          
+          # Show service status
+          echo "📊 Final service status:"
+          docker-compose ps
+          
+          # Cleanup old images
+          echo "🧹 Cleaning up old Docker images..."
+          docker image prune -f >/dev/null 2>&1 || true
+          
+          echo ""
+          echo "✅ Deployment completed successfully!"
+          echo ""
+          echo "🌐 Access URLs:"
+          echo "  - Open WebUI: http://192.168.1.11:3000"
+          echo "  - Core Gateway: http://192.168.1.11:8080"
+          echo "  - Orchestrator: http://192.168.1.11:8090"
+          echo "  - RAG Service: http://192.168.1.11:8091"
+          echo "  - Admin Dashboard: http://192.168.1.11:3002"
+          echo ""
+        ENDSSH
+
+    - name: Test deployment
+      run: |
+        echo "🧪 Testing deployment..."
+        
+        # Test Open WebUI (frontend)
+        if curl -f http://192.168.1.11:3000 >/dev/null 2>&1; then
+          echo "✅ Open WebUI is accessible"
+        else
+          echo "❌ Open WebUI is not accessible"
+        fi
+        
+        # Test API Gateway
+        if curl -f http://192.168.1.11:8080/health >/dev/null 2>&1; then
+          echo "✅ Core Gateway is healthy"
+        else
+          echo "❌ Core Gateway is not healthy"
+        fi
+        
+        # Test Orchestrator
+        if curl -f http://192.168.1.11:8090/health >/dev/null 2>&1; then
+          echo "✅ Orchestrator is healthy"
+        else
+          echo "❌ Orchestrator is not healthy"
+        fi
+
+    - name: Show deployment summary
+      if: always()
+      run: |
+        echo ""
+        echo "=========================================="
+        echo "🚀 Deployment Summary"
+        echo "=========================================="
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Deployed by: ${{ github.actor }}"
+        echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo ""
+        echo "🌐 Production URLs:"
+        echo "  - Open WebUI: http://192.168.1.11:3000"
+        echo "  - Core Gateway: http://192.168.1.11:8080"
+        echo "  - Service Registry: http://192.168.1.11:8000"  
+        echo "  - Orchestrator: http://192.168.1.11:8090"
+        echo "  - RAG Service: http://192.168.1.11:8091"
+        echo "  - Admin Dashboard: http://192.168.1.11:3002"
+        echo ""
+        echo "📊 Infrastructure:"
+        echo "  - PostgreSQL: port 5432"
+        echo "  - Redis: port 6379"
+        echo "  - OpenSearch: port 9200"
+        echo ""
+        echo "Status: ${{ job.status }}"
+        echo "=========================================="

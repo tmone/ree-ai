@@ -52,7 +52,7 @@ jobs:
   # ============================================================
   deploy:
     name: Deploy to Production Server
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, production]  # Self-hosted runner trên production server
     timeout-minutes: 30
     needs: pre-deploy-checks
     if: needs.pre-deploy-checks.outputs.deploy_approved == 'true'
@@ -61,60 +61,34 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup SSH Key
-      uses: webfactory/ssh-agent@v0.7.0
-      with:
-        ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
-
-    - name: Add server to known hosts
+    - name: Deploy to Production Server (Self-hosted)
       run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H 192.168.1.11 >> ~/.ssh/known_hosts
-
-    - name: Deploy to Production Server
-      run: |
-        ssh -o StrictHostKeyChecking=no tmone@192.168.1.11 << 'ENDSSH'
-          set -e
-          echo "🚀 Starting deployment on production server..."
-          
-          # Navigate to project directory
-          PROJECT_DIR="/home/tmone/ree-ai"
-          
-          # Create project directory if it doesn't exist
-          if [ ! -d "$PROJECT_DIR" ]; then
-            echo "📁 Creating project directory..."
-            mkdir -p "$PROJECT_DIR"
-          fi
-          
-          cd "$PROJECT_DIR"
-          
-          # Stop existing services
-          echo "🛑 Stopping existing services..."
-          if [ -f "docker-compose.yml" ]; then
-            docker-compose down || true
-          fi
-          
-          # Cleanup old files (preserve data volumes)
-          echo "🧹 Cleaning up old files..."
-          sudo rm -rf ./*
-          
-          # Clone or pull latest code
-          echo "📥 Getting latest code..."
-          if [ ! -d ".git" ]; then
-            git clone https://github.com/tmone/ree-ai.git .
-          else
-            git fetch origin
-            git reset --hard origin/main
-          fi
-          
-          # Create .env file from template
-          echo "⚙️ Setting up environment..."
-          if [ ! -f ".env" ]; then
-            cp .env.example .env || echo "# Environment variables" > .env
-          fi
-          
-          # Update .env with production values
-          cat > .env << EOF
+        echo "🚀 Starting deployment on production server..."
+        
+        # Navigate to project directory  
+        PROJECT_DIR="/home/tmone/ree-ai"
+        
+        # Create project directory if it doesn't exist
+        if [ ! -d "$PROJECT_DIR" ]; then
+          echo "📁 Creating project directory..."
+          mkdir -p "$PROJECT_DIR"
+        fi
+        
+        cd "$PROJECT_DIR"
+        
+        # Stop existing services
+        echo "🛑 Stopping existing services..."
+        if [ -f "docker-compose.yml" ]; then
+          docker-compose down || true
+        fi
+        
+        # Copy latest code from checkout
+        echo "📥 Updating code..."
+        rsync -av --exclude='.git' --exclude='_work' ${{ github.workspace }}/ ./
+        
+        # Create .env file with production values
+        echo "⚙️ Setting up environment..."
+        cat > .env << 'EOF'
         # Database Configuration
         POSTGRES_DB=ree_ai
         POSTGRES_USER=ree_ai_user
@@ -266,47 +240,46 @@ jobs:
               # Don't exit - let deployment continue with partial services
             fi
           done
-          
-          # Show service status
-          echo "📊 Final service status:"
-          docker-compose ps
-          
-          # Cleanup old images
-          echo "🧹 Cleaning up old Docker images..."
-          docker image prune -f >/dev/null 2>&1 || true
-          
-          echo ""
-          echo "✅ Deployment completed successfully!"
-          echo ""
-          echo "🌐 Access URLs:"
-          echo "  - Open WebUI: http://192.168.1.11:3000"
-          echo "  - Core Gateway: http://192.168.1.11:8080"
-          echo "  - Orchestrator: http://192.168.1.11:8090"
-          echo "  - RAG Service: http://192.168.1.11:8091"
-          echo "  - Admin Dashboard: http://192.168.1.11:3002"
-          echo ""
-        ENDSSH
+        
+        # Show service status
+        echo "📊 Final service status:"
+        docker-compose ps
+        
+        # Cleanup old images
+        echo "🧹 Cleaning up old Docker images..."
+        docker image prune -f >/dev/null 2>&1 || true
+        
+        echo ""
+        echo "✅ Deployment completed successfully!"
+        echo ""
+        echo "🌐 Access URLs:"
+        echo "  - Open WebUI: http://192.168.1.11:3000"
+        echo "  - Core Gateway: http://192.168.1.11:8080"
+        echo "  - Orchestrator: http://192.168.1.11:8090"
+        echo "  - RAG Service: http://192.168.1.11:8091"
+        echo "  - Admin Dashboard: http://192.168.1.11:3002"
+        echo ""
 
     - name: Test deployment
       run: |
         echo "🧪 Testing deployment..."
         
         # Test Open WebUI (frontend)
-        if curl -f http://192.168.1.11:3000 >/dev/null 2>&1; then
+        if curl -f http://localhost:3000 >/dev/null 2>&1; then
           echo "✅ Open WebUI is accessible"
         else
           echo "❌ Open WebUI is not accessible"
         fi
         
         # Test API Gateway
-        if curl -f http://192.168.1.11:8080/health >/dev/null 2>&1; then
+        if curl -f http://localhost:8080/health >/dev/null 2>&1; then
           echo "✅ Core Gateway is healthy"
         else
           echo "❌ Core Gateway is not healthy"
         fi
         
         # Test Orchestrator
-        if curl -f http://192.168.1.11:8090/health >/dev/null 2>&1; then
+        if curl -f http://localhost:8090/health >/dev/null 2>&1; then
           echo "✅ Orchestrator is healthy"
         else
           echo "❌ Orchestrator is not healthy"

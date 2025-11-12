@@ -30,6 +30,7 @@ Code → main branch → WSL Test → release branch → Production Server
 - **File**: `.github/workflows/deploy-production.yml` 
 - **Trigger**: Push to `release` branch
 - **Purpose**: Deploy stable code lên server chính thức
+- **Runner**: Self-hosted trên production server (192.168.1.11)
 - **Ports**: 3000, 8080, 8090, 8091 (standard ports)
 
 ---
@@ -59,35 +60,49 @@ git push origin release
 
 ## ⚡ Setup Instructions
 
-### Bước 1: Chuẩn bị Production Server
+### Bước 1: Chuẩn bị Production Server & Self-hosted Runner
 ```bash
 # SSH vào server production
 ssh tmone@192.168.1.11
 
-# Download và chạy setup script
+# Download và chạy setup scripts
 curl -sSL https://raw.githubusercontent.com/tmone/ree-ai/main/scripts/setup-production-server.sh -o setup.sh
-chmod +x setup.sh
-./setup.sh
+curl -sSL https://raw.githubusercontent.com/tmone/ree-ai/main/scripts/setup-github-runner-production.sh -o setup-runner.sh
+
+chmod +x setup.sh setup-runner.sh
+./setup.sh       # Setup Docker, firewall, etc.
+./setup-runner.sh  # Setup GitHub Actions runner
 ```
 
-### Bước 2: Tạo SSH Keys cho GitHub Actions
+### Bước 2: Cấu hình GitHub Runner
 ```bash
-# Windows
-scripts\setup-github-actions-ssh.bat
+# Trên production server, cấu hình runner
+cd ~/github-actions-runner
 
-# Linux/Mac
-scripts/setup-github-actions-ssh.sh
+# Get token từ: https://github.com/tmone/ree-ai/settings/actions/runners/new
+./config.sh --url https://github.com/tmone/ree-ai --token YOUR_TOKEN
+
+# Install và start service
+sudo ./svc.sh install
+sudo ./svc.sh start
 ```
 
-### Bước 3: Cấu hình GitHub Secrets
+### Bước 3: Cấu hình WSL Runner (nếu chưa có)
+```bash
+# Trên WSL, setup self-hosted runner tương tự
+# Labels: self-hosted,linux,x64,wsl-test
+```
+
+### Bước 4: Cấu hình GitHub Secrets
 Vào: `https://github.com/tmone/ree-ai/settings/secrets/actions`
 
 | Secret Name | Value | Description |
 |-------------|--------|-------------|
-| `PRODUCTION_SSH_KEY` | SSH private key | Để kết nối server 192.168.1.11 |
 | `OPENAI_API_KEY` | OpenAI API key | Cho cả WSL và Production |
 
-### Bước 4: Tạo Release Branch
+**Lưu ý**: Không cần SSH keys nữa vì dùng self-hosted runner!
+
+### Bước 5: Tạo Release Branch
 ```bash
 git checkout -b release
 git push -u origin release

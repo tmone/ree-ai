@@ -103,6 +103,9 @@ jobs:
       
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        clean: false
+        fetch-depth: 1
 
     - name: Setup SSH for production server
       run: |

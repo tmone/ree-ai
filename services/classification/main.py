@@ -131,18 +131,33 @@ Your tasks:
 
 **PART 2: INTENT DETECTION (NEW - Multi-Intent Support)**
 
-Detect ALL intents in the query:
-- **SEARCH**: User wants to find properties ("tìm", "cần mua", "cần thuê")
+Detect ALL intents in the query. **CRITICAL**: Distinguish between POSTING vs SEARCHING:
+
+**PRIMARY INTENTS (Transaction Type + Listing Type):**
+- **POST_SALE**: User wants to post property FOR SALE ("đăng tin bán", "tôi có nhà bán", "cần bán nhà", "muốn đăng bán")
+- **POST_RENT**: User wants to post property FOR RENT ("đăng tin cho thuê", "tôi có nhà cho thuê", "cần cho thuê", "muốn đăng cho thuê")
+- **SEARCH_BUY**: User wants to FIND properties to BUY ("tìm nhà mua", "cần mua nhà", "muốn mua căn hộ", "tìm mua")
+- **SEARCH_RENT**: User wants to FIND properties to RENT ("tìm nhà thuê", "cần thuê nhà", "muốn thuê căn hộ", "tìm thuê")
+
+**SECONDARY INTENTS (Can combine with primary):**
 - **PRICE_SUGGESTION**: User wants market price info ("giá thị trường", "giá khu vực này", "bao nhiêu một m2")
 - **COMPARE**: User wants to compare properties ("so sánh", "khác gì", "tốt hơn")
 - **VALUATION**: User wants property valuation ("định giá", "nhà này giá bao nhiêu")
 - **TREND_ANALYSIS**: User wants market trends ("xu hướng thị trường", "giá đang tăng hay giảm")
 - **CONSULTATION**: User asks for advice ("nên mua", "nên chọn", "đầu tư")
 
+**DETECTION RULES:**
+1. Look for OWNERSHIP keywords: "tôi có", "nhà của tôi", "cần bán", "cần cho thuê" → POST intent
+2. Look for SEARCH keywords: "tìm", "cần mua", "cần thuê", "muốn mua" → SEARCH intent
+3. Look for TRANSACTION TYPE: "bán" → SALE, "cho thuê/thuê" → RENT
+4. Combine: POST + SALE = POST_SALE, POST + RENT = POST_RENT, etc.
+
 Examples:
-- "Tìm căn hộ 2PN Q7" → intents: ["SEARCH"], primary: "SEARCH"
-- "Tìm nhà 3 tỷ và cho tôi giá thị trường Q2" → intents: ["SEARCH", "PRICE_SUGGESTION"], primary: "SEARCH"
-- "So sánh nhà phố Q7 và Q2" → intents: ["COMPARE", "SEARCH"], primary: "COMPARE"
+- "Tôi có nhà cần bán ở Q7" → intents: ["POST_SALE"], primary: "POST_SALE"
+- "Đăng tin cho thuê căn hộ 2PN" → intents: ["POST_RENT"], primary: "POST_RENT"
+- "Tìm căn hộ 2PN Q7 để mua" → intents: ["SEARCH_BUY"], primary: "SEARCH_BUY"
+- "Cần thuê nhà Q2" → intents: ["SEARCH_RENT"], primary: "SEARCH_RENT"
+- "Tìm nhà 3 tỷ và cho tôi giá thị trường Q2" → intents: ["SEARCH_BUY", "PRICE_SUGGESTION"], primary: "SEARCH_BUY"
 
 IMPORTANT:
 - Respond in JSON format ONLY
@@ -207,8 +222,8 @@ Respond with JSON only."""
                     confidence = result.get("confidence", 0.7)
                     reasoning = result.get("reasoning", "")
                     # NEW: Multi-intent fields
-                    intents = result.get("intents", ["SEARCH"])  # Default to SEARCH
-                    primary_intent = result.get("primary_intent", "SEARCH")
+                    intents = result.get("intents", ["SEARCH_BUY"])  # Default to SEARCH_BUY
+                    primary_intent = result.get("primary_intent", "SEARCH_BUY")
 
                     # Validate mode
                     if mode not in ["filter", "semantic", "both"]:
@@ -241,22 +256,48 @@ Respond with JSON only."""
                 except json.JSONDecodeError as e:
                     self.logger.error(f"{LogEmoji.ERROR} Failed to parse LLM response: {content}")
                     # Fallback: simple heuristic
-                    mode = self._fallback_classification(request.query)
-                    return ClassifyResponse(
-                        mode=mode,
-                        confidence=0.5,
-                        reasoning="Fallback classification (LLM parse error)"
-                    )
+                    fallback_result = self._fallback_classification(request.query)
+                    return ClassifyResponse(**fallback_result)
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Classification failed: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
-    def _fallback_classification(self, query: str) -> str:
-        """Simple heuristic fallback if LLM fails"""
+    def _fallback_classification(self, query: str) -> Dict:
+        """
+        Simple heuristic fallback if LLM fails
+        Returns dict with mode, confidence, reasoning, intents, primary_intent
+        """
         query_lower = query.lower()
 
-        # Check for structured keywords
+        # Detect intent first (POST vs SEARCH, SALE vs RENT)
+        posting_keywords = ["đăng tin", "tôi có", "nhà của tôi", "cần bán", "cần cho thuê", "muốn đăng"]
+        search_keywords = ["tìm", "cần mua", "cần thuê", "muốn mua", "muốn thuê", "tìm kiếm"]
+
+        sale_keywords = ["bán", "mua"]
+        rent_keywords = ["cho thuê", "thuê"]
+
+        is_posting = any(kw in query_lower for kw in posting_keywords)
+        is_searching = any(kw in query_lower for kw in search_keywords) or not is_posting  # Default to search
+
+        is_sale = any(kw in query_lower for kw in sale_keywords)
+        is_rent = any(kw in query_lower for kw in rent_keywords)
+
+        # Determine primary intent
+        if is_posting and is_sale:
+            primary_intent = "POST_SALE"
+        elif is_posting and is_rent:
+            primary_intent = "POST_RENT"
+        elif is_searching and is_sale:
+            primary_intent = "SEARCH_BUY"
+        elif is_searching and is_rent:
+            primary_intent = "SEARCH_RENT"
+        elif is_posting:
+            primary_intent = "POST_SALE"  # Default posting to sale
+        else:
+            primary_intent = "SEARCH_BUY"  # Default to search buy
+
+        # Check for structured keywords (for mode classification)
         structured_keywords = [
             "pn", "phòng ngủ", "bedroom",
             "tỷ", "triệu", "vnd",
@@ -275,11 +316,19 @@ Respond with JSON only."""
         has_semantic = any(kw in query_lower for kw in semantic_keywords)
 
         if has_structured and has_semantic:
-            return "both"
+            mode = "both"
         elif has_structured:
-            return "filter"
+            mode = "filter"
         else:
-            return "semantic"
+            mode = "semantic"
+
+        return {
+            "mode": mode,
+            "confidence": 0.5,
+            "reasoning": "Fallback heuristic classification",
+            "intents": [primary_intent],
+            "primary_intent": primary_intent
+        }
 
     async def on_shutdown(self):
         """Cleanup on shutdown"""

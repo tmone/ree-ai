@@ -145,12 +145,11 @@ jobs:
     - name: Start AI Services
       run: |
         docker-compose up -d \
-          semantic-chunking \
           classification \
           attribute-extraction \
-          completeness \
-          price-suggestion
+          completeness
         echo "Waiting for AI services..."
+        echo "Note: Only services with Dockerfiles are started"
         sleep 15
 
     - name: Start Orchestrator and RAG Service

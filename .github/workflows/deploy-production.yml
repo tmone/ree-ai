@@ -96,9 +96,17 @@ jobs:
     - name: Cleanup workspace
       run: |
         echo "🧹 Cleaning up workspace..."
-        # Remove any existing __pycache__ directories with permission issues
-        sudo find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        sudo find . -name "*.pyc" -type f -delete 2>/dev/null || true
+        # Force remove any existing files with permission issues
+        sudo find /home/tmone/actions-runner-production/_work/ree-ai/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+        sudo find /home/tmone/actions-runner-production/_work/ree-ai/ -name "*.pyc" -type f -delete 2>/dev/null || true
+        sudo find /home/tmone/actions-runner-production/_work/ree-ai/ -type f -name "*.pyc" -exec chmod 777 {} + 2>/dev/null || true
+        sudo find /home/tmone/actions-runner-production/_work/ree-ai/ -type d -name "__pycache__" -exec chmod 777 {} + 2>/dev/null || true
+        
+        # If still exists, try nuclear option
+        if [ -d "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai" ]; then
+          echo "🔥 Removing entire workspace directory..."
+          sudo rm -rf /home/tmone/actions-runner-production/_work/ree-ai/ree-ai || true
+        fi
         echo "✅ Workspace cleanup completed"
       
     - name: Checkout code

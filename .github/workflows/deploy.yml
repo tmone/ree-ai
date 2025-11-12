@@ -160,7 +160,7 @@ jobs:
 
     - name: Start API Gateway and Frontend
       run: |
-        docker-compose up -d api-gateway open-webui
+        docker-compose up -d core-gateway open-webui
         echo "Waiting for gateway and frontend..."
         sleep 10
 

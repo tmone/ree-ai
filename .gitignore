@@ -52,6 +52,7 @@ redis_data/
 *_old.py
 *_v2.py
 *_backup.py
+*_refactored.py
 *.bak
 *.tmp
 *~

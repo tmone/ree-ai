@@ -2,6 +2,7 @@
 Intelligent Model Router for Core Gateway
 Automatically selects optimal LLM model based on query complexity
 """
+import os
 from typing import List, Optional
 from enum import Enum
 from shared.models.core_gateway import Message, ModelType
@@ -140,13 +141,24 @@ class ModelRouter:
 
         # Route based on complexity
         if complexity == QueryComplexity.SIMPLE:
-            # Use Ollama for simple tasks (free, fast)
-            optimal_model = ModelType.OLLAMA_QWEN
-            logger.info(
-                f"{LogEmoji.SUCCESS} Model routing: {current_model.value} → {optimal_model.value} "
-                f"(SIMPLE task, cost savings: 100%)"
-            )
-            return optimal_model
+            # Check if Ollama is available
+            ollama_url = os.getenv('OLLAMA_BASE_URL', '')
+            if ollama_url and ollama_url.strip():
+                # Use Ollama for simple tasks (free, fast)
+                optimal_model = ModelType.OLLAMA_QWEN25
+                logger.info(
+                    f"{LogEmoji.SUCCESS} Model routing: {current_model.value} → {optimal_model.value} "
+                    f"(SIMPLE task, cost savings: 100%)"
+                )
+                return optimal_model
+            else:
+                # Ollama not available, fallback to GPT-4o-mini
+                optimal_model = ModelType.GPT4_MINI
+                logger.info(
+                    f"{LogEmoji.WARNING} Ollama unavailable, fallback: {current_model.value} → {optimal_model.value} "
+                    f"(SIMPLE task, production mode)"
+                )
+                return optimal_model
 
         elif complexity == QueryComplexity.MEDIUM:
             # Use GPT-4o-mini for medium tasks (cheap, decent)

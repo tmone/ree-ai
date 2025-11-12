@@ -55,6 +55,10 @@ jobs:
         # OpenAI Configuration
         OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
 
+        # Ollama Configuration (Production uses OpenAI primarily)
+        OLLAMA_BASE_URL=
+        PRODUCTION_MODE=true
+
         # OpenSearch Configuration
         OPENSEARCH_PASSWORD=${{ secrets.OPENSEARCH_PASSWORD || 'Admin123!@#' }}
 
@@ -207,7 +211,7 @@ jobs:
         echo ""
         echo "Access URLs:"
         echo "- Open WebUI: http://localhost:3000"
-        echo "- API Gateway: http://localhost:8888"
+        echo "- Core Gateway: http://localhost:8080"
         echo "- Service Registry: http://localhost:8000"
         echo "- Orchestrator: http://localhost:8090"
         echo "- OpenSearch: http://localhost:9200"

@@ -114,8 +114,8 @@ jobs:
         echo "📥 Manual checkout of repository..."
         cd /home/tmone/actions-runner-production/_work/ree-ai/
         
-        # Remove any existing directory
-        rm -rf ree-ai || true
+        # Remove any existing directory with sudo
+        sudo rm -rf ree-ai || true
         
         # Clone fresh repository
         git clone https://github.com/tmone/ree-ai.git ree-ai

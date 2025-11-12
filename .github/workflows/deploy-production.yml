@@ -93,6 +93,14 @@ jobs:
       url: http://${{ vars.SERVER_HOST || 'localhost' }}:3000
 
     steps:
+    - name: Cleanup workspace
+      run: |
+        echo "🧹 Cleaning up workspace..."
+        # Remove any existing __pycache__ directories with permission issues
+        sudo find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+        sudo find . -name "*.pyc" -type f -delete 2>/dev/null || true
+        echo "✅ Workspace cleanup completed"
+      
     - name: Checkout code
       uses: actions/checkout@v4
 

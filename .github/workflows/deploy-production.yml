@@ -216,7 +216,7 @@ jobs:
           rm -rf ree-ai-production-deploy
           mkdir -p ree-ai-production-deploy
           tar -xzf ree-ai-deployment.tar.gz -C ree-ai-production-deploy
-          cd ree-ai-production-deploy
+          cd ree-ai-production-deploy/ree-ai
           
           echo "⚙️ Setting up environment..."
           cat > .env << 'ENVEOF'

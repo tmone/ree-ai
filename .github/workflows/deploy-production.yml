@@ -108,12 +108,16 @@ jobs:
           sudo rm -rf /home/tmone/actions-runner-production/_work/ree-ai/ree-ai || true
         fi
         echo "✅ Workspace cleanup completed"
-      
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        clean: false
-        fetch-depth: 1
+
+    - name: Manual checkout
+      run: |
+        echo "📥 Manual checkout of repository..."
+        cd /home/tmone/actions-runner-production/_work/ree-ai/
+        git clone https://github.com/tmone/ree-ai.git ree-ai || true
+        cd ree-ai
+        git checkout release
+        git pull origin release
+        echo "✅ Repository checked out successfully"
 
     - name: Setup SSH for production server
       run: |

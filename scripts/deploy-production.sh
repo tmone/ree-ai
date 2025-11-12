@@ -206,6 +206,9 @@ EOF
 build_services() {
     log "🔨 Building services..."
     
+    # Set Docker Compose profile
+    export COMPOSE_PROFILES="$DOCKER_COMPOSE_PROFILE"
+    
     # Pull external images first
     log "📦 Pulling external images..."
     docker-compose pull postgres redis opensearch || {

@@ -5,9 +5,9 @@ Automatically selects optimal LLM model based on query complexity
 from typing import List, Optional
 from enum import Enum
 from shared.models.core_gateway import Message, ModelType
-from shared.utils.logger import get_logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
-logger = get_logger("model_router")
+logger = setup_logger("model_router")
 
 
 class QueryComplexity(str, Enum):

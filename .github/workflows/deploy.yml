@@ -148,9 +148,8 @@ jobs:
           semantic-chunking \
           classification \
           attribute-extraction \
-          completeness-check \
-          price-suggestion \
-          reranking
+          completeness \
+          price-suggestion
         echo "Waiting for AI services..."
         sleep 15
 

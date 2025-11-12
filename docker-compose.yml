@@ -437,23 +437,6 @@ services:
       - real
       - all
 
-  # Completeness Check Service (Layer 3)
-  completeness-check:
-    build:
-      context: .
-      dockerfile: services/completeness_check/Dockerfile
-    container_name: ree-ai-completeness-check
-    environment:
-      - DEBUG=${DEBUG:-true}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    ports:
-      - "8086:8080"
-    networks:
-      - ree-ai-network
-    profiles:
-      - real
-      - all
-
   # Price Suggestion Service (Layer 3)
   price-suggestion:
     build:

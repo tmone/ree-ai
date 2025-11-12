@@ -210,10 +210,10 @@ jobs:
         echo "🚀 Executing deployment on production server..."
         ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP << 'EOF'
           set -e
-          
+
           echo "🔄 Extracting deployment package..."
           cd ~
-          rm -rf ree-ai-production-deploy
+          sudo rm -rf ree-ai-production-deploy
           mkdir -p ree-ai-production-deploy
           tar -xzf ree-ai-deployment.tar.gz -C ree-ai-production-deploy
           cd ree-ai-production-deploy/ree-ai

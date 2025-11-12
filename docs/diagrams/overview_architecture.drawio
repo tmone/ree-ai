@@ -1,0 +1,199 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Overview Architecture" id="overview">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="REE AI Orchestrator Architecture" style="text;fontSize=24;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="40" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- User -->
+        <mxCell id="user" value="USER" style="shape=actor;fillColor=#90EE90;strokeColor=#333333;strokeWidth=3;" vertex="1" parent="1">
+          <mxGeometry x="100" y="300" width="60" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Open WebUI -->
+        <mxCell id="webui" value="Open WebUI&#xa;Layer 0" style="rounded=1;fillColor=#90EE90;strokeColor=#333333;strokeWidth=2;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="240" y="310" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Orchestrator -->
+        <mxCell id="orch" value="Orchestrator&#xa;Layer 2&#xa;Central Routing" style="rounded=1;fillColor=#FFD700;strokeColor=#333333;strokeWidth=4;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="480" y="300" width="180" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Layer 3: AI Services -->
+        <mxCell id="layer3_label" value="Layer 3: AI Services" style="text;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="120" width="200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="class" value="Classification&#xa;:8083" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="850" y="160" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="extract" value="Extraction&#xa;:8084" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="160" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="complete" value="Completeness&#xa;:8086" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="850" y="240" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chunk" value="Semantic Chunking&#xa;:8082" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="240" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rerank" value="Reranking&#xa;:8088" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="850" y="320" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="price" value="Price Suggestion&#xa;:8087" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="320" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Layer 4: Storage -->
+        <mxCell id="layer4_label" value="Layer 4: Storage" style="text;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="420" width="200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="dbgw" value="DB Gateway&#xa;:8081" style="rounded=1;fillColor=#FFEB99;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="850" y="460" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="postgres" value="PostgreSQL&#xa;(Users, History)" style="shape=cylinder;fillColor=#B0E0B0;strokeColor=#333333;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="460" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="opensearch" value="OpenSearch&#xa;(Properties)" style="shape=cylinder;fillColor=#B0E0B0;strokeColor=#333333;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="460" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Layer 5: LLM -->
+        <mxCell id="layer5_label" value="Layer 5: LLM Gateway" style="text;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="850" y="580" width="220" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="coregw" value="Core Gateway&#xa;:8080&#xa;(LiteLLM)" style="rounded=1;fillColor=#FFB366;strokeColor=#333333;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="850" y="620" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="llm" value="Ollama / OpenAI" style="shape=cylinder;fillColor=#B0E0B0;strokeColor=#333333;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="620" width="120" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- 4 Cases -->
+        <mxCell id="cases_label" value="4 Main Cases" style="text;fontSize=16;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="480" width="200" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="case1" value="1. Property Posting&#xa;POST_SALE / POST_RENT" style="rounded=1;fillColor=#E1F5E1;strokeColor=#4CAF50;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="80" y="520" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="case2" value="2. Property Search&#xa;SEARCH_BUY / SEARCH_RENT" style="rounded=1;fillColor=#E3F2FD;strokeColor=#2196F3;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="260" y="520" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="case3" value="3. Price Consultation&#xa;PRICE_CONSULTATION&#xa;⚠️ NOT READY" style="rounded=1;fillColor=#FFE6E6;strokeColor=#E74C3C;strokeWidth=2;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="600" width="160" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="case4" value="4. General Chat&#xa;CHAT" style="rounded=1;fillColor=#FFF9C4;strokeColor=#FBC02D;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="260" y="600" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Legend" style="text;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="520" width="100" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg1" value="━━━ Solid: Direct service call" style="text;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="480" y="560" width="250" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg2" value="┅┅┅ Dashed: Internal flow steps" style="text;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="480" y="590" width="250" height="20" as="geometry" />
+        </mxCell>
+
+        <mxCell id="leg3" value="⬡ Dashed Box: Storage layer" style="text;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="480" y="620" width="250" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Main Connections -->
+        <mxCell id="e1" edge="1" parent="1" source="user" target="webui" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e2" edge="1" parent="1" source="webui" target="orch" style="strokeWidth=3;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Orchestrator to Layer 3 (only solid lines) -->
+        <mxCell id="e3" edge="1" parent="1" source="orch" target="class" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e4" edge="1" parent="1" source="orch" target="extract" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e5" edge="1" parent="1" source="orch" target="complete" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e6" edge="1" parent="1" source="orch" target="chunk" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e7" edge="1" parent="1" source="orch" target="rerank" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e8" edge="1" parent="1" source="orch" target="price" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e9" edge="1" parent="1" source="orch" target="dbgw" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e10" edge="1" parent="1" source="orch" target="coregw" style="strokeWidth=2;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Storage connections -->
+        <mxCell id="e11" edge="1" parent="1" source="dbgw" target="postgres">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e12" edge="1" parent="1" source="dbgw" target="opensearch">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e13" edge="1" parent="1" source="coregw" target="llm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Case connections to Orchestrator -->
+        <mxCell id="e14" edge="1" parent="1" source="case1" target="orch" style="strokeWidth=1;dashed=1;dashPattern=3 3;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e15" edge="1" parent="1" source="case2" target="orch" style="strokeWidth=1;dashed=1;dashPattern=3 3;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e16" edge="1" parent="1" source="case3" target="orch" style="strokeWidth=1;dashed=1;dashPattern=5 5;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e17" edge="1" parent="1" source="case4" target="orch" style="strokeWidth=1;dashed=1;dashPattern=3 3;">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

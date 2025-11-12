@@ -315,7 +315,7 @@ start_application_services() {
         "core-gateway db-gateway auth-service"
         "classification attribute-extraction completeness semantic-chunking"
         "orchestrator rag-service"
-        "open-webui"
+        # "open-webui"  # Temporarily disabled due to build issues
     )
     
     for group in "${service_groups[@]}"; do

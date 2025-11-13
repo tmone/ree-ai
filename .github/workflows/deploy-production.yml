@@ -169,7 +169,7 @@ jobs:
         
         echo "✅ Environment setup completed"
 
-    - name: Deploy to Production Server
+    - name: Deploy Directly on Production Server
       env:
         DEPLOYMENT_ENV: ${{ needs.pre-deploy-checks.outputs.deployment_env }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -179,45 +179,15 @@ jobs:
         OPENSEARCH_PASSWORD: ${{ secrets.OPENSEARCH_PASSWORD || 'Admin123!@#' }}
         PROJECT_NAME: ree-ai
         LOG_LEVEL: INFO
-        PRODUCTION_SERVER_IP: "192.168.1.12"
-        PRODUCTION_SERVER_USER: "tmone"
       run: |
-        echo "🚀 Starting remote deployment to production server..."
-        echo "Target: $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP"
-        
-        # Test SSH connectivity
-        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP "echo 'SSH connection successful'"
-        
-        # Create deployment package
-        echo "📦 Preparing deployment package..."
-        cd /home/tmone/actions-runner-production/_work/ree-ai/
-        tar -czf /tmp/ree-ai-deployment.tar.gz \
-          --exclude='ree-ai/.git' \
-          --exclude='ree-ai/node_modules' \
-          --exclude='ree-ai/__pycache__' \
-          --exclude='ree-ai/*.pyc' \
-          --exclude='ree-ai/temp' \
-          --exclude='ree-ai-old-*' \
-          ree-ai
-        
-        # Copy deployment package to production server
-        echo "📤 Copying files to production server..."
-        scp -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no /tmp/ree-ai-deployment.tar.gz $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP:~/
-        
-        # Execute deployment on production server
-        echo "🚀 Executing deployment on production server..."
-        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP << 'EOF'
-          set -e
+        echo "🚀 Starting direct deployment on production server..."
+        echo "Deployment directory: /home/tmone/actions-runner-production/_work/ree-ai/ree-ai"
 
-          echo "🔄 Extracting deployment package..."
-          cd ~
-          sudo rm -rf ree-ai-production-deploy
-          mkdir -p ree-ai-production-deploy
-          tar -xzf ree-ai-deployment.tar.gz -C ree-ai-production-deploy
-          cd ree-ai-production-deploy/ree-ai
-          
-          echo "⚙️ Setting up environment..."
-          cat > .env << 'ENVEOF'
+        # Navigate to project directory
+        cd /home/tmone/actions-runner-production/_work/ree-ai/ree-ai
+
+        echo "⚙️ Setting up environment file..."
+        cat > .env << 'ENVEOF'
         # REE AI Production Environment Configuration
         POSTGRES_DB=ree_ai
         POSTGRES_USER=ree_ai_user
@@ -258,111 +228,103 @@ jobs:
         
         PROJECT_NAME=ree-ai
         ENVEOF
-          
-          echo "🐳 Running staged deployment with Docker Compose..."
-          export COMPOSE_PROFILES="real"
-          
-          # Stop existing services if any
-          echo "Stopping existing services..."
-          docker-compose down --remove-orphans || true
 
-          # Pull external images first (postgres, redis, opensearch)
-          echo "📦 Pulling external images..."
-          docker-compose pull --ignore-pull-failures postgres redis opensearch || true
+        echo "🐳 Running staged deployment with Docker Compose..."
+        export COMPOSE_PROFILES="real"
 
-          # Build application services with new code
-          echo "🔨 Building application services..."
-          docker-compose build --parallel || {
-            echo "⚠️ Parallel build failed, trying sequential build..."
-            docker-compose build
-          }
+        # Stop existing services if any
+        echo "Stopping existing services..."
+        docker-compose down --remove-orphans || true
 
-          # Stage 1: Start base infrastructure services first
-          echo "🚀 Stage 1: Starting base infrastructure..."
-          docker-compose up -d postgres redis opensearch
-          
-          # Wait for base services to be ready
-          echo "⏳ Waiting for base infrastructure..."
-          sleep 20
-          
-          # Stage 2: Start core services
-          echo "🚀 Stage 2: Starting core services..."
-          docker-compose up -d service-registry core-gateway monitoring-service db-gateway
-          
-          # Wait for core services
-          echo "⏳ Waiting for core services..."
-          sleep 15
-          
-          # Stage 3: Start application services  
-          echo "🚀 Stage 3: Starting application services..."
-          docker-compose up -d auth-service orchestrator rag-service
-          
-          # Wait for app services
-          echo "⏳ Waiting for application services..."
-          sleep 10
-          
-          # Stage 4: Start all remaining services
-          echo "🚀 Stage 4: Starting remaining services..."
-          docker-compose up -d
-          
-          echo "✅ Staged deployment completed!"
-          echo "� Services will continue initializing in the background."
-          
-          # Show initial status
-          echo "📊 Initial service status:"
-          docker-compose ps
-          
-          # Cleanup
-          cd ~
-          rm -f ree-ai-deployment.tar.gz
-        EOF
+        # Pull external images first (postgres, redis, opensearch)
+        echo "📦 Pulling external images..."
+        docker-compose pull --ignore-pull-failures postgres redis opensearch || true
+
+        # Build application services with new code
+        echo "🔨 Building application services..."
+        docker-compose build --parallel || {
+          echo "⚠️ Parallel build failed, trying sequential build..."
+          docker-compose build
+        }
+
+        # Stage 1: Start base infrastructure services first
+        echo "🚀 Stage 1: Starting base infrastructure..."
+        docker-compose up -d postgres redis opensearch
+
+        # Wait for base services to be ready
+        echo "⏳ Waiting for base infrastructure..."
+        sleep 20
+
+        # Stage 2: Start core services
+        echo "🚀 Stage 2: Starting core services..."
+        docker-compose up -d service-registry core-gateway monitoring-service db-gateway
+
+        # Wait for core services
+        echo "⏳ Waiting for core services..."
+        sleep 15
+
+        # Stage 3: Start application services
+        echo "🚀 Stage 3: Starting application services..."
+        docker-compose up -d auth-service orchestrator rag-service
+
+        # Wait for app services
+        echo "⏳ Waiting for application services..."
+        sleep 10
+
+        # Stage 4: Start all remaining services
+        echo "🚀 Stage 4: Starting remaining services..."
+        docker-compose up -d
+
+        echo "✅ Staged deployment completed!"
+        echo "📊 Services will continue initializing in the background."
+
+        # Show initial status
+        echo "📊 Initial service status:"
+        docker-compose ps
 
     - name: Post-deployment verification
-      env:
-        PRODUCTION_SERVER_IP: "192.168.1.12"
-        PRODUCTION_SERVER_USER: "tmone"
       run: |
         echo "🧪 Running post-deployment verification..."
-        
+
+        # Navigate to project directory
+        cd /home/tmone/actions-runner-production/_work/ree-ai/ree-ai
+
         # Quick verification - only wait for critical services
         sleep 15
-        
-        echo "🔍 Testing critical services on production server..."
-        ssh -i ~/.ssh/ree_ai_production_key -o StrictHostKeyChecking=no $PRODUCTION_SERVER_USER@$PRODUCTION_SERVER_IP << 'EOF'
-          cd ~/ree-ai-production-deploy/ree-ai
-          
-          # Quick health checks for critical services only
-          critical_services=(
-            "localhost:8000/health|Service Registry"
-            "localhost:8080/health|Core Gateway"
-            "localhost:3000|Open WebUI"
-          )
-          
-          failed_services=()
-          
-          for service_info in "${critical_services[@]}"; do
-            IFS='|' read -r endpoint name <<< "$service_info"
-            
-            echo "Testing $name..."
-            if timeout 5 curl -f "http://$endpoint" >/dev/null 2>&1; then
-              echo "✅ $name: OK"
-            else
-              echo "⚠️ $name: Not yet ready (services may still be initializing)"
-              failed_services+=("$name")
-            fi
-          done
-          
-          echo "📋 Container status:"
-          docker-compose ps --format "table {{.Service}}\t{{.State}}\t{{.Ports}}"
-          
-          # Don't fail deployment if services are still starting up
-          if [ ${#failed_services[@]} -gt 0 ]; then
-            echo "⚠️ Some services still initializing: ${failed_services[*]}"
-            echo "🕒 Services will be available shortly. Check status manually if needed."
+
+        echo "🔍 Testing critical services..."
+
+        # Quick health checks for critical services only
+        critical_services=(
+          "localhost:8000/health|Service Registry"
+          "localhost:8080/health|Core Gateway"
+          "localhost:3000|Open WebUI"
+        )
+
+        failed_services=()
+
+        for service_info in "${critical_services[@]}"; do
+          IFS='|' read -r endpoint name <<< "$service_info"
+
+          echo "Testing $name..."
+          if timeout 5 curl -f "http://$endpoint" >/dev/null 2>&1; then
+            echo "✅ $name: OK"
           else
-            echo "✅ All critical services are responding"
+            echo "⚠️ $name: Not yet ready (services may still be initializing)"
+            failed_services+=("$name")
           fi
-        EOF
+        done
+
+        echo "📋 Container status:"
+        docker-compose ps --format "table {{.Service}}\t{{.State}}\t{{.Ports}}" || docker-compose ps
+
+        # Don't fail deployment if services are still starting up
+        if [ ${#failed_services[@]} -gt 0 ]; then
+          echo "⚠️ Some services still initializing: ${failed_services[*]}"
+          echo "🕒 Services will be available shortly. Check status manually if needed."
+        else
+          echo "✅ All critical services are responding"
+        fi
 
     - name: Deployment summary
       if: always()
@@ -398,11 +360,11 @@ jobs:
           - Redis: $PRODUCTION_SERVER_IP:6379  
           - OpenSearch: $PRODUCTION_SERVER_IP:9200
         
-        📋 Remote Management:
-          - SSH: ssh tmone@$PRODUCTION_SERVER_IP
-          - View logs: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose logs [service]'
-          - Stop services: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose down'
-          - Service status: ssh tmone@$PRODUCTION_SERVER_IP 'cd ~/ree-ai-production-deploy && sudo docker-compose ps'
+        📋 Local Management:
+          - Deployment directory: /home/tmone/actions-runner-production/_work/ree-ai/ree-ai
+          - View logs: docker-compose logs [service]
+          - Stop services: docker-compose down
+          - Service status: docker-compose ps
         
         Status: ${{ job.status == 'success' && '✅ SUCCESS' || '❌ FAILED' }}
         ==========================================

@@ -412,6 +412,34 @@ services:
       - real
       - all
 
+  # Master Data Management Service (Layer 3)
+  master-data-service:
+    build:
+      context: .
+      dockerfile: services/master_data_service/Dockerfile
+    container_name: ree-ai-master-data-service
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - CRAWLER_PORT=${CRAWLER_PORT:-8092}
+      - EXTRACTION_PORT=${EXTRACTION_PORT:-8084}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8095:8080"
+    depends_on:
+      - postgres
+      - attribute-extraction
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
   # Price Suggestion Service (Layer 3)
   price-suggestion:
     build:

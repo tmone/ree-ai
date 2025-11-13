@@ -96,11 +96,14 @@ jobs:
     - name: Cleanup workspace
       run: |
         echo "🧹 Cleaning up workspace..."
-        # Simple cleanup - just remove the directory if it exists
-        if [ -d "/home/tmone/actions-runner-production/_work/ree-ai/ree-ai" ]; then
-          echo "Removing workspace directory..."
-          rm -rf /home/tmone/actions-runner-production/_work/ree-ai/ree-ai || true
+        # Clean workspace contents but keep the directory structure
+        cd /home/tmone/actions-runner-production/_work/ree-ai
+        if [ -d "ree-ai" ]; then
+          echo "Removing workspace contents..."
+          rm -rf ree-ai/* ree-ai/.* 2>/dev/null || true
         fi
+        # Ensure workspace directory exists
+        mkdir -p ree-ai
         echo "✅ Workspace cleanup completed"
 
     - name: Manual checkout

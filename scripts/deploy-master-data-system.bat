@@ -27,13 +27,13 @@ REM ============================================================================
 
 echo [INFO] Step 1/7: Checking prerequisites...
 
-where docker >nul 2>nul
+where docker >NUL 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Docker is not installed. Please install Docker Desktop first.
     exit /b 1
 )
 
-where docker-compose >nul 2>nul
+where docker-compose >NUL 2>&1
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] docker-compose is not installed.
     exit /b 1
@@ -61,7 +61,7 @@ REM Wait for PostgreSQL
 echo [INFO] Waiting for PostgreSQL to be ready...
 set retries=0
 :wait_postgres
-docker exec %POSTGRES_CONTAINER% pg_isready -U ree_ai_user -d ree_ai >nul 2>nul
+docker exec %POSTGRES_CONTAINER% pg_isready -U ree_ai_user -d ree_ai >NUL 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] PostgreSQL is ready!
     goto postgres_ready
@@ -74,7 +74,7 @@ if %retries% geq %HEALTH_CHECK_RETRIES% (
 )
 
 echo [WARNING] PostgreSQL not ready yet (attempt %retries%/%HEALTH_CHECK_RETRIES%)...
-timeout /t %HEALTH_CHECK_DELAY% /nobreak >nul
+timeout /t %HEALTH_CHECK_DELAY% /nobreak >NUL
 goto wait_postgres
 
 :postgres_ready
@@ -104,7 +104,7 @@ echo [INFO] Step 4/7: Verifying database schema...
 
 for %%t in (cities districts property_types amenities directions furniture_types pending_master_data) do (
     echo [INFO] Checking table '%%t'...
-    docker exec %POSTGRES_CONTAINER% psql -U ree_ai_user -d ree_ai -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='%%t';" >nul
+    docker exec %POSTGRES_CONTAINER% psql -U ree_ai_user -d ree_ai -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='%%t';" >NUL
 )
 
 echo [INFO] Schema verification completed
@@ -131,7 +131,7 @@ REM Wait for Attribute Extraction Service
 echo [INFO] Waiting for Attribute Extraction Service...
 set retries=0
 :wait_extraction
-curl -sf http://localhost:%EXTRACTION_SERVICE_PORT%/health >nul 2>nul
+curl -sf http://localhost:%EXTRACTION_SERVICE_PORT%/health >NUL 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Attribute Extraction Service is ready!
     goto extraction_ready
@@ -144,7 +144,7 @@ if %retries% geq %HEALTH_CHECK_RETRIES% (
 )
 
 echo [WARNING] Service not ready yet (attempt %retries%/%HEALTH_CHECK_RETRIES%)...
-timeout /t %HEALTH_CHECK_DELAY% /nobreak >nul
+timeout /t %HEALTH_CHECK_DELAY% /nobreak >NUL
 goto wait_extraction
 
 :extraction_ready
@@ -153,7 +153,7 @@ REM Wait for Crawler Service
 echo [INFO] Waiting for Crawler Service...
 set retries=0
 :wait_crawler
-curl -sf http://localhost:%CRAWLER_SERVICE_PORT%/health >nul 2>nul
+curl -sf http://localhost:%CRAWLER_SERVICE_PORT%/health >NUL 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Crawler Service is ready!
     goto crawler_ready
@@ -166,7 +166,7 @@ if %retries% geq %HEALTH_CHECK_RETRIES% (
 )
 
 echo [WARNING] Service not ready yet (attempt %retries%/%HEALTH_CHECK_RETRIES%)...
-timeout /t %HEALTH_CHECK_DELAY% /nobreak >nul
+timeout /t %HEALTH_CHECK_DELAY% /nobreak >NUL
 goto wait_crawler
 
 :crawler_ready
@@ -182,7 +182,7 @@ echo [INFO] Step 7/7: Running smoke tests...
 echo [INFO] Testing extraction endpoint...
 curl -sf -X POST http://localhost:%EXTRACTION_SERVICE_PORT%/extract-with-master-data ^
     -H "Content-Type: application/json" ^
-    -d "{\"text\": \"Can ho 2PN Quan 1\", \"confidence_threshold\": 0.7}" >nul
+    -d "{\"text\": \"Can ho 2PN Quan 1\", \"confidence_threshold\": 0.7}" >NUL
 
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Extraction endpoint working
@@ -192,7 +192,7 @@ if %ERRORLEVEL% equ 0 (
 )
 
 echo [INFO] Testing crawler endpoint...
-curl -sf http://localhost:%CRAWLER_SERVICE_PORT%/crawlers >nul
+curl -sf http://localhost:%CRAWLER_SERVICE_PORT%/crawlers >NUL
 
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Crawler endpoint working

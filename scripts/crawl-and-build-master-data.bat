@@ -33,7 +33,7 @@ echo [INFO] Pre-Flight Checks
 echo.
 
 REM Check crawler service
-curl -sf %CRAWLER_SERVICE_URL%/health >nul 2>nul
+curl -sf %CRAWLER_SERVICE_URL%/health >NUL 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Crawler Service is running
 ) else (
@@ -43,7 +43,7 @@ if %ERRORLEVEL% equ 0 (
 )
 
 REM Check extraction service
-curl -sf %EXTRACTION_SERVICE_URL%/health >nul 2>nul
+curl -sf %EXTRACTION_SERVICE_URL%/health >NUL 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [INFO] Extraction Service is running
 ) else (
@@ -82,7 +82,7 @@ if %ERRORLEVEL% equ 0 (
 
 echo.
 echo [INFO] Waiting 10 seconds before next crawl...
-timeout /t 10 /nobreak >nul
+timeout /t 10 /nobreak >NUL
 
 REM =============================================================================
 REM Crawl Mogi
@@ -160,6 +160,6 @@ echo   Crawl completed!
 echo =======================================================================
 
 REM Cleanup temp files
-del crawl_result_batdongsan.json crawl_result_mogi.json pending_items.json 2>nul
+del crawl_result_batdongsan.json crawl_result_mogi.json pending_items.json 2>NUL
 
 exit /b 0

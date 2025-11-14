@@ -214,20 +214,30 @@ class Orchestrator(BaseService):
                         intent = "post_property"
                     elif primary_intent in ["SEARCH_BUY", "SEARCH_RENT"]:
                         intent = "search"
+                    elif primary_intent == "PRICE_CONSULTATION":
+                        intent = "price_consultation"
                     else:
                         intent = "chat"
 
                 # Step 2: Route based on intent (with history context + files)
                 if intent == "post_property":
-                    # NEW: Handle property posting workflow
+                    # Case 1: Handle property posting workflow with reasoning loop
                     response_text = await self._handle_property_posting(
                         request.query,
                         primary_intent=primary_intent,
                         history=history
                     )
                 elif intent == "search":
+                    # Case 2: Handle search with ReAct agent
                     response_text = await self._handle_search(request.query, history=history, files=request.files)
+                elif intent == "price_consultation":
+                    # Case 3: Handle price consultation with reasoning loop
+                    response_text = await self._handle_price_consultation(
+                        request.query,
+                        history=history
+                    )
                 else:
+                    # Case 4: General chat (multimodal or text)
                     response_text = await self._handle_chat(request.query, history=history, files=request.files)
 
                 # Step 3: Save conversation to memory
@@ -236,8 +246,18 @@ class Orchestrator(BaseService):
 
                 execution_time = (time.time() - start_time) * 1000
 
+                # Map intent to IntentType enum
+                if intent == "search":
+                    intent_type = IntentType.SEARCH
+                elif intent == "post_property":
+                    intent_type = IntentType.POST
+                elif intent == "price_consultation":
+                    intent_type = IntentType.PRICE_CONSULTATION
+                else:
+                    intent_type = IntentType.CHAT
+
                 return OrchestrationResponse(
-                    intent=IntentType.SEARCH if intent == "search" else IntentType.CHAT,
+                    intent=intent_type,
                     confidence=0.9,
                     response=response_text,
                     service_used="classification_routing_with_memory_multimodal",
@@ -247,7 +267,8 @@ class Orchestrator(BaseService):
                         "history_messages": len(history),
                         "multimodal": request.has_files(),
                         "files_count": len(request.files) if request.files else 0,
-                        "request_id": request_id  # MEDIUM FIX Bug#1: Include request ID for tracing
+                        "request_id": request_id,  # MEDIUM FIX Bug#1: Include request ID for tracing
+                        "reasoning_loops": 1  # All cases use reasoning loops now
                     }
                 )
 
@@ -1406,10 +1427,17 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
         history: List[Dict] = None
     ) -> str:
         """
-        Handle property posting workflow:
-        1. Extract property attributes from query
+        Handle property posting workflow with INTERNAL REASONING LOOP:
+        Loop 1-5 times within single request:
+        1. Extract property attributes from query (with context)
         2. Assess completeness
-        3. Provide feedback and request missing information
+        3. Decision: Score >= 80? Exit : Continue
+        4. Re-extract with improved context
+
+        Exit conditions:
+        - Score >= 80 (satisfied)
+        - Max 5 iterations
+        - No improvement between iterations
 
         Args:
             query: User query (e.g., "Tôi có nhà cần bán ở Q7, 2PN, 5 tỷ")
@@ -1425,117 +1453,297 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
             # Determine transaction type from intent
             transaction_type = "bán" if primary_intent == "POST_SALE" else "cho thuê"
 
-            # Step 1: Extract property attributes from query
-            self.logger.info(f"{LogEmoji.AI} [Step 1/3] Extracting property attributes...")
+            # INTERNAL REASONING LOOP CONFIGURATION
+            MAX_ITERATIONS = 5
+            COMPLETENESS_THRESHOLD = 80
 
-            extraction_response = await self.http_client.post(
-                f"{self.extraction_url}/extract-query",
-                json={"query": query, "intent": "POST"},
-                timeout=30.0
+            # Initialize loop variables
+            entities = {}
+            completeness_data = {}
+            overall_score = 0
+            previous_score = 0
+
+            # Build conversation context from history once
+            conversation_context = await self._build_conversation_context(history or [])
+
+            self.logger.info(f"{LogEmoji.INFO} [Property Posting Loop] Starting reasoning loop (max {MAX_ITERATIONS} iterations)")
+
+            # REASONING LOOP: Extract → Assess → Decide → Re-extract
+            for iteration in range(1, MAX_ITERATIONS + 1):
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}/{MAX_ITERATIONS}] ========== ITERATION {iteration} ==========")
+
+                # STEP 1: Extract attributes (with enriched context in later iterations)
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}] Step 1: Extracting attributes...")
+
+                # Build extraction prompt with context
+                if iteration == 1:
+                    # First iteration: use original query + conversation context
+                    extraction_prompt = query
+                    if conversation_context:
+                        extraction_prompt = f"{conversation_context}\n\nCurrent query: {query}"
+                else:
+                    # Later iterations: enrich with previous extraction results
+                    extraction_prompt = f"""Conversation context: {conversation_context}
+
+Original query: {query}
+
+Previous extraction (iteration {iteration-1}):
+{json.dumps(entities, ensure_ascii=False, indent=2)}
+
+Previous completeness score: {previous_score}/100
+
+Re-extract property attributes with improved understanding. Focus on filling missing fields and improving accuracy."""
+
+                extraction_response = await self.http_client.post(
+                    f"{self.extraction_url}/extract-query",
+                    json={
+                        "query": extraction_prompt,
+                        "intent": "POST",
+                        "iteration": iteration
+                    },
+                    timeout=30.0
+                )
+
+                if extraction_response.status_code != 200:
+                    self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
+                    if iteration == 1:
+                        return f"Xin lỗi, tôi gặp sự cố khi xử lý thông tin. Bạn có thể mô tả lại chi tiết hơn về {transaction_type} không?"
+                    else:
+                        # Use previous iteration's data
+                        break
+
+                extraction_data = extraction_response.json()
+                entities = extraction_data.get("entities", {})
+                confidence = extraction_data.get("confidence", 0.0)
+
+                self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] Step 1: Extracted {len(entities)} attributes (confidence: {confidence:.1%})")
+
+                # STEP 2: Assess completeness
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}] Step 2: Assessing completeness...")
+
+                property_data = {
+                    "transaction_type": transaction_type,
+                    **entities
+                }
+
+                completeness_response = await self.http_client.post(
+                    f"{self.completeness_url}/assess",
+                    json={"property_data": property_data, "include_examples": False},
+                    timeout=30.0
+                )
+
+                if completeness_response.status_code != 200:
+                    self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Completeness assessment failed")
+                    if iteration == 1:
+                        return f"Xin lỗi, tôi gặp sự cố khi đánh giá thông tin. Bạn có thể cung cấp thêm chi tiết về {transaction_type} không?"
+                    else:
+                        break
+
+                completeness_data = completeness_response.json()
+                overall_score = completeness_data.get("overall_score", 0)
+                interpretation = completeness_data.get("interpretation", "")
+
+                self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] Step 2: Score: {overall_score}/100 ({interpretation})")
+
+                # STEP 3: DECISION - Exit loop?
+                # Exit condition 1: Score >= threshold (SATISFIED)
+                if overall_score >= COMPLETENESS_THRESHOLD:
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] ✅ SATISFIED (score {overall_score} >= {COMPLETENESS_THRESHOLD})")
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting Loop] Exiting loop after {iteration} iteration(s)")
+                    break
+
+                # Exit condition 2: Max iterations reached
+                if iteration == MAX_ITERATIONS:
+                    self.logger.info(f"{LogEmoji.WARNING} [Loop {iteration}] ⚠️ MAX ITERATIONS reached")
+                    self.logger.info(f"{LogEmoji.INFO} [Property Posting Loop] Final score: {overall_score}/100")
+                    break
+
+                # Exit condition 3: No improvement
+                if iteration > 1:
+                    improvement = overall_score - previous_score
+                    self.logger.info(f"{LogEmoji.INFO} [Loop {iteration}] Improvement: +{improvement:.1f} points")
+
+                    if improvement <= 0:
+                        self.logger.info(f"{LogEmoji.WARNING} [Loop {iteration}] ⚠️ NO IMPROVEMENT, stopping early")
+                        self.logger.info(f"{LogEmoji.INFO} [Property Posting Loop] Exiting loop after {iteration} iteration(s)")
+                        break
+
+                # Continue loop: Save score for next iteration comparison
+                previous_score = overall_score
+                self.logger.info(f"{LogEmoji.INFO} [Loop {iteration}] → Continuing to iteration {iteration + 1}")
+
+            # STEP 4: Generate response based on final results
+            self.logger.info(f"{LogEmoji.AI} [Property Posting] Step 3: Generating feedback response...")
+
+            return self._generate_posting_feedback(
+                entities=entities,
+                completeness_data=completeness_data,
+                transaction_type=transaction_type,
+                iterations=iteration
             )
-
-            if extraction_response.status_code != 200:
-                return f"Xin lỗi, tôi gặp sự cố khi xử lý thông tin. Bạn có thể mô tả lại chi tiết hơn về {transaction_type} không?"
-
-            extraction_data = extraction_response.json()
-            entities = extraction_data.get("entities", {})
-            confidence = extraction_data.get("confidence", 0.0)
-
-            self.logger.info(f"{LogEmoji.SUCCESS} [Step 1/3] Extracted {len(entities)} attributes (confidence: {confidence:.1%})")
-
-            # Add transaction type to property data
-            property_data = {
-                "transaction_type": transaction_type,
-                **entities
-            }
-
-            # Step 2: Assess completeness
-            self.logger.info(f"{LogEmoji.AI} [Step 2/3] Assessing completeness...")
-
-            completeness_response = await self.http_client.post(
-                f"{self.completeness_url}/assess",
-                json={"property_data": property_data, "include_examples": False},
-                timeout=30.0
-            )
-
-            if completeness_response.status_code != 200:
-                return f"Xin lỗi, tôi gặp sự cố khi đánh giá thông tin. Bạn có thể cung cấp thêm chi tiết về {transaction_type} không?"
-
-            completeness_data = completeness_response.json()
-
-            overall_score = completeness_data.get("overall_score", 0)
-            interpretation = completeness_data.get("interpretation", "")
-            missing_fields = completeness_data.get("missing_fields", [])
-            suggestions = completeness_data.get("suggestions", [])
-            strengths = completeness_data.get("strengths", [])
-            priority_actions = completeness_data.get("priority_actions", [])
-
-            self.logger.info(f"{LogEmoji.SUCCESS} [Step 2/3] Completeness score: {overall_score:.0f}/100 ({interpretation})")
-
-            # Step 3: Generate response with feedback
-            self.logger.info(f"{LogEmoji.AI} [Step 3/3] Generating feedback response...")
-
-            response_parts = []
-
-            # Greeting and acknowledgment
-            response_parts.append(f"Cảm ơn bạn đã muốn đăng tin {transaction_type} bất động sản! 🏠\n")
-
-            # Show what we understood
-            response_parts.append(f"**Tôi đã hiểu về bất động sản của bạn:**\n")
-            if entities.get("property_type"):
-                response_parts.append(f"- Loại: {entities['property_type']}\n")
-            if entities.get("district"):
-                response_parts.append(f"- Khu vực: {entities['district']}\n")
-            if entities.get("bedrooms"):
-                response_parts.append(f"- Phòng ngủ: {entities['bedrooms']}PN\n")
-            if entities.get("area"):
-                response_parts.append(f"- Diện tích: {entities['area']} m²\n")
-            if entities.get("price"):
-                response_parts.append(f"- Giá: {entities['price']:,.0f} VNĐ\n")
-
-            response_parts.append(f"\n**Đánh giá độ đầy đủ: {overall_score:.0f}/100 - {interpretation}**\n")
-
-            # Show strengths if any
-            if strengths and overall_score >= 60:
-                response_parts.append("\n**Điểm mạnh:**\n")
-                for strength in strengths[:3]:
-                    response_parts.append(f"{strength}\n")
-
-            # Show missing fields
-            if missing_fields:
-                response_parts.append(f"\n**Thông tin còn thiếu ({len(missing_fields)} mục):**\n")
-                for field in missing_fields[:5]:
-                    response_parts.append(f"❌ {field}\n")
-
-            # Show suggestions
-            if suggestions:
-                response_parts.append("\n**Đề xuất cải thiện:**\n")
-                for suggestion in suggestions[:5]:
-                    response_parts.append(f"{suggestion}\n")
-
-            # Show priority actions if score is low
-            if overall_score < 70 and priority_actions:
-                response_parts.append("\n**Cần làm gấp:**\n")
-                for action in priority_actions[:3]:
-                    response_parts.append(f"{action}\n")
-
-            # Call to action based on score
-            if overall_score >= 80:
-                response_parts.append("\n✅ **Tin đăng của bạn đã khá đầy đủ!** Bạn có thể bổ sung thêm một vài thông tin nhỏ rồi đăng được ngay.")
-            elif overall_score >= 60:
-                response_parts.append("\n📝 **Bạn cần bổ sung thêm một số thông tin quan trọng** để tin đăng hấp dẫn hơn.")
-            else:
-                response_parts.append("\n⚠️ **Tin đăng còn thiếu nhiều thông tin quan trọng.** Vui lòng bổ sung để tôi có thể giúp bạn đăng tin.")
-
-            response_parts.append("\n\n💬 Bạn có thể cung cấp thêm thông tin còn thiếu không?")
-
-            return "".join(response_parts)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [Property Posting] Failed: {e}")
             import traceback
             traceback.print_exc()
             return f"Xin lỗi, đã xảy ra lỗi khi xử lý thông tin đăng tin {transaction_type}. Vui lòng thử lại."
+
+    async def _handle_price_consultation(
+        self,
+        query: str,
+        history: List[Dict] = None
+    ) -> str:
+        """
+        Handle price consultation workflow with REASONING LOOP:
+        Loop 1-3 times within single request:
+        1. Extract property info from query
+        2. Market analysis: Query similar properties
+        3. Compare & Validate confidence
+        4. Refine if needed
+
+        Exit conditions:
+        - Confidence >= 0.8 (high confidence)
+        - Max 3 iterations
+        - Sufficient market data (>= 5 similar properties)
+
+        Args:
+            query: User query (e.g., "Căn hộ 2PN Quận 2 giá bao nhiêu?")
+            history: Conversation history
+
+        Returns:
+            Price consultation response with range and insights
+        """
+        try:
+            self.logger.info(f"{LogEmoji.AI} [Price Consultation] Starting price analysis...")
+
+            # REASONING LOOP CONFIGURATION
+            MAX_ITERATIONS = 3
+            CONFIDENCE_THRESHOLD = 0.8
+            MIN_MARKET_SAMPLES = 5
+
+            # Initialize loop variables
+            property_info = {}
+            market_data = []
+            confidence = 0.0
+            previous_confidence = 0.0
+
+            # Build conversation context from history once
+            conversation_context = await self._build_conversation_context(history or [])
+
+            self.logger.info(f"{LogEmoji.INFO} [Price Consultation Loop] Starting reasoning loop (max {MAX_ITERATIONS} iterations)")
+
+            # REASONING LOOP: Extract → Analyze → Validate → Refine
+            for iteration in range(1, MAX_ITERATIONS + 1):
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}/{MAX_ITERATIONS}] ========== ITERATION {iteration} ==========")
+
+                # STEP 1: Extract property information
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}] Step 1: Extracting property info...")
+
+                # Build extraction prompt with context
+                if iteration == 1:
+                    extraction_prompt = query
+                    if conversation_context:
+                        extraction_prompt = f"{conversation_context}\n\nCurrent query: {query}"
+                else:
+                    # Later iterations: enrich with previous results
+                    extraction_prompt = f"""Conversation context: {conversation_context}
+
+Original query: {query}
+
+Previous extraction (iteration {iteration-1}):
+{json.dumps(property_info, ensure_ascii=False, indent=2)}
+
+Previous market data: {len(market_data)} similar properties found
+Previous confidence: {previous_confidence:.1%}
+
+Re-extract property info with improved understanding. Be more specific about location, property type, and features."""
+
+                extraction_response = await self.http_client.post(
+                    f"{self.extraction_url}/extract-query",
+                    json={
+                        "query": extraction_prompt,
+                        "intent": "PRICE_CONSULTATION",
+                        "iteration": iteration
+                    },
+                    timeout=30.0
+                )
+
+                if extraction_response.status_code != 200:
+                    self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
+                    if iteration == 1:
+                        return "Xin lỗi, tôi gặp sự cố khi phân tích yêu cầu của bạn. Bạn có thể mô tả cụ thể hơn về bất động sản cần tư vấn giá không?"
+                    else:
+                        break
+
+                extraction_data = extraction_response.json()
+                property_info = extraction_data.get("entities", {})
+
+                self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] Step 1: Extracted info: {list(property_info.keys())}")
+
+                # STEP 2: Market Analysis - Query similar properties
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}] Step 2: Analyzing market data...")
+
+                market_data = await self._query_similar_properties(property_info)
+
+                self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] Step 2: Found {len(market_data)} similar properties")
+
+                # STEP 3: Compare & Validate - Calculate confidence
+                self.logger.info(f"{LogEmoji.AI} [Loop {iteration}] Step 3: Validating data quality...")
+
+                validation = self._validate_market_data(property_info, market_data)
+                confidence = validation["confidence"]
+                data_quality = validation["data_quality"]
+
+                self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] Step 3: Confidence: {confidence:.1%}, Quality: {data_quality}")
+
+                # DECISION: Exit loop?
+                # Exit condition 1: High confidence
+                if confidence >= CONFIDENCE_THRESHOLD:
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] ✅ HIGH CONFIDENCE (>= {CONFIDENCE_THRESHOLD:.0%})")
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Price Consultation Loop] Exiting loop after {iteration} iteration(s)")
+                    break
+
+                # Exit condition 2: Sufficient market samples
+                if len(market_data) >= MIN_MARKET_SAMPLES and confidence >= 0.6:
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Loop {iteration}] ✅ SUFFICIENT DATA ({len(market_data)} samples, confidence {confidence:.1%})")
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Price Consultation Loop] Exiting loop after {iteration} iteration(s)")
+                    break
+
+                # Exit condition 3: Max iterations
+                if iteration == MAX_ITERATIONS:
+                    self.logger.info(f"{LogEmoji.WARNING} [Loop {iteration}] ⚠️ MAX ITERATIONS reached")
+                    self.logger.info(f"{LogEmoji.INFO} [Price Consultation Loop] Final confidence: {confidence:.1%}")
+                    break
+
+                # Exit condition 4: No improvement
+                if iteration > 1:
+                    improvement = confidence - previous_confidence
+                    self.logger.info(f"{LogEmoji.INFO} [Loop {iteration}] Improvement: +{improvement:.1%}")
+
+                    if improvement <= 0.05:  # Less than 5% improvement
+                        self.logger.info(f"{LogEmoji.WARNING} [Loop {iteration}] ⚠️ MINIMAL IMPROVEMENT, stopping")
+                        self.logger.info(f"{LogEmoji.INFO} [Price Consultation Loop] Exiting loop after {iteration} iteration(s)")
+                        break
+
+                # Continue loop
+                previous_confidence = confidence
+                self.logger.info(f"{LogEmoji.INFO} [Loop {iteration}] → Continuing to iteration {iteration + 1}")
+
+            # STEP 4: Generate consultation response
+            self.logger.info(f"{LogEmoji.AI} [Price Consultation] Step 4: Generating consultation...")
+
+            return self._generate_price_consultation_response(
+                property_info=property_info,
+                market_data=market_data,
+                confidence=confidence,
+                iterations=iteration
+            )
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} [Price Consultation] Failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return "Xin lỗi, đã xảy ra lỗi khi tư vấn giá. Vui lòng thử lại hoặc cung cấp thêm chi tiết về bất động sản."
 
     # ========================================
     # ReAct Agent Pattern Methods
@@ -2405,6 +2613,398 @@ Nearby districts:"""
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Nearby districts inference failed: {e}")
             return []
+
+    # ========================================
+    # Property Posting Helper Methods
+    # ========================================
+
+    async def _build_conversation_context(self, history: List[Dict]) -> str:
+        """
+        Build conversation context string from history for property posting.
+
+        Args:
+            history: List of conversation messages
+
+        Returns:
+            Formatted context string
+        """
+        if not history or len(history) == 0:
+            return ""
+
+        try:
+            context_parts = []
+            # Use last 4 messages for context
+            for msg in history[-4:]:
+                role = msg.get('role', '')
+                content = msg.get('content', '')
+                if role == 'user':
+                    context_parts.append(f"User: {content[:200]}")
+                elif role == 'assistant':
+                    # Only include first 150 chars of assistant response
+                    context_parts.append(f"Assistant: {content[:150]}")
+
+            if context_parts:
+                return "Conversation history:\n" + "\n".join(context_parts)
+            return ""
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to build conversation context: {e}")
+            return ""
+
+    def _generate_posting_feedback(
+        self,
+        entities: Dict,
+        completeness_data: Dict,
+        transaction_type: str,
+        iterations: int
+    ) -> str:
+        """
+        Generate feedback response for property posting.
+
+        Args:
+            entities: Extracted property attributes
+            completeness_data: Completeness assessment data
+            transaction_type: "bán" or "cho thuê"
+            iterations: Number of reasoning loop iterations
+
+        Returns:
+            Formatted feedback response
+        """
+        try:
+            overall_score = completeness_data.get("overall_score", 0)
+            interpretation = completeness_data.get("interpretation", "")
+            missing_fields = completeness_data.get("missing_fields", [])
+            suggestions = completeness_data.get("suggestions", [])
+            strengths = completeness_data.get("strengths", [])
+            priority_actions = completeness_data.get("priority_actions", [])
+
+            response_parts = []
+
+            # Greeting and acknowledgment
+            response_parts.append(f"Cảm ơn bạn đã muốn đăng tin {transaction_type} bất động sản! 🏠\n")
+
+            # Show what we understood
+            response_parts.append(f"**Tôi đã hiểu về bất động sản của bạn:**\n")
+            if entities.get("property_type"):
+                response_parts.append(f"- Loại: {entities['property_type']}\n")
+            if entities.get("district"):
+                response_parts.append(f"- Khu vực: {entities['district']}\n")
+            if entities.get("bedrooms"):
+                response_parts.append(f"- Phòng ngủ: {entities['bedrooms']}PN\n")
+            if entities.get("area"):
+                response_parts.append(f"- Diện tích: {entities['area']} m²\n")
+            if entities.get("price"):
+                response_parts.append(f"- Giá: {entities['price']:,.0f} VNĐ\n")
+
+            # Show completeness score
+            response_parts.append(f"\n**Đánh giá độ đầy đủ: {overall_score:.0f}/100 - {interpretation}**\n")
+
+            # Show processing info (for transparency)
+            if iterations > 1:
+                response_parts.append(f"_(Đã phân tích {iterations} lần để hiểu đầy đủ hơn)_\n")
+
+            # Show strengths if any
+            if strengths and overall_score >= 60:
+                response_parts.append("\n**Điểm mạnh:**\n")
+                for strength in strengths[:3]:
+                    response_parts.append(f"✅ {strength}\n")
+
+            # Show missing fields
+            if missing_fields:
+                response_parts.append(f"\n**Thông tin còn thiếu ({len(missing_fields)} mục):**\n")
+                for field in missing_fields[:5]:
+                    response_parts.append(f"❌ {field}\n")
+
+            # Show suggestions
+            if suggestions:
+                response_parts.append("\n**Đề xuất cải thiện:**\n")
+                for suggestion in suggestions[:5]:
+                    response_parts.append(f"💡 {suggestion}\n")
+
+            # Show priority actions if score is low
+            if overall_score < 70 and priority_actions:
+                response_parts.append("\n**Cần làm gấp:**\n")
+                for action in priority_actions[:3]:
+                    response_parts.append(f"🔥 {action}\n")
+
+            # Call to action based on score
+            if overall_score >= 80:
+                response_parts.append("\n✅ **Tin đăng của bạn đã khá đầy đủ!** Bạn có thể bổ sung thêm một vài thông tin nhỏ rồi đăng được ngay.")
+            elif overall_score >= 60:
+                response_parts.append("\n📝 **Bạn cần bổ sung thêm một số thông tin quan trọng** để tin đăng hấp dẫn hơn.")
+            else:
+                response_parts.append("\n⚠️ **Tin đăng còn thiếu nhiều thông tin quan trọng.** Vui lòng bổ sung để tôi có thể giúp bạn đăng tin.")
+
+            response_parts.append("\n\n💬 Bạn có thể cung cấp thêm thông tin còn thiếu không?")
+
+            return "".join(response_parts)
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to generate posting feedback: {e}")
+            return f"Cảm ơn bạn đã cung cấp thông tin! Vui lòng bổ sung thêm chi tiết về {transaction_type} để tôi có thể hỗ trợ tốt hơn."
+
+    # ========================================
+    # Price Consultation Helper Methods
+    # ========================================
+
+    async def _query_similar_properties(self, property_info: Dict) -> List[Dict]:
+        """
+        Query database for similar properties to analyze market prices.
+
+        Args:
+            property_info: Property attributes (district, property_type, bedrooms, area)
+
+        Returns:
+            List of similar properties with prices
+        """
+        try:
+            # Build search filters from property info
+            filters = {}
+
+            # Required: Location
+            if property_info.get("district"):
+                filters["district"] = property_info["district"]
+            else:
+                # Cannot analyze without location
+                self.logger.warning(f"{LogEmoji.WARNING} No district specified, cannot query market data")
+                return []
+
+            # Optional: Property type
+            if property_info.get("property_type"):
+                filters["property_type"] = property_info["property_type"]
+
+            # Optional: Bedrooms (with ±1 tolerance)
+            if property_info.get("bedrooms"):
+                bedrooms = property_info["bedrooms"]
+                filters["bedrooms_min"] = max(1, bedrooms - 1)
+                filters["bedrooms_max"] = bedrooms + 1
+
+            # Optional: Area (with ±20% tolerance)
+            if property_info.get("area"):
+                area = property_info["area"]
+                filters["area_min"] = area * 0.8
+                filters["area_max"] = area * 1.2
+
+            self.logger.info(f"{LogEmoji.INFO} Querying market data with filters: {filters}")
+
+            # Query DB Gateway for similar properties
+            response = await self.http_client.post(
+                f"{self.db_gateway_url}/search",
+                json={
+                    "filters": filters,
+                    "limit": 50,  # Get more samples for better analysis
+                    "sort_by": "created_at",
+                    "sort_order": "desc"
+                },
+                timeout=30.0
+            )
+
+            if response.status_code != 200:
+                self.logger.warning(f"{LogEmoji.WARNING} Market data query failed: {response.status_code}")
+                return []
+
+            data = response.json()
+            properties = data.get("results", [])
+
+            # Filter out properties without price
+            properties_with_price = [p for p in properties if p.get("price") and p["price"] > 0]
+
+            self.logger.info(f"{LogEmoji.SUCCESS} Found {len(properties_with_price)} properties with prices")
+
+            return properties_with_price
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to query similar properties: {e}")
+            return []
+
+    def _validate_market_data(self, property_info: Dict, market_data: List[Dict]) -> Dict:
+        """
+        Validate market data quality and calculate confidence score.
+
+        Args:
+            property_info: Target property attributes
+            market_data: List of similar properties
+
+        Returns:
+            Validation result with confidence score and quality metrics
+        """
+        try:
+            # Calculate confidence based on multiple factors
+            confidence = 0.0
+            quality_factors = []
+
+            # Factor 1: Sample size (0-40 points)
+            sample_count = len(market_data)
+            if sample_count >= 20:
+                sample_score = 0.4
+                quality_factors.append("Excellent sample size (20+)")
+            elif sample_count >= 10:
+                sample_score = 0.3
+                quality_factors.append("Good sample size (10+)")
+            elif sample_count >= 5:
+                sample_score = 0.2
+                quality_factors.append("Acceptable sample size (5+)")
+            else:
+                sample_score = 0.1
+                quality_factors.append("Small sample size (<5)")
+
+            confidence += sample_score
+
+            # Factor 2: Location match (0-30 points)
+            if property_info.get("district"):
+                district_matches = sum(1 for p in market_data if p.get("district") == property_info["district"])
+                location_score = min(0.3, district_matches / max(sample_count, 1) * 0.3)
+                confidence += location_score
+
+                if location_score >= 0.25:
+                    quality_factors.append("Excellent location match")
+                elif location_score >= 0.15:
+                    quality_factors.append("Good location match")
+
+            # Factor 3: Property type match (0-20 points)
+            if property_info.get("property_type"):
+                type_matches = sum(1 for p in market_data if p.get("property_type") == property_info["property_type"])
+                type_score = min(0.2, type_matches / max(sample_count, 1) * 0.2)
+                confidence += type_score
+
+                if type_score >= 0.15:
+                    quality_factors.append("Good property type match")
+
+            # Factor 4: Bedrooms match (0-10 points)
+            if property_info.get("bedrooms"):
+                target_bedrooms = property_info["bedrooms"]
+                bedroom_matches = sum(1 for p in market_data
+                                     if p.get("bedrooms") and abs(p["bedrooms"] - target_bedrooms) <= 1)
+                bedroom_score = min(0.1, bedroom_matches / max(sample_count, 1) * 0.1)
+                confidence += bedroom_score
+
+            # Quality assessment
+            if confidence >= 0.8:
+                data_quality = "Excellent"
+            elif confidence >= 0.6:
+                data_quality = "Good"
+            elif confidence >= 0.4:
+                data_quality = "Fair"
+            else:
+                data_quality = "Poor"
+
+            return {
+                "confidence": confidence,
+                "data_quality": data_quality,
+                "sample_count": sample_count,
+                "quality_factors": quality_factors
+            }
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to validate market data: {e}")
+            return {
+                "confidence": 0.0,
+                "data_quality": "Unknown",
+                "sample_count": 0,
+                "quality_factors": []
+            }
+
+    def _generate_price_consultation_response(
+        self,
+        property_info: Dict,
+        market_data: List[Dict],
+        confidence: float,
+        iterations: int
+    ) -> str:
+        """
+        Generate price consultation response with insights.
+
+        Args:
+            property_info: Target property attributes
+            market_data: Similar properties data
+            confidence: Confidence score
+            iterations: Number of reasoning iterations
+
+        Returns:
+            Formatted consultation response
+        """
+        try:
+            response_parts = []
+
+            # Greeting
+            response_parts.append("📊 **Tư Vấn Giá Bất Động Sản**\n\n")
+
+            # Show understood property
+            response_parts.append("**Thông tin BDS bạn cần tư vấn:**\n")
+            if property_info.get("property_type"):
+                response_parts.append(f"- Loại: {property_info['property_type']}\n")
+            if property_info.get("district"):
+                response_parts.append(f"- Khu vực: {property_info['district']}\n")
+            if property_info.get("bedrooms"):
+                response_parts.append(f"- Phòng ngủ: {property_info['bedrooms']}PN\n")
+            if property_info.get("area"):
+                response_parts.append(f"- Diện tích: {property_info['area']} m²\n")
+
+            response_parts.append("\n")
+
+            # Calculate price statistics
+            if market_data:
+                prices = [p["price"] for p in market_data if p.get("price")]
+                if prices:
+                    avg_price = sum(prices) / len(prices)
+                    min_price = min(prices)
+                    max_price = max(prices)
+                    median_price = sorted(prices)[len(prices) // 2]
+
+                    response_parts.append(f"**Phân Tích Thị Trường** _(dựa trên {len(prices)} BDS tương tự)_\n")
+                    response_parts.append(f"- Giá trung bình: **{avg_price:,.0f} VNĐ** ({avg_price/1_000_000_000:.2f} tỷ)\n")
+                    response_parts.append(f"- Khoảng giá: {min_price:,.0f} - {max_price:,.0f} VNĐ\n")
+                    response_parts.append(f"- Giá trung vị: {median_price:,.0f} VNĐ ({median_price/1_000_000_000:.2f} tỷ)\n")
+
+                    # Confidence indicator
+                    if confidence >= 0.8:
+                        response_parts.append(f"\n✅ **Độ tin cậy: Cao** ({confidence:.0%})\n")
+                        response_parts.append("Dữ liệu thị trường rất đầy đủ, giá tư vấn chính xác.\n")
+                    elif confidence >= 0.6:
+                        response_parts.append(f"\n📊 **Độ tin cậy: Trung bình** ({confidence:.0%})\n")
+                        response_parts.append("Dữ liệu thị trường khá tốt, giá tư vấn đáng tin cậy.\n")
+                    else:
+                        response_parts.append(f"\n⚠️ **Độ tin cậy: Thấp** ({confidence:.0%})\n")
+                        response_parts.append("Dữ liệu thị trường hạn chế, giá chỉ mang tính tham khảo.\n")
+
+                    # Price per sqm if area is known
+                    if property_info.get("area"):
+                        price_per_sqm = avg_price / property_info["area"]
+                        response_parts.append(f"\n💰 **Giá trên m²:** {price_per_sqm:,.0f} VNĐ/m²\n")
+
+                    # Additional insights
+                    response_parts.append("\n**Nhận Xét:**\n")
+                    if avg_price > median_price * 1.2:
+                        response_parts.append("- Thị trường có xu hướng giá cao\n")
+                    elif avg_price < median_price * 0.8:
+                        response_parts.append("- Thị trường có nhiều BDS giá tốt\n")
+                    else:
+                        response_parts.append("- Giá thị trường khá ổn định\n")
+
+                    if max_price > avg_price * 2:
+                        response_parts.append("- Có phân khúc cao cấp trong khu vực\n")
+
+                else:
+                    response_parts.append("⚠️ Không tìm thấy thông tin giá từ thị trường.\n")
+            else:
+                response_parts.append("⚠️ **Không tìm thấy BDS tương tự trên thị trường.**\n")
+                response_parts.append("Vui lòng cung cấp thêm thông tin hoặc thử khu vực khác.\n")
+
+            # Show processing transparency
+            if iterations > 1:
+                response_parts.append(f"\n_(Đã phân tích {iterations} lần để đảm bảo độ chính xác)_\n")
+
+            response_parts.append("\n💬 Bạn cần thêm thông tin gì về giá thị trường không?")
+
+            return "".join(response_parts)
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to generate price consultation response: {e}")
+            return "Xin lỗi, tôi gặp sự cố khi tạo báo cáo giá. Vui lòng thử lại."
+
+    # ========================================
+    # Search Quality & Response Generation
+    # ========================================
 
     async def _generate_quality_response(self, query: str, results: List[Dict], requirements: Dict, evaluation: Dict) -> str:
         """

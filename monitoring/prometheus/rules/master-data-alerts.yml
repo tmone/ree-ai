@@ -1,0 +1,172 @@
+# Alert Rules for Master Data Extraction System
+
+groups:
+  - name: master_data_extraction
+    interval: 30s
+    rules:
+      # High number of pending master data items
+      - alert: HighPendingMasterDataCount
+        expr: pending_master_data_count{status="pending"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: attribute-extraction
+        annotations:
+          summary: "High number of pending master data items"
+          description: "There are {{ $value }} pending master data items requiring admin review (threshold: 100)"
+
+      # Critical number of pending items
+      - alert: CriticalPendingMasterDataCount
+        expr: pending_master_data_count{status="pending"} > 500
+        for: 5m
+        labels:
+          severity: critical
+          service: attribute-extraction
+        annotations:
+          summary: "Critical number of pending master data items"
+          description: "There are {{ $value }} pending master data items. System may be auto-creating too many duplicates."
+
+      # Slow extraction performance
+      - alert: SlowExtractionPerformance
+        expr: histogram_quantile(0.95, rate(extraction_request_duration_seconds_bucket[5m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: attribute-extraction
+        annotations:
+          summary: "Extraction service is slow"
+          description: "95th percentile extraction time is {{ $value }}s (threshold: 3s)"
+
+      # High error rate
+      - alert: HighExtractionErrorRate
+        expr: rate(extraction_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: critical
+          service: attribute-extraction
+        annotations:
+          summary: "High extraction error rate"
+          description: "Extraction error rate is {{ $value }} errors/sec"
+
+      # Low fuzzy match confidence
+      - alert: LowFuzzyMatchConfidence
+        expr: histogram_quantile(0.50, rate(fuzzy_match_confidence_bucket[5m])) < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          service: attribute-extraction
+        annotations:
+          summary: "Low fuzzy match confidence scores"
+          description: "Median fuzzy match confidence is {{ $value }} (threshold: 0.6). Master data may need review."
+
+      # Missing translations
+      - alert: LowTranslationCoverage
+        expr: (sum(master_data_translations_count{lang="vi"}) / sum(master_data_total_records)) * 100 < 80
+        for: 5m
+        labels:
+          severity: warning
+          service: attribute-extraction
+        annotations:
+          summary: "Low Vietnamese translation coverage"
+          description: "Only {{ $value }}% of master data has Vietnamese translations (threshold: 80%)"
+
+      # Crawler errors
+      - alert: HighCrawlerErrorRate
+        expr: rate(crawler_errors_total[10m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: crawler
+        annotations:
+          summary: "High crawler error rate"
+          description: "Crawler is experiencing {{ $value }} errors/sec on {{ $labels.site }}"
+
+      # Database connection pool exhaustion
+      - alert: DatabaseConnectionPoolExhausted
+        expr: database_connection_pool_available < 2
+        for: 2m
+        labels:
+          severity: critical
+          service: attribute-extraction
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Only {{ $value }} database connections available. Service may start failing."
+
+      # High database query latency
+      - alert: HighDatabaseQueryLatency
+        expr: histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: attribute-extraction
+        annotations:
+          summary: "High database query latency"
+          description: "95th percentile database query time is {{ $value }}s (threshold: 1s)"
+
+  - name: master_data_crawler
+    interval: 60s
+    rules:
+      # No crawler activity detected
+      - alert: NoCrawlerActivity
+        expr: rate(crawler_listings_scraped_total[1h]) == 0
+        for: 2h
+        labels:
+          severity: info
+          service: crawler
+        annotations:
+          summary: "No crawler activity detected"
+          description: "Crawler has not scraped any listings in the past hour. May need to schedule crawl job."
+
+      # Low new attribute discovery rate
+      - alert: LowNewAttributeDiscoveryRate
+        expr: rate(crawler_new_attributes_discovered_total[24h]) < 0.001
+        for: 6h
+        labels:
+          severity: info
+          service: crawler
+        annotations:
+          summary: "Low new attribute discovery rate"
+          description: "Crawler is discovering very few new attributes. Master data may be complete, or crawler needs tuning."
+
+  - name: system_health
+    interval: 30s
+    rules:
+      # Service down
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "Service {{ $labels.job }} has been down for more than 1 minute"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value }}% (threshold: 90%)"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value }}% (threshold: 80%)"
+
+      # Disk space low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Only {{ $value }}% disk space remaining (threshold: 20%)"

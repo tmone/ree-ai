@@ -9,6 +9,10 @@ Handles SEARCH intent:
 import time
 from typing import Dict, Any, List, Optional
 from services.orchestrator.handlers.base_handler import BaseHandler
+from services.orchestrator.utils.extraction_helpers import (
+    build_filters_from_extraction_response,
+    extract_entities_for_logging
+)
 from shared.utils.logger import LogEmoji
 
 
@@ -44,19 +48,40 @@ class SearchHandler(BaseHandler):
         start_time = time.time()
         self.log_handler_start(request_id, "SearchHandler", query)
 
-        # STEP 1: Extract attributes from query
-        self.logger.info(f"{LogEmoji.AI} [{request_id}] Extracting search attributes...")
+        # STEP 1: Extract attributes from query using enhanced pipeline
+        self.logger.info(f"{LogEmoji.AI} [{request_id}] Extracting search attributes with master data...")
 
         try:
             extraction_result = await self.call_service(
                 "attribute_extraction",
-                "/extract",
-                json_data={"query": query}
+                "/extract-query-enhanced",
+                json_data={
+                    "query": query,
+                    "intent": "SEARCH"
+                }
             )
 
-            extracted_attrs = extraction_result.get("attributes", {})
+            # NEW: Extract from 3-tier response structure (raw/mapped/new)
+            raw_attrs = extraction_result.get("raw", {})
+            mapped_attrs = extraction_result.get("mapped", [])
+            new_attrs = extraction_result.get("new", [])
+            confidence = extraction_result.get("confidence", 0.0)
+
             self.logger.info(
-                f"{LogEmoji.SUCCESS} [{request_id}] Extracted attributes: {extracted_attrs}"
+                f"{LogEmoji.SUCCESS} [{request_id}] Extraction complete: "
+                f"{len(mapped_attrs)} mapped, {len(new_attrs)} new, confidence: {confidence:.2f}"
+            )
+
+            # Build filters using helper function
+            extracted_attrs = build_filters_from_extraction_response(extraction_result)
+
+            # Log in human-readable format
+            entities_log = extract_entities_for_logging(extraction_result)
+            self.logger.info(
+                f"{LogEmoji.INFO} [{request_id}] Extracted entities: {entities_log}"
+            )
+            self.logger.info(
+                f"{LogEmoji.INFO} [{request_id}] Built filters: {extracted_attrs}"
             )
 
         except Exception as e:

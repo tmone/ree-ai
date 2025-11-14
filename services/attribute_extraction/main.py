@@ -676,14 +676,14 @@ Intent: {intent or "SEARCH"}
         3. Value ranges and patterns from DB
         """
         # Build enhanced prompt
-        prompt = self._build_enhanced_prompt(query, nlp_entities, rag_context, intent)
+        prompt = await self._build_enhanced_prompt(query, nlp_entities, rag_context, intent)
 
         # Call LLM
         entities = await self._call_llm_for_extraction(prompt)
 
         return entities
 
-    def _build_enhanced_prompt(
+    async def _build_enhanced_prompt(
         self,
         query: str,
         nlp_entities: Dict[str, Any],
@@ -691,8 +691,36 @@ Intent: {intent or "SEARCH"}
         intent: Optional[str] = None
     ) -> str:
         """
-        Build enhanced prompt with NLP hints and RAG context.
+        Build enhanced prompt with NLP hints, RAG context, and dynamic master data.
         """
+        # Fetch master data dynamically (with caching)
+        if not hasattr(self, '_master_data_cache'):
+            self.logger.info(f"{LogEmoji.INFO} Fetching master data from database...")
+            try:
+                property_types = await self.master_data_validator.get_property_types_list()
+                districts = await self.master_data_validator.get_districts_list()
+                amenities = await self.master_data_validator.get_amenities_list()
+
+                # Cache for performance
+                self._master_data_cache = {
+                    'property_types': property_types,
+                    'districts': districts,
+                    'amenities': amenities
+                }
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Master data cached: "
+                    f"{len(property_types)} property types, "
+                    f"{len(districts)} districts, "
+                    f"{len(amenities)} amenities"
+                )
+            except Exception as e:
+                self.logger.warning(f"{LogEmoji.WARNING} Failed to fetch master data: {e}")
+                self._master_data_cache = {
+                    'property_types': [],
+                    'districts': [],
+                    'amenities': []
+                }
+
         # Get RAG components
         examples = rag_context.get("examples", [])
         patterns = rag_context.get("patterns", {})
@@ -732,9 +760,39 @@ Intent: {intent or "SEARCH"}
         if nlp_entities:
             nlp_hints_text = f"💡 NLP PRE-EXTRACTED HINTS:\n{json.dumps(nlp_entities, indent=2, ensure_ascii=False)}\n"
 
+        # Format master data dynamically
+        master_data_cache = self._master_data_cache
+
+        # Property types from master data (multilingual)
+        property_types_text = "**1. PROPERTY TYPE** (from master data):\n"
+        if master_data_cache['property_types']:
+            prop_types_vi = [pt['name_vi'] for pt in master_data_cache['property_types'][:10]]
+            prop_types_en = [pt['name_en'] for pt in master_data_cache['property_types'][:10]]
+            property_types_text += f"- property_type: {' | '.join(prop_types_vi)}\n"
+            property_types_text += f"  (English: {' | '.join(prop_types_en)})\n"
+        else:
+            property_types_text += "- property_type: (use text from query)\n"
+
+        # Districts from master data (multilingual)
+        districts_text = "**2. LOCATION** (from master data):\n"
+        if master_data_cache['districts']:
+            districts_sample = [d['name_vi'] for d in master_data_cache['districts'][:15]]
+            districts_text += f"- district: {', '.join(districts_sample)}, ...\n"
+            districts_text += "  (Chuẩn hóa theo master data, có hỗ trợ fuzzy matching)\n"
+        else:
+            districts_text += "- district: Quận/Huyện\n"
+        districts_text += "- ward: Phường (nếu có)\n"
+        districts_text += "- project_name: Tên dự án\n"
+
+        # Amenities from master data
+        amenities_text = ""
+        if master_data_cache['amenities']:
+            amenities_sample = [a['name_vi'] for a in master_data_cache['amenities'][:10]]
+            amenities_text = f"  Available amenities: {', '.join(amenities_sample)}, ...\n"
+
         prompt = f"""Bạn là chuyên gia trích xuất thông tin bất động sản.
 
-🎯 NHIỆM VỤ: Trích xuất entities từ query, SỬ DỤNG HINTS từ NLP và EXAMPLES từ database.
+🎯 NHIỆM VỤ: Trích xuất entities từ query, SỬ DỤNG HINTS từ NLP, EXAMPLES từ database, và MASTER DATA.
 
 {nlp_hints_text}
 
@@ -747,38 +805,33 @@ Intent: {intent or "SEARCH"}
 🔍 EXTRACTION RULES:
 1. **USE NLP hints as starting point** - Ưu tiên thông tin từ NLP layer
 2. **FOLLOW patterns from real examples** - Tham khảo format từ DB
-3. **STAY within typical value ranges** - Kiểm tra với ranges từ DB
-4. **DON'T hallucinate** - Chỉ trích xuất thông tin có trong query
-5. **Chuẩn hóa format** - Sử dụng format giống examples
+3. **MATCH against master data** - Sử dụng giá trị chuẩn từ master data
+4. **STAY within typical value ranges** - Kiểm tra với ranges từ DB
+5. **DON'T hallucinate** - Chỉ trích xuất thông tin có trong query
+6. **Multilingual support** - Hỗ trợ vi/en/th/ja (fuzzy matching sẽ xử lý)
 
 📊 ENTITIES CẦN TRÍCH XUẤT (chỉ trích xuất những gì có trong câu hỏi):
 
-**1. PROPERTY TYPE**
-- property_type: căn hộ | nhà phố | biệt thự | đất | chung cư | văn phòng
+{property_types_text}
 
-**2. LOCATION**
-- district: Quận/Huyện (chuẩn hóa như examples)
-- ward: Phường (nếu có)
-- project_name: Tên dự án
+{districts_text}
 
-**3. PHYSICAL ATTRIBUTES**
-- bedrooms: Số phòng ngủ
+**3. PHYSICAL ATTRIBUTES**:
+- bedrooms: Số phòng ngủ (nullable cho đất/parking/commercial)
 - bathrooms: Số phòng tắm
 - area: Diện tích (m²)
 - floors: Số tầng
 
-**4. PRICE**
-- price: Giá cụ thể (VND)
+**4. PRICE**:
+- price: Giá cụ thể (VND) - Hỗ trợ cả dấu chấm và phẩy
 - min_price: Giá tối thiểu (VND)
 - max_price: Giá tối đa (VND)
 
-**5. FEATURES & AMENITIES**
-- furniture: full | cơ bản | không
-- direction: Hướng nhà
-- parking: true/false
-- elevator: true/false
-- swimming_pool: true/false
-- gym: true/false
+**5. FEATURES & AMENITIES**:
+- furniture: full | cơ bản | không | cao cấp
+- direction: Đông | Tây | Nam | Bắc | Đông Nam | Đông Bắc | Tây Nam | Tây Bắc
+{amenities_text}
+- parking, elevator, swimming_pool, gym, security: true/false
 
 📥 USER QUERY:
 {query}

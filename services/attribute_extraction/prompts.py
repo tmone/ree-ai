@@ -86,22 +86,14 @@ class AttributeExtractionPrompts:
 
 **3. PHYSICAL ATTRIBUTES**
 - area: Diện tích (m²) - Extract số, bỏ chữ
-  * "70m²" → 70
-  * "100m2" → 100
-  * "5x20" → 100 (nhân ra)
-- bedrooms: Số phòng ngủ
-  * "2PN" → 2
-  * "3 phòng ngủ" → 3
+- bedrooms: Số phòng ngủ (nullable cho đất/parking/commercial)
 - bathrooms: Số phòng tắm/WC
 - floors: Số tầng
-- facade_width: Mặt tiền (m) - "MT 5m" → 5
-- alley_width: Hẻm rộng (m) - "Hẻm 4m" → 4
+- facade_width: Mặt tiền (m)
+- alley_width: Hẻm rộng (m)
 
 **4. PRICE**
-- price: Giá (VND) - Chuẩn hóa về số
-  * "2.5 tỷ" → 2500000000
-  * "25 triệu/tháng" → 25000000
-  * "500 triệu" → 500000000
+- price: Giá (VND) - Chuẩn hóa về số (hỗ trợ cả dấu chấm và phẩy)
 - price_per_m2: Giá/m² - Tự tính nếu có đủ thông tin
 - deposit: Tiền cọc (VND)
 

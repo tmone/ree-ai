@@ -1,0 +1,38 @@
+====================================================================================================
+MASTER DATA ANALYSIS - What fields do we need for property posting?
+====================================================================================================
+
+1. PROPERTY TYPES (Loại BDS):
+Traceback (most recent call last):
+  File "D:\Crastonic\ree-ai\scripts\analyze_master_data.py", line 146, in <module>
+    asyncio.run(analyze_master_data())
+  File "C:\Program Files\Python311\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\Python311\Lib\asyncio\base_events.py", line 653, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "D:\Crastonic\ree-ai\scripts\analyze_master_data.py", line 28, in analyze_master_data
+    types = await conn.fetch('SELECT code, name_vi, name_en FROM ree_common.property_types LIMIT 15')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dev\AppData\Roaming\Python\Python311\site-packages\asyncpg\connection.py", line 690, in fetch
+    return await self._execute(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dev\AppData\Roaming\Python\Python311\site-packages\asyncpg\connection.py", line 1864, in _execute
+    result, _ = await self.__execute(
+                ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dev\AppData\Roaming\Python\Python311\site-packages\asyncpg\connection.py", line 1961, in __execute
+    result, stmt = await self._do_execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dev\AppData\Roaming\Python\Python311\site-packages\asyncpg\connection.py", line 2004, in _do_execute
+    stmt = await self._get_statement(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\dev\AppData\Roaming\Python\Python311\site-packages\asyncpg\connection.py", line 432, in _get_statement
+    statement = await self._protocol.prepare(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "asyncpg\\protocol\\protocol.pyx", line 165, in prepare
+asyncpg.exceptions.UndefinedColumnError: column "name_vi" does not exist
+HINT:  Perhaps you meant to reference the column "property_types.name".

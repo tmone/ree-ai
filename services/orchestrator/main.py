@@ -1507,7 +1507,8 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if extraction_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
                     if iteration == 1:
-                        return f"Xin lỗi, tôi gặp sự cố khi xử lý thông tin. Bạn có thể mô tả lại chi tiết hơn về {transaction_type} không?"
+                        language = self._detect_language(history)
+                        return self._generate_simple_fallback_feedback({}, 0, ["extraction_error"], language)
                     else:
                         # Use previous iteration's data
                         break
@@ -1535,7 +1536,8 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if completeness_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Completeness assessment failed")
                     if iteration == 1:
-                        return f"Xin lỗi, tôi gặp sự cố khi đánh giá thông tin. Bạn có thể cung cấp thêm chi tiết về {transaction_type} không?"
+                        language = self._detect_language(history)
+                        return self._generate_simple_fallback_feedback({}, 0, ["completeness_error"], language)
                     else:
                         break
 
@@ -1573,20 +1575,38 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 self.logger.info(f"{LogEmoji.INFO} [Loop {iteration}] → Continuing to iteration {iteration + 1}")
 
             # STEP 4: Generate response based on final results
-            self.logger.info(f"{LogEmoji.AI} [Property Posting] Step 3: Generating feedback response...")
+            self.logger.info(f"{LogEmoji.AI} [Property Posting] Step 3: Generating response...")
 
-            return self._generate_posting_feedback(
+            # Check if user confirms completion (conversation ending logic)
+            is_user_confirming = self._detect_completion_confirmation(query, history)
+
+            # Ending Condition: High completeness + User confirmation
+            if overall_score >= 75 and is_user_confirming:
+                self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Conversation ending: Score {overall_score}/100 + User confirmed")
+                return await self._generate_completion_message(
+                    entities=entities,
+                    overall_score=overall_score,
+                    history=history
+                )
+
+            # Otherwise: Generate regular feedback with improvement suggestions
+            self.logger.info(f"{LogEmoji.AI} [Property Posting] Generating feedback (Score: {overall_score}/100, Confirmed: {is_user_confirming})")
+            return await self._generate_posting_feedback(
                 entities=entities,
                 completeness_data=completeness_data,
                 transaction_type=transaction_type,
-                iterations=iteration
+                iterations=iteration,
+                history=history,
+                query=query
             )
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [Property Posting] Failed: {e}")
             import traceback
             traceback.print_exc()
-            return f"Xin lỗi, đã xảy ra lỗi khi xử lý thông tin đăng tin {transaction_type}. Vui lòng thử lại."
+            # Use fallback with language detection for error messages
+            language = self._detect_language(history)
+            return self._generate_simple_fallback_feedback({}, 0, [], language)
 
     async def _handle_price_consultation(
         self,
@@ -2651,26 +2671,247 @@ Nearby districts:"""
             self.logger.error(f"{LogEmoji.ERROR} Failed to build conversation context: {e}")
             return ""
 
-    def _generate_posting_feedback(
+    def _detect_user_frustration(self, query: str, history: List[Dict] = None) -> bool:
+        """
+        Detect if user is showing frustration signals.
+
+        Args:
+            query: Current user query
+            history: Conversation history
+
+        Returns:
+            True if user shows frustration, False otherwise
+        """
+        try:
+            query_lower = query.lower()
+
+            # Frustration signals (multilingual)
+            frustration_signals = [
+                # Vietnamese
+                "ủa", "ơi", "sao", "không đúng", "sai rồi", "không phải",
+                "kiểm tra lại", "xem lại", "vẫn", "vẫn còn", "vẫn sai",
+                "hệ thống bị lỗi", "không hoạt động", "không work", "lỗi",
+                "sao lại", "tại sao", "không hiểu", "không đúng rồi",
+                # English
+                "what", "wrong", "incorrect", "error", "bug", "not working",
+                "doesn't work", "still wrong", "check again", "not right",
+                "system error", "broken", "why", "again",
+                # Thai
+                "ผิด", "ไม่ถูก", "ทำไม", "อีกแล้ว", "ไม่ทำงาน",
+                # Japanese
+                "違う", "間違い", "なぜ", "エラー", "おかしい"
+            ]
+
+            # Check for frustration signals
+            if any(signal in query_lower for signal in frustration_signals):
+                return True
+
+            return False
+
+        except Exception as e:
+            self.logger.warning(f"{LogEmoji.WARNING} Frustration detection failed: {e}")
+            return False
+
+    def _detect_completion_confirmation(self, query: str, history: List[Dict] = None) -> bool:
+        """
+        Detect if user is confirming completion or wants to end conversation.
+
+        Args:
+            query: Current user query
+            history: Conversation history
+
+        Returns:
+            True if user confirms completion, False otherwise
+        """
+        try:
+            query_lower = query.lower()
+
+            # Confirmation signals (multilingual)
+            confirmation_keywords = [
+                # Vietnamese
+                "cảm ơn", "cam on", "ok", "okay", "được rồi", "duoc roi",
+                "xong", "đủ rồi", "du roi", "hoàn thành", "hoan thanh",
+                "đăng luôn", "dang luon", "đăng đi", "dang di",
+                # English
+                "thank you", "thanks", "that's enough", "enough", "complete",
+                "done", "finish", "post it", "submit",
+                # Thai
+                "ขอบคุณ", "เสร็จแล้ว", "พอแล้ว", "เอาละ",
+                # Japanese
+                "ありがとう", "終わり", "完了", "十分"
+            ]
+
+            # Check if user confirms
+            if any(keyword in query_lower for keyword in confirmation_keywords):
+                return True
+
+            return False
+
+        except Exception as e:
+            self.logger.warning(f"{LogEmoji.WARNING} Completion confirmation detection failed: {e}")
+            return False
+
+    def _detect_language(self, history: List[Dict] = None, entities: Dict = None) -> str:
+        """
+        Detect user's language from conversation history or entities.
+
+        Args:
+            history: Conversation history
+            entities: Extracted entities
+
+        Returns:
+            Language code: 'vi', 'en', 'th', 'ja'
+        """
+        try:
+            # Check recent messages for language indicators
+            if history:
+                recent_text = " ".join([msg.get("content", "") for msg in history[-3:] if msg.get("role") == "user"])
+
+                # Vietnamese indicators (diacritics)
+                if any(c in recent_text for c in "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ"):
+                    return "vi"
+
+                # Thai indicators
+                if any(c in recent_text for c in "กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ"):
+                    return "th"
+
+                # Japanese indicators
+                if any(c in recent_text for c in "ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔ"):
+                    return "ja"
+
+            # Default to English if no clear indicators
+            return "en"
+
+        except Exception as e:
+            self.logger.warning(f"{LogEmoji.WARNING} Language detection failed: {e}, defaulting to 'en'")
+            return "en"
+
+    async def _generate_completion_message(
+        self,
+        entities: Dict,
+        overall_score: float,
+        history: List[Dict] = None
+    ) -> str:
+        """
+        Generate completion/closing message when posting is ready.
+
+        Args:
+            entities: Final extracted entities
+            overall_score: Final completeness score
+            history: Conversation history for language detection
+
+        Returns:
+            Completion message in user's language
+        """
+        try:
+            language = self._detect_language(history, entities)
+
+            # Build entity summary
+            entity_summary = []
+            if entities.get("property_type"):
+                entity_summary.append(f"Property Type: {entities['property_type']}")
+            if entities.get("district"):
+                entity_summary.append(f"Location: {entities['district']}")
+            if entities.get("bedrooms"):
+                entity_summary.append(f"Bedrooms: {entities['bedrooms']}")
+            if entities.get("area"):
+                entity_summary.append(f"Area: {entities['area']} m²")
+            if entities.get("price"):
+                entity_summary.append(f"Price: {entities['price']:,.0f} VND")
+
+            entities_text = "\n".join(entity_summary) if entity_summary else "Property details provided"
+
+            # Build prompt for completion message
+            prompt = f"""You are a helpful real estate assistant. The user has provided all necessary information for their property posting.
+
+**USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
+
+**PROPERTY INFORMATION**:
+{entities_text}
+
+**COMPLETENESS SCORE**: {overall_score}/100 (Complete!)
+
+**YOUR TASK**:
+Generate a warm, congratulatory closing message in **{language} language** that:
+1. Congratulates user on providing complete information ✅
+2. Briefly summarizes the key property details
+3. Informs them the posting is ready to be published
+4. Thanks them for using the service
+5. Offers to help with anything else if needed
+
+**FORMAT REQUIREMENTS**:
+- Be warm and encouraging
+- Use emojis appropriately: ✅ 🎉 🏠 💚
+- Keep it concise (3-4 sentences max)
+- CRITICAL: Write EVERYTHING in {language} language!
+
+**OUTPUT** (in {language} language):"""
+
+            # Call LLM
+            self.logger.info(f"{LogEmoji.INFO} Generating completion message in '{language}'...")
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/v1/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 300,
+                    "temperature": 0.8
+                },
+                timeout=15.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                message = data.get("content", "").strip()
+                if message:
+                    return message
+
+            # Fallback
+            fallback_templates = {
+                "vi": f"✅ Hoàn tất! Thông tin đăng tin đã đầy đủ ({overall_score:.0f}/100). 🎉 Tin của bạn đã sẵn sàng đăng tải!",
+                "en": f"✅ Complete! Your posting information is ready ({overall_score:.0f}/100). 🎉 Your property is ready to be published!",
+                "th": f"✅ เสร็จสิ้น! ข้อมูลของคุณครบถ้วน ({overall_score:.0f}/100). 🎉 พร้อมเผยแพร่แล้ว!",
+                "ja": f"✅ 完了！情報は完全です ({overall_score:.0f}/100). 🎉 投稿の準備ができました！"
+            }
+            return fallback_templates.get(language, fallback_templates["en"])
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Failed to generate completion message: {e}")
+            return "✅ Complete! Your property posting is ready."
+
+    async def _generate_posting_feedback(
         self,
         entities: Dict,
         completeness_data: Dict,
         transaction_type: str,
-        iterations: int
+        iterations: int,
+        history: List[Dict] = None,
+        query: str = ""
     ) -> str:
         """
-        Generate feedback response for property posting.
+        Generate multilingual feedback response for property posting using LLM.
 
         Args:
             entities: Extracted property attributes
             completeness_data: Completeness assessment data
-            transaction_type: "bán" or "cho thuê"
+            transaction_type: "bán"/"sale" or "cho thuê"/"rent"
             iterations: Number of reasoning loop iterations
+            history: Conversation history for language detection
+            query: Current user query for frustration detection
 
         Returns:
-            Formatted feedback response
+            Formatted feedback response in user's language
         """
         try:
+            # Detect user's language and frustration
+            language = self._detect_language(history, entities)
+            is_frustrated = self._detect_user_frustration(query, history) if query else False
+
+            if is_frustrated:
+                self.logger.info(f"{LogEmoji.WARNING} User frustration detected - adjusting response tone")
+
+            # Prepare data for LLM
             overall_score = completeness_data.get("overall_score", 0)
             interpretation = completeness_data.get("interpretation", "")
             missing_fields = completeness_data.get("missing_fields", [])
@@ -2678,70 +2919,152 @@ Nearby districts:"""
             strengths = completeness_data.get("strengths", [])
             priority_actions = completeness_data.get("priority_actions", [])
 
-            response_parts = []
-
-            # Greeting and acknowledgment
-            response_parts.append(f"Cảm ơn bạn đã muốn đăng tin {transaction_type} bất động sản! 🏠\n")
-
-            # Show what we understood
-            response_parts.append(f"**Tôi đã hiểu về bất động sản của bạn:**\n")
+            # Build structured data summary
+            entities_summary = []
             if entities.get("property_type"):
-                response_parts.append(f"- Loại: {entities['property_type']}\n")
+                entities_summary.append(f"Property Type: {entities['property_type']}")
             if entities.get("district"):
-                response_parts.append(f"- Khu vực: {entities['district']}\n")
+                entities_summary.append(f"Location: {entities['district']}")
             if entities.get("bedrooms"):
-                response_parts.append(f"- Phòng ngủ: {entities['bedrooms']}PN\n")
+                entities_summary.append(f"Bedrooms: {entities['bedrooms']}")
             if entities.get("area"):
-                response_parts.append(f"- Diện tích: {entities['area']} m²\n")
+                entities_summary.append(f"Area: {entities['area']} m²")
             if entities.get("price"):
-                response_parts.append(f"- Giá: {entities['price']:,.0f} VNĐ\n")
+                entities_summary.append(f"Price: {entities['price']:,.0f} VND")
 
-            # Show completeness score
-            response_parts.append(f"\n**Đánh giá độ đầy đủ: {overall_score:.0f}/100 - {interpretation}**\n")
+            entities_text = "\n".join(entities_summary) if entities_summary else "No specific details yet"
 
-            # Show processing info (for transparency)
-            if iterations > 1:
-                response_parts.append(f"_(Đã phân tích {iterations} lần để hiểu đầy đủ hơn)_\n")
+            # Build LLM prompt for multilingual response generation
+            frustration_note = ""
+            if is_frustrated:
+                frustration_note = f"""
+**⚠️ USER FRUSTRATION DETECTED**:
+The user appears frustrated or confused. Adjust your response to:
+- Start with an apology and acknowledgment: "Sorry for any confusion!"
+- Clearly show what data you currently have recorded
+- Ask them to correct any incorrect information
+- Be extra patient and helpful
+- Use reassuring tone"""
 
-            # Show strengths if any
-            if strengths and overall_score >= 60:
-                response_parts.append("\n**Điểm mạnh:**\n")
-                for strength in strengths[:3]:
-                    response_parts.append(f"✅ {strength}\n")
+            prompt = f"""You are a helpful real estate assistant providing feedback on a property posting.
 
-            # Show missing fields
-            if missing_fields:
-                response_parts.append(f"\n**Thông tin còn thiếu ({len(missing_fields)} mục):**\n")
-                for field in missing_fields[:5]:
-                    response_parts.append(f"❌ {field}\n")
+**USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
 
-            # Show suggestions
-            if suggestions:
-                response_parts.append("\n**Đề xuất cải thiện:**\n")
-                for suggestion in suggestions[:5]:
-                    response_parts.append(f"💡 {suggestion}\n")
+**LANGUAGE CODES**:
+- vi: Vietnamese (Tiếng Việt)
+- en: English
+- th: Thai (ภาษาไทย)
+- ja: Japanese (日本語)
 
-            # Show priority actions if score is low
-            if overall_score < 70 and priority_actions:
-                response_parts.append("\n**Cần làm gấp:**\n")
-                for action in priority_actions[:3]:
-                    response_parts.append(f"🔥 {action}\n")
+**TRANSACTION TYPE**: {transaction_type}
 
-            # Call to action based on score
-            if overall_score >= 80:
-                response_parts.append("\n✅ **Tin đăng của bạn đã khá đầy đủ!** Bạn có thể bổ sung thêm một vài thông tin nhỏ rồi đăng được ngay.")
-            elif overall_score >= 60:
-                response_parts.append("\n📝 **Bạn cần bổ sung thêm một số thông tin quan trọng** để tin đăng hấp dẫn hơn.")
-            else:
-                response_parts.append("\n⚠️ **Tin đăng còn thiếu nhiều thông tin quan trọng.** Vui lòng bổ sung để tôi có thể giúp bạn đăng tin.")
+**EXTRACTED INFORMATION**:
+{entities_text}
 
-            response_parts.append("\n\n💬 Bạn có thể cung cấp thêm thông tin còn thiếu không?")
+**COMPLETENESS ASSESSMENT**:
+- Overall Score: {overall_score}/100
+- Interpretation: {interpretation}
+- Missing Fields ({len(missing_fields)}): {', '.join(missing_fields) if missing_fields else 'None'}
+- Strengths ({len(strengths)}): {', '.join(strengths) if strengths else 'None'}
+- Suggestions ({len(suggestions)}): {', '.join(suggestions) if suggestions else 'None'}
+- Priority Actions ({len(priority_actions)}): {', '.join(priority_actions) if priority_actions else 'None'}
 
-            return "".join(response_parts)
+**PROCESSING INFO**:
+- Analysis Iterations: {iterations}
+{frustration_note}
+
+**YOUR TASK**:
+Generate a friendly, structured response in **{language} language** that includes:
+
+1. **Greeting & Acknowledgment**: Thank the user for wanting to post a property{' (with apology if frustrated)' if is_frustrated else ''}
+2. **Summary**: Show what information you understood (property type, location, size, price, etc.)
+3. **Completeness Score**: Display the score (X/100) and interpretation
+4. **Strengths**: List 2-3 strong points (if score >= 60)
+5. **Missing Information**: List missing required fields with ❌ emoji
+6. **Suggestions**: Provide 2-3 improvement suggestions with 💡 emoji
+7. **Priority Actions**: If score < 70, list urgent items with 🔥 emoji
+8. **Call to Action**:
+   - If score >= 80: Encourage to add final touches
+   - If score 60-79: Ask to add important details
+   - If score < 60: Request essential information
+9. **Closing Question**: Ask if user can provide missing information{' or corrections' if is_frustrated else ''}
+
+**FORMAT REQUIREMENTS**:
+- Use markdown formatting (**, -, emojis)
+- Be warm and encouraging{', extra patient if user is frustrated' if is_frustrated else ''}
+- Keep it concise but informative
+- Use appropriate emojis: 🏠 ✅ ❌ 💡 🔥 📝 ⚠️ 💬
+- CRITICAL: Write EVERYTHING in {language} language!
+
+**OUTPUT** (in {language} language):"""
+
+            # Call Core Gateway LLM
+            self.logger.info(f"{LogEmoji.INFO} Generating multilingual feedback in '{language}'...")
+
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/v1/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 800,
+                    "temperature": 0.7
+                },
+                timeout=20.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                feedback = data.get("content", "").strip()
+
+                if feedback:
+                    self.logger.info(f"{LogEmoji.SUCCESS} Multilingual feedback generated successfully in '{language}'")
+                    return feedback
+
+            # Fallback if LLM fails
+            self.logger.warning(f"{LogEmoji.WARNING} LLM feedback generation failed, using simple fallback")
+            return self._generate_simple_fallback_feedback(entities, overall_score, missing_fields, language)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate posting feedback: {e}")
-            return f"Cảm ơn bạn đã cung cấp thông tin! Vui lòng bổ sung thêm chi tiết về {transaction_type} để tôi có thể hỗ trợ tốt hơn."
+            return self._generate_simple_fallback_feedback(entities, 0, [], "en")
+
+    def _generate_simple_fallback_feedback(
+        self,
+        entities: Dict,
+        score: float,
+        missing_fields: List[str],
+        language: str
+    ) -> str:
+        """
+        Simple fallback feedback when LLM generation fails.
+
+        Args:
+            entities: Extracted entities
+            score: Completeness score
+            missing_fields: List of missing fields
+            language: Target language
+
+        Returns:
+            Simple feedback message
+        """
+        try:
+            # Simple templates by language
+            templates = {
+                "vi": f"Cảm ơn bạn đã cung cấp thông tin! Độ hoàn thiện: {score:.0f}/100. "
+                      f"{'Vui lòng bổ sung: ' + ', '.join(missing_fields[:3]) if missing_fields else 'Thông tin đã đầy đủ!'}",
+                "en": f"Thank you for providing information! Completeness: {score:.0f}/100. "
+                      f"{'Please add: ' + ', '.join(missing_fields[:3]) if missing_fields else 'Information is complete!'}",
+                "th": f"ขอบคุณที่ให้ข้อมูล! ความสมบูรณ์: {score:.0f}/100. "
+                      f"{'กรุณาเพิ่ม: ' + ', '.join(missing_fields[:3]) if missing_fields else 'ข้อมูลครบถ้วน!'}",
+                "ja": f"情報をありがとうございます！完全度: {score:.0f}/100. "
+                      f"{'追加してください: ' + ', '.join(missing_fields[:3]) if missing_fields else '情報は完全です！'}"
+            }
+
+            return templates.get(language, templates["en"])
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Fallback feedback generation failed: {e}")
+            return "Thank you for your information. Please provide more details about the property."
 
     # ========================================
     # Price Consultation Helper Methods

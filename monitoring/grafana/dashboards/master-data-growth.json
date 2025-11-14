@@ -1,0 +1,318 @@
+{
+  "dashboard": {
+    "title": "Master Data Growth Dashboard",
+    "tags": ["master-data", "extraction", "crawler"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "type": "graph",
+        "title": "Master Data Growth Over Time",
+        "targets": [
+          {
+            "expr": "master_data_total_records{table=\"districts\"}",
+            "legendFormat": "Districts",
+            "refId": "A"
+          },
+          {
+            "expr": "master_data_total_records{table=\"amenities\"}",
+            "legendFormat": "Amenities",
+            "refId": "B"
+          },
+          {
+            "expr": "master_data_total_records{table=\"property_types\"}",
+            "legendFormat": "Property Types",
+            "refId": "C"
+          },
+          {
+            "expr": "master_data_total_records{table=\"view_types\"}",
+            "legendFormat": "View Types",
+            "refId": "D"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Records"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"}
+      },
+      {
+        "id": 2,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "type": "stat",
+        "title": "Total Master Data Records",
+        "targets": [
+          {
+            "expr": "sum(master_data_total_records)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          }
+        }
+      },
+      {
+        "id": 3,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "type": "graph",
+        "title": "Pending Master Data Items",
+        "targets": [
+          {
+            "expr": "pending_master_data_count{status=\"pending\"}",
+            "legendFormat": "Pending Review",
+            "refId": "A"
+          },
+          {
+            "expr": "pending_master_data_count{status=\"approved\"}",
+            "legendFormat": "Approved",
+            "refId": "B"
+          },
+          {
+            "expr": "pending_master_data_count{status=\"rejected\"}",
+            "legendFormat": "Rejected",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Count"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [100], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Pending Items",
+          "message": "More than 100 items pending admin review",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      },
+      {
+        "id": 4,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "type": "graph",
+        "title": "Extraction Performance",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(extraction_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(extraction_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(extraction_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Duration"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"}
+      },
+      {
+        "id": 5,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "type": "table",
+        "title": "Top Pending Items by Frequency",
+        "targets": [
+          {
+            "expr": "topk(10, pending_master_data_frequency)",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {},
+              "indexByName": {},
+              "renameByName": {
+                "value_english": "Value",
+                "frequency": "Frequency",
+                "suggested_table": "Table"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "type": "graph",
+        "title": "Crawler Activity",
+        "targets": [
+          {
+            "expr": "rate(crawler_listings_scraped_total[5m])",
+            "legendFormat": "Listings/min",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(crawler_new_attributes_discovered_total[5m])",
+            "legendFormat": "New Attributes/min",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Rate"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"}
+      },
+      {
+        "id": 7,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "type": "graph",
+        "title": "Fuzzy Match Confidence Distribution",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(fuzzy_match_confidence_bucket[5m]))",
+            "legendFormat": "p50 Confidence",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.75, rate(fuzzy_match_confidence_bucket[5m]))",
+            "legendFormat": "p75 Confidence",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(fuzzy_match_confidence_bucket[5m]))",
+            "legendFormat": "p95 Confidence",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Confidence"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"}
+      },
+      {
+        "id": 8,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "type": "piechart",
+        "title": "Match Methods Distribution",
+        "targets": [
+          {
+            "expr": "sum by (match_method) (fuzzy_match_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "legend": {"displayMode": "list", "placement": "bottom"},
+          "pieType": "pie",
+          "displayLabels": ["percent"]
+        }
+      },
+      {
+        "id": 9,
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+        "type": "stat",
+        "title": "Translation Coverage",
+        "targets": [
+          {
+            "expr": "(sum(master_data_translations_count{lang=\"vi\"}) / sum(master_data_total_records)) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "orientation": "auto",
+          "reduceOptions": {
+            "values": false,
+            "calcs": ["lastNotNull"]
+          },
+          "textMode": "value_and_name"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 80, "color": "yellow"},
+                {"value": 95, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 10,
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+        "type": "graph",
+        "title": "Error Rates",
+        "targets": [
+          {
+            "expr": "rate(extraction_errors_total[5m])",
+            "legendFormat": "Extraction Errors",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(crawler_errors_total[5m])",
+            "legendFormat": "Crawler Errors",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(database_errors_total[5m])",
+            "legendFormat": "Database Errors",
+            "refId": "C"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Errors/sec"},
+          {"format": "short"}
+        ],
+        "xaxis": {"mode": "time"},
+        "alert": {
+          "conditions": [
+            {
+              "evaluator": {"params": [0.1], "type": "gt"},
+              "operator": {"type": "and"},
+              "query": {"params": ["A", "5m", "now"]},
+              "reducer": {"params": [], "type": "avg"},
+              "type": "query"
+            }
+          ],
+          "executionErrorState": "alerting",
+          "frequency": "1m",
+          "handler": 1,
+          "name": "High Error Rate",
+          "message": "Extraction error rate exceeds threshold",
+          "noDataState": "no_data",
+          "notifications": []
+        }
+      }
+    ]
+  },
+  "overwrite": true
+}

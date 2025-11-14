@@ -412,6 +412,35 @@ services:
       - real
       - all
 
+  # Crawler Service (Master Data Collection)
+  crawler-service:
+    build:
+      context: .
+      dockerfile: services/crawler_service/Dockerfile
+    container_name: ree-ai-crawler-service
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8095:8080"
+    depends_on:
+      - postgres
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+    # Set higher resources for Chromium
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
   # Price Suggestion Service (Layer 3)
   price-suggestion:
     build:

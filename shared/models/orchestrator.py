@@ -8,13 +8,18 @@ from shared.models.reasoning import ReasoningChain, AmbiguityDetectionResult, Kn
 
 class IntentType(str, Enum):
     """Detected user intent types - Aligned with Vietnamese real estate domain."""
-    SEARCH = "search"  # Tìm kiếm bất động sản
+    # Core intents (4 main use cases)
+    POST = "post"  # Đăng tin bán/cho thuê bất động sản (Case 1)
+    SEARCH = "search"  # Tìm kiếm bất động sản (Case 2)
+    PRICE_CONSULTATION = "price_consultation"  # Tư vấn giá thị trường (Case 3)
+    CHAT = "chat"  # Trò chuyện chung / chào hỏi (Case 4)
+
+    # Extended intents (future use)
     COMPARE = "compare"  # So sánh bất động sản
-    PRICE_ANALYSIS = "price_analysis"  # Phân tích giá & định giá
+    PRICE_ANALYSIS = "price_analysis"  # Phân tích giá & định giá (legacy, use PRICE_CONSULTATION)
     INVESTMENT_ADVICE = "investment_advice"  # Tư vấn đầu tư bất động sản
     LOCATION_INSIGHTS = "location_insights"  # Phân tích khu vực & tiện ích
     LEGAL_GUIDANCE = "legal_guidance"  # Tư vấn pháp lý & thủ tục
-    CHAT = "chat"  # Trò chuyện chung / chào hỏi
     UNKNOWN = "unknown"  # Không xác định được intent
 
 

@@ -19,9 +19,12 @@ from services.attribute_extraction.nlp_processor import VietnameseNLPProcessor
 from services.attribute_extraction.rag_enhancer import RAGContextEnhancer
 from services.attribute_extraction.validator import AttributeValidator
 from services.attribute_extraction.master_data_validator import MasterDataValidator
+from services.attribute_extraction.master_data_extractor import MasterDataExtractor
+from services.attribute_extraction.admin_routes import AdminRoutes
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.i18n import get_multilingual_mapper
+from shared.models.attribute_extraction import ExtractionRequest, ExtractionResponse
 
 
 class QueryExtractionRequest(BaseModel):
@@ -83,11 +86,22 @@ class AttributeExtractionService(BaseService):
         self.multilingual_mapper = get_multilingual_mapper()
         self.master_data_validator = MasterDataValidator()
 
+        # NEW: Initialize master data extractor (v2.0)
+        self.master_data_extractor = MasterDataExtractor(
+            core_gateway_url=self.core_gateway_url,
+            llm_extractor=self._call_llm_for_extraction
+        )
+
+        # NEW: Initialize admin routes
+        self.admin_routes = AdminRoutes()
+
         self.logger.info(f"{LogEmoji.INFO} Using Core Gateway at: {self.core_gateway_url}")
         self.logger.info(f"{LogEmoji.INFO} Using DB Gateway at: {self.db_gateway_url}")
         self.logger.info(f"{LogEmoji.SUCCESS} Enhanced NLP + RAG pipeline initialized")
         self.logger.info(f"{LogEmoji.SUCCESS} Multilingual mapper initialized (vi/en/zh → English)")
         self.logger.info(f"{LogEmoji.SUCCESS} Master data validator initialized (PostgreSQL)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Master data extractor v2.0 initialized (full pipeline)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Admin routes initialized (pending item review)")
 
     def setup_routes(self):
         """Setup API routes"""
@@ -120,6 +134,151 @@ class AttributeExtractionService(BaseService):
                 return {"amenities": amenities, "count": len(amenities)}
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to get amenities: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/extract-with-master-data", response_model=ExtractionResponse)
+        async def extract_with_master_data(request: ExtractionRequest):
+            """
+            ✨ **NEW V2.0 ENDPOINT** ✨
+
+            Complete extraction pipeline with master data integration:
+            1. Auto-detect language from input text
+            2. Extract attributes using LLM
+            3. Fuzzy match against PostgreSQL master data with translations
+            4. Translate unmatched items to English using LLM
+            5. Return 3-tier response: raw/mapped/new
+
+            This is the RECOMMENDED endpoint for production use!
+
+            **Response Structure**:
+            - `raw`: Numeric and free-form attributes (bedrooms, area, price)
+            - `mapped`: Successfully matched attributes with master data IDs + translations
+            - `new`: Unmatched attributes requiring admin review
+
+            **Example**:
+            Input: "Căn hộ 2PN Quận 1 có hồ bơi"
+            Output:
+            {
+              "raw": {"bedrooms": 2},
+              "mapped": [
+                {
+                  "property_name": "property_type",
+                  "id": 1,
+                  "value": "apartment",
+                  "value_translated": "Căn hộ",
+                  "confidence": 0.98
+                }
+              ],
+              "new": []
+            }
+            """
+            try:
+                # Initialize extractor if needed
+                if not hasattr(self, '_extractor_initialized'):
+                    self.logger.info(f"{LogEmoji.INFO} Initializing master data extractor...")
+                    await self.master_data_extractor.initialize()
+                    self._extractor_initialized = True
+
+                self.logger.info(
+                    f"{LogEmoji.TARGET} Extraction request: "
+                    f"text='{request.text[:50]}...', lang={request.language}"
+                )
+
+                # Execute extraction
+                response = await self.master_data_extractor.extract(request)
+
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} Extraction complete: "
+                    f"{len(response.mapped)} mapped, {len(response.new)} new "
+                    f"({response.processing_time_ms:.0f}ms)"
+                )
+
+                return response
+
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Extraction with master data failed: {e}")
+                import traceback
+                traceback.print_exc()
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.get("/admin/pending-items")
+        async def get_pending_items(
+            status: str = "pending",
+            limit: int = 50,
+            offset: int = 0
+        ):
+            """
+            Get list of pending master data items for admin review
+
+            **Query Parameters**:
+            - status: Filter by status ('pending', 'approved', 'rejected')
+            - limit: Max items to return (default: 50)
+            - offset: Pagination offset (default: 0)
+
+            **Returns**:
+            - items: List of pending items
+            - total_count: Total number of items
+            - high_frequency_items: Items that appear frequently (priority review)
+            """
+            try:
+                return await self.admin_routes.get_pending_items(status, limit, offset)
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to get pending items: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/admin/approve-item")
+        async def approve_pending_item(
+            pending_id: int,
+            translations: dict,
+            admin_user_id: str,
+            admin_notes: Optional[str] = None
+        ):
+            """
+            Approve a pending item and add to master data
+
+            **Body Parameters**:
+            - pending_id: ID of pending item
+            - translations: Dict of {lang_code: translated_text}
+              Example: {"vi": "Hầm rượu", "en": "Wine cellar", "zh": "酒窖"}
+            - admin_user_id: ID of admin approving
+            - admin_notes: Optional notes
+
+            **Returns**:
+            - success: True if successful
+            - master_data_id: ID of newly created master data
+            - table: Which master data table it was added to
+            """
+            try:
+                return await self.admin_routes.approve_pending_item(
+                    pending_id, translations, admin_user_id, admin_notes
+                )
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to approve item: {e}")
+                raise HTTPException(status_code=500, detail=str(e))
+
+        @self.app.post("/admin/reject-item")
+        async def reject_pending_item(
+            pending_id: int,
+            admin_user_id: str,
+            admin_notes: Optional[str] = None
+        ):
+            """
+            Reject a pending item
+
+            **Body Parameters**:
+            - pending_id: ID of pending item
+            - admin_user_id: ID of admin rejecting
+            - admin_notes: Reason for rejection
+
+            **Returns**:
+            - success: True if successful
+            """
+            try:
+                return await self.admin_routes.reject_pending_item(
+                    pending_id, admin_user_id, admin_notes
+                )
+            except Exception as e:
+                self.logger.error(f"{LogEmoji.ERROR} Failed to reject item: {e}")
                 raise HTTPException(status_code=500, detail=str(e))
 
         @self.app.post("/extract-query-enhanced", response_model=EnhancedExtractionResponse)
@@ -965,6 +1124,8 @@ Output: {
         await self.http_client.aclose()
         await self.rag_enhancer.close()
         await self.master_data_validator.close()
+        await self.master_data_extractor.close()
+        await self.admin_routes.close()  # NEW: Cleanup admin routes
         await super().on_shutdown()
 
 

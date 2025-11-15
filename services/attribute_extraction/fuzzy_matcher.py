@@ -5,7 +5,7 @@ Matches user input against master data with translations
 from typing import Optional, Dict, Any, List
 import asyncpg
 from fuzzywuzzy import fuzz
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 from shared.config import settings
 
 
@@ -15,7 +15,7 @@ class FuzzyMatcher:
     """
 
     def __init__(self):
-        self.logger = logger
+        self.logger = setup_logger("fuzzy_matcher")
         self.db_pool: Optional[asyncpg.Pool] = None
 
     async def initialize(self):

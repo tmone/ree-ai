@@ -18,7 +18,7 @@ from shared.models.attribute_extraction import (
     MatchMethod,
     LanguageCode
 )
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
 
 class MasterDataExtractor:
@@ -45,7 +45,7 @@ class MasterDataExtractor:
         self.fuzzy_matcher = FuzzyMatcher()
         self.llm_translator = LLMTranslator(core_gateway_url)
 
-        self.logger = logger
+        self.logger = setup_logger("master_data_extractor")
 
     async def initialize(self):
         """Initialize all components"""

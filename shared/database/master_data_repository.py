@@ -16,7 +16,7 @@ from shared.models.master_data import (
     ValidationResult
 )
 from shared.config import settings
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
 
 class MasterDataRepository:
@@ -24,7 +24,7 @@ class MasterDataRepository:
 
     def __init__(self):
         self.pool: Optional[asyncpg.Pool] = None
-        self.logger = logger
+        self.logger = setup_logger("master_data_repository")
 
     async def connect(self):
         """Create database connection pool"""

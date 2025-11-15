@@ -4,7 +4,7 @@ Auto-detect language from user input text
 """
 from typing import Optional
 from langdetect import detect, LangDetectException
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
 
 class LanguageDetector:
@@ -16,7 +16,7 @@ class LanguageDetector:
     SUPPORTED_LANGUAGES = {'vi', 'en', 'zh-cn', 'ko', 'ja'}
 
     def __init__(self):
-        self.logger = logger
+        self.logger = setup_logger("language_detector")
 
     def detect_language(self, text: str) -> str:
         """

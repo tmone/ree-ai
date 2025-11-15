@@ -6,7 +6,7 @@ import json
 import re
 from typing import Dict, Optional
 import httpx
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
 
 class LLMTranslator:
@@ -18,7 +18,7 @@ class LLMTranslator:
     def __init__(self, core_gateway_url: str):
         self.core_gateway_url = core_gateway_url
         self.http_client = httpx.AsyncClient(timeout=30.0)
-        self.logger = logger
+        self.logger = setup_logger("llm_translator")
 
     async def translate_to_english(
         self,

@@ -70,6 +70,13 @@ class AttributeExtractionPrompts:
 🎯 NHIỆM VỤ:
 Đọc mô tả bất động sản và trích xuất TẤT CẢ thông tin thành JSON có cấu trúc.
 
+⭐ ƯU TIÊN COLLECTION:
+Hệ thống yêu cầu TỐI THIỂU 15-20 fields để có tin đăng chuyên nghiệp!
+- TIER 1 (CRITICAL - BẮT BUỘC): property_type, transaction_type, district, area, price
+- TIER 2 (HIGHLY RECOMMENDED): bedrooms, bathrooms, ward, street, furniture, direction, legal_status, contact_phone
+- TIER 3 (RECOMMENDED): floors, facade_width, balcony_direction, year_built, project_name, contact_name
+- TIER 4 (OPTIONAL): amenities, description, images
+
 📊 CATEGORIES CẦN TRÍCH XUẤT:
 
 **1. BASIC INFO**
@@ -146,6 +153,12 @@ class AttributeExtractionPrompts:
 5. **Tính toán tự động:**
    - Nếu có price và area → Tính price_per_m2
    - Nếu có mặt tiền x hẻm → Tính area (nếu chưa có)
+
+6. **Property-type specific extraction:**
+   - Đất (LAND): KHÔNG cần bedrooms, bathrooms, furniture → Emphasize legal_status, facade_width
+   - Căn hộ (APARTMENT): CẦN floor number, view_type, project_name, balcony_direction
+   - Nhà phố/Biệt thự (HOUSE/VILLA): CẦN floors, facade_width, alley_width
+   - Commercial (OFFICE/SHOPHOUSE/WAREHOUSE): CẦN floors, facade_width, parking_capacity
 
 📤 OUTPUT FORMAT:
 ```json

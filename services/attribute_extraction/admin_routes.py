@@ -5,7 +5,7 @@ Endpoints for reviewing and approving pending master data items
 from typing import List, Optional
 from fastapi import HTTPException, Query
 import asyncpg
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 from shared.config import settings
 from shared.models.attribute_extraction import (
     PendingMasterDataApproval,
@@ -20,7 +20,7 @@ class AdminRoutes:
     """
 
     def __init__(self):
-        self.logger = logger
+        self.logger = setup_logger("admin_routes")
         self.db_pool: Optional[asyncpg.Pool] = None
 
     async def initialize(self):

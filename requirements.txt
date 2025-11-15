@@ -6,7 +6,7 @@ pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
 # HTTP clients
-httpx[http2]==0.26.0
+httpx[http2]==0.27.2
 requests==2.31.0
 
 # Database
@@ -29,11 +29,11 @@ langchain==0.1.6
 langchain-openai==0.0.5
 langchain-community==0.0.20
 
-# Web Scraping (Crawler Service)
-crawl4ai>=0.3.0
+# Web Scraping (Crawler Service) - Not needed for attribute_extraction
+# crawl4ai>=0.3.0
 beautifulsoup4==4.12.3
-lxml==5.1.0
-playwright==1.41.2
+lxml==5.3.0
+# playwright==1.41.2
 
 # Language Detection & Fuzzy Matching (Extraction Service)
 langdetect==1.0.9

@@ -32,10 +32,20 @@ class VietnameseNLPProcessor:
         self.property_type_master = get_property_type_master()
         self.amenity_master = get_amenity_master()
 
+        # Famous projects for extraction (synced with LLM prompt - 2025-11-15)
+        self.KNOWN_PROJECTS = [
+            "vinhomes central park", "vinhomes", "masteri thao dien", "masteri",
+            "the sun avenue", "the manor", "saigon pearl", "landmark 81",
+            "phu my hung", "thao dien pearl", "diamond island", "estella heights",
+            "gateway thao dien", "feliz en vista", "impero", "eco green saigon",
+            "sunrise city", "phu hoang anh"
+        ]
+
         logger.info(f"{LogEmoji.INFO} Initialized Vietnamese NLP Processor with Master Data")
         logger.info(f"{LogEmoji.INFO} Loaded {len(self.district_master.districts)} districts")
         logger.info(f"{LogEmoji.INFO} Loaded {len(self.property_type_master.PROPERTY_TYPES)} property types")
         logger.info(f"{LogEmoji.INFO} Loaded {len(self.amenity_master.AMENITIES)} amenities")
+        logger.info(f"{LogEmoji.INFO} Loaded {len(self.KNOWN_PROJECTS)} known projects")
 
     def extract_entities(self, text: str) -> Dict[str, Any]:
         """
@@ -142,16 +152,25 @@ class VietnameseNLPProcessor:
                 logger.debug(f"Extracted {key}: {numbers[key]}")
                 break
 
-        # Bathrooms
+        # Bathrooms - Enhanced patterns (2025-11-15 bugfix)
         bathroom_patterns = [
-            (r'(\d+)\s*(?:phòng\s+tắm|wc|toilet|bathroom)', 'bathrooms'),
-            (r'(\d+)\s*wc\b', 'bathrooms'),
+            # Standard: "X phòng tắm", "X toilet", "X WC"
+            (r'(\d+)\s*(?:phòng\s+tắm|phòng\s+vệ\s+sinh|nhà\s+vệ\s+sinh|toilet|wc|bathroom)', 'bathrooms'),
+            (r'(\d+)\s*(?:wc|toilet)\b', 'bathrooms'),
+            # With "có": "có X phòng tắm"
+            (r'có\s+(\d+)\s+(?:phòng\s+tắm|phòng\s+vệ\s+sinh|toilet|wc)', 'bathrooms'),
+            # Short form: "X tắm", "X vệ sinh"
+            (r'(\d+)\s+(?:phòng\s+)?(?:tắm|vệ\s+sinh)', 'bathrooms'),
+            # Reversed with "là": "nhà vệ sinh là X phòng"
+            (r'(?:phòng\s+tắm|phòng\s+vệ\s+sinh|nhà\s+vệ\s+sinh|toilet|wc)\s+là\s+(\d+)', 'bathrooms'),
+            # Colon format: "Phòng tắm: X"
+            (r'(?:phòng\s+tắm|phòng\s+vệ\s+sinh|nhà\s+vệ\s+sinh|toilet|wc)[:\s]+(\d+)', 'bathrooms'),
         ]
         for pattern, key in bathroom_patterns:
             match = re.search(pattern, text_lower)
             if match:
                 numbers[key] = int(match.group(1))
-                logger.debug(f"Extracted {key}: {numbers[key]}")
+                logger.debug(f"Extracted {key}: {numbers[key]} from pattern: {pattern}")
                 break
 
         # Area (diện tích)

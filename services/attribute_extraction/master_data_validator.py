@@ -5,7 +5,7 @@ Uses PostgreSQL master data for normalization and validation
 from typing import Dict, Any, List
 from shared.database import get_master_data_repository
 from shared.models.master_data import ValidationResult
-from shared.utils.logger import logger, LogEmoji
+from shared.utils.logger import setup_logger, LogEmoji
 
 
 class MasterDataValidator:
@@ -15,7 +15,7 @@ class MasterDataValidator:
 
     def __init__(self):
         self.repo = None
-        self.logger = logger
+        self.logger = setup_logger("master_data_validator")
 
     async def initialize(self):
         """Initialize repository connection"""

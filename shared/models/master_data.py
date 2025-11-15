@@ -2,7 +2,7 @@
 Master Data Models
 Pydantic models for PostgreSQL master data tables
 """
-from typing import Optional, List
+from typing import Optional, List, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -188,7 +188,7 @@ class NormalizedEntity(BaseModel):
 class ValidationResult(BaseModel):
     """Validation result from master data"""
     field_name: str
-    original_value: any
+    original_value: Any
     is_valid: bool
     normalized_entity: Optional[NormalizedEntity] = None
     warnings: List[str] = Field(default_factory=list)

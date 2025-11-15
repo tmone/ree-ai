@@ -170,7 +170,7 @@ services:
     container_name: ree-ai-core-gateway
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}  # Empty in production, fallback to OpenAI
+      - OLLAMA_BASE_URL=  # PRODUCTION: Empty - force OpenAI only (no Ollama)
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
@@ -284,6 +284,12 @@ services:
     container_name: ree-ai-classification
     environment:
       - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - REDIS_HOST=${REDIS_HOST:-redis}
@@ -307,11 +313,18 @@ services:
     container_name: ree-ai-completeness
     environment:
       - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8089:8080"
     depends_on:
+      - postgres
       - core-gateway
     networks:
       - ree-ai-network
@@ -401,6 +414,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
     ports:
       - "8084:8080"
     depends_on:

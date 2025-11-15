@@ -9,7 +9,7 @@ Extracts structured entities from raw user queries using enhanced 3-layer pipeli
 import httpx
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from fastapi import HTTPException
 from pydantic import BaseModel
 
@@ -515,12 +515,31 @@ class AttributeExtractionService(BaseService):
     def _build_query_extraction_prompt(self, query: str, intent: Optional[str] = None) -> str:
         """
         Build specialized prompt for extracting entities from USER QUERIES
-        Simpler than full property extraction - focuses on search criteria
+        Enhanced with learnings from comprehensive testing (2025-11-15)
+        - Famous project → district mapping
+        - Strict contact name extraction rules
+        - Tier-based field collection emphasis
         """
         return f"""Bạn là chuyên gia trích xuất thông tin tìm kiếm bất động sản từ câu hỏi của người dùng.
 
 🎯 NHIỆM VỤ:
 Đọc câu hỏi của user và trích xuất CÁC TIÊU CHÍ TÌM KIẾM thành JSON.
+
+⭐ TARGET: Extract 15-20 fields để tạo tin đăng chuyên nghiệp!
+
+**TIER 1** (CRITICAL - ALWAYS extract if available):
+- property_type, transaction_type, district, area, price
+
+**TIER 2** (HIGHLY RECOMMENDED - prioritize these):
+- bedrooms, bathrooms, ward, street, furniture, direction, legal_status, contact_phone, project_name
+
+**TIER 3** (NICE-TO-HAVE - only request if score < 70% and mentioned):
+- floors, facade_width, alley_width, year_built, contact_name, balcony_direction, property_condition
+- ⚠️ Do NOT request these if score >= 70% - they are optional enhancements only
+
+**TIER 4** (TRULY OPTIONAL - NEVER request, only extract if user volunteers):
+- parking, elevator, swimming_pool, gym, security, description
+- ⚠️ Do NOT ask about these fields - only extract if user mentions them
 
 📊 ENTITIES CẦN TRÍCH XUẤT (chỉ trích xuất những gì có trong câu hỏi):
 
@@ -536,12 +555,35 @@ class AttributeExtractionService(BaseService):
 - ward: Phường (nếu có)
 - project_name: Tên dự án (Vinhomes, Masteri, etc.)
 
+**🏢 FAMOUS PROJECT → DISTRICT MAPPING**:
+If you detect any of these famous projects, automatically extract the corresponding district:
+- Landmark 81 → "Quận Bình Thạnh"
+- Vinhomes Central Park → "Quận Bình Thạnh"
+- Masteri Thao Dien → "Quận 2"
+- Phu My Hung → "Quận 7"
+- Saigon Pearl → "Quận Bình Thạnh"
+- The Sun Avenue → "Quận 2"
+- The Manor → "Quận Bình Thạnh"
+- Estella Heights → "Quận 2"
+- Gateway Thao Dien → "Quận 2"
+- Feliz En Vista → "Quận 2"
+- Diamond Island → "Quận 2"
+- Thao Dien Pearl → "Quận 2"
+- Eco Green Saigon → "Quận 7"
+- Sunrise City → "Quận 7"
+- Phu Hoang Anh → "Quận 7"
+
 **3. PHYSICAL ATTRIBUTES**
 - bedrooms: Số phòng ngủ
   * "2PN" → 2
   * "3 phòng ngủ" → 3
   * "2 phòng" → 2
-- bathrooms: Số phòng tắm/WC
+- bathrooms: Số phòng tắm/WC (BUGFIX 2025-11-15: Support multiple aliases)
+  * "2 toilet" → 2
+  * "4 phòng vệ sinh" → 4
+  * "có 3 phòng tắm" → 3
+  * "2 WC" → 2
+  * "nhà vệ sinh" = phòng tắm = toilet = WC = bathroom
 - area: Diện tích (m²)
 - min_area: Diện tích tối thiểu
 - max_area: Diện tích tối đa
@@ -566,6 +608,27 @@ CHUẨN HÓA GIÁ:
 - elevator: true nếu có yêu cầu thang máy
 - swimming_pool: true nếu có yêu cầu hồ bơi
 - gym: true nếu có yêu cầu gym
+
+**7. CONTACT INFORMATION**
+
+**👤 CONTACT NAME EXTRACTION - STRICT RULES**:
+
+✅ VALID PATTERNS (only extract from these contexts):
+- "Lien he: [Name]" or "LH: [Name]"
+- "Chinh chu: [Name]"
+- "Anh/Ba/Chi/Ong [Name] - [phone]"
+- "[Name] [10-digit phone]"
+
+❌ INVALID EXTRACTIONS (DO NOT extract names from):
+- Address components: "Phuong Binh Thanh", "Quan Nam", "Duong Xa"
+- Room descriptions: "phong ngu", "phong tam"
+- Street names: "Duong Xa Lo", "Hem Linh"
+- Common words: "ban", "mua", "thue", "gia", "tien"
+
+**VALIDATION**: Names must:
+- Be 3-15 characters long
+- Appear near phone numbers or contact keywords
+- NOT match these invalid words: ban, mua, thue, cho, nha, dat, quan, phuong, duong, hem, tang, ngu, tam, phong, tien, gap, ngay, gia, thanh, binh, dong, nam, bac, tay, trung, van, linh, trai, hong, sang, full, cao, dep, tot, gan, xa, lo, toan
 
 🔍 EXTRACTION RULES:
 
@@ -592,6 +655,14 @@ Output: {{"property_type": "chung cư", "project_name": "Vinhomes", "swimming_po
 Example 4:
 Input: "Biệt thự Q2 từ 10 đến 20 tỷ, có garage"
 Output: {{"property_type": "biệt thự", "district": "Quận 2", "min_price": 10000000000, "max_price": 20000000000, "parking": true}}
+
+Example 5 (Bathrooms variants - BUGFIX 2025-11-15):
+Input: "Nhà có 2 toilet, 3 phòng ngủ"
+Output: {{"property_type": "nhà", "bathrooms": 2, "bedrooms": 3}}
+
+Example 6 (Bathrooms variants):
+Input: "Biệt thự 4 phòng vệ sinh, diện tích 200m2"
+Output: {{"property_type": "biệt thự", "bathrooms": 4, "area": 200}}
 
 📥 USER QUERY:
 {query}
@@ -818,7 +889,12 @@ Intent: {intent or "SEARCH"}
 
 **3. PHYSICAL ATTRIBUTES**:
 - bedrooms: Số phòng ngủ (nullable cho đất/parking/commercial)
-- bathrooms: Số phòng tắm
+- bathrooms: Số phòng tắm/WC (BUGFIX 2025-11-15: Support multiple aliases)
+  * "2 toilet" → 2
+  * "4 phòng vệ sinh" → 4
+  * "có 3 phòng tắm" → 3
+  * "2 WC" → 2
+  * "nhà vệ sinh" = phòng tắm = toilet = WC = bathroom
 - area: Diện tích (m²)
 - floors: Số tầng
 
@@ -832,6 +908,20 @@ Intent: {intent or "SEARCH"}
 - direction: Đông | Tây | Nam | Bắc | Đông Nam | Đông Bắc | Tây Nam | Tây Bắc
 {amenities_text}
 - parking, elevator, swimming_pool, gym, security: true/false
+
+📝 FEW-SHOT EXAMPLES (for bathroom extraction):
+
+Example 1 (Bathrooms - toilet):
+Input: "Nhà có 2 toilet, 3 phòng ngủ"
+Output: {{"property_type": "nhà", "bathrooms": 2, "bedrooms": 3}}
+
+Example 2 (Bathrooms - phòng vệ sinh):
+Input: "Biệt thự 4 phòng vệ sinh, diện tích 200m2"
+Output: {{"property_type": "biệt thự", "bathrooms": 4, "area": 200}}
+
+Example 3 (Bathrooms - WC):
+Input: "Căn hộ 3PN 2WC Quận 7"
+Output: {{"property_type": "căn hộ", "bedrooms": 3, "bathrooms": 2, "district": "Quận 7"}}
 
 📥 USER QUERY:
 {query}

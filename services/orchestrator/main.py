@@ -13,6 +13,7 @@ import httpx
 import asyncpg
 from datetime import datetime
 from fastapi.responses import StreamingResponse
+from langdetect import detect, LangDetectException
 
 # HIGH PRIORITY FIX: Add retry logic and circuit breaker
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
@@ -104,9 +105,9 @@ class Orchestrator(BaseService):
         self.logger.info(f"{LogEmoji.SUCCESS} Knowledge Base Loaded: PROPERTIES.md + LOCATIONS.md")
         self.logger.info(f"{LogEmoji.SUCCESS} Ambiguity Detector Ready")
 
-    def _string_to_uuid(self, string_id: str) -> uuid.UUID:
-        """Convert string ID to deterministic UUID using UUID v5"""
-        return uuid.uuid5(self.uuid_namespace, string_id)
+    def _string_to_uuid(self, string_id: str) -> str:
+        """Convert string ID to deterministic UUID string using UUID v5"""
+        return str(uuid.uuid5(self.uuid_namespace, string_id))
 
     def _parse_data_uri(self, data_uri: str) -> Optional[FileAttachment]:
         """
@@ -543,7 +544,7 @@ class Orchestrator(BaseService):
                 ]
             }
 
-        @self.app.post("/v1/chat/completions")
+        @self.app.post("/chat/completions")
         async def openai_compatible_chat(request: Dict[str, Any]):
             """
             OpenAI-compatible endpoint with multimodal support.
@@ -782,7 +783,7 @@ If the query contains references to previous context (e.g., "căn đó", "dự �
 Standalone query:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
@@ -1323,7 +1324,7 @@ LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
             for attempt in range(max_retries):
                 try:
                     response = await self.http_client.post(
-                        f"{self.core_gateway_url}/v1/chat/completions",
+                        f"{self.core_gateway_url}/chat/completions",
                         json={
                             "model": model,
                             "messages": messages_data,
@@ -1507,7 +1508,7 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if extraction_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
                     if iteration == 1:
-                        language = self._detect_language(history)
+                        language = self._detect_language(history, current_query=query)
                         return self._generate_simple_fallback_feedback({}, 0, ["extraction_error"], language)
                     else:
                         # Use previous iteration's data
@@ -1536,7 +1537,7 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if completeness_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Completeness assessment failed")
                     if iteration == 1:
-                        language = self._detect_language(history)
+                        language = self._detect_language(history, current_query=query)
                         return self._generate_simple_fallback_feedback({}, 0, ["completeness_error"], language)
                     else:
                         break
@@ -1586,7 +1587,8 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 return await self._generate_completion_message(
                     entities=entities,
                     overall_score=overall_score,
-                    history=history
+                    history=history,
+                    query=query
                 )
 
             # Otherwise: Generate regular feedback with improvement suggestions
@@ -1605,7 +1607,7 @@ Re-extract property attributes with improved understanding. Focus on filling mis
             import traceback
             traceback.print_exc()
             # Use fallback with language detection for error messages
-            language = self._detect_language(history)
+            language = self._detect_language(history, current_query=query)
             return self._generate_simple_fallback_feedback({}, 0, [], language)
 
     async def _handle_price_consultation(
@@ -1891,7 +1893,7 @@ CRITICAL RULES:
 JSON:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": analysis_prompt}],
@@ -1968,7 +1970,7 @@ RULES:
 City name:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": geo_prompt}],
@@ -2235,7 +2237,7 @@ JSON:"""
 
             # Call LLM for semantic validation
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": validation_prompt}],
@@ -2313,7 +2315,7 @@ Chỉ trả về query mới, không giải thích.
 Query mới:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": refine_prompt}],
@@ -2606,7 +2608,7 @@ RULES:
 Nearby districts:"""
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": nearby_prompt}],
@@ -2751,46 +2753,69 @@ Nearby districts:"""
             self.logger.warning(f"{LogEmoji.WARNING} Completion confirmation detection failed: {e}")
             return False
 
-    def _detect_language(self, history: List[Dict] = None, entities: Dict = None) -> str:
+    def _detect_language(self, history: List[Dict] = None, entities: Dict = None, current_query: str = None) -> str:
         """
-        Detect user's language from conversation history or entities.
+        Detect user's language from conversation history or current query using AI langdetect library.
 
         Args:
             history: Conversation history
             entities: Extracted entities
+            current_query: Current user query (used when history is empty)
 
         Returns:
-            Language code: 'vi', 'en', 'th', 'ja'
+            Language code: 'vi', 'en', 'th', 'ja', 'zh', 'ko'
         """
         try:
-            # Check recent messages for language indicators
+            text_to_detect = None
+
+            # Priority 1: Extract text from recent user messages in history
             if history:
                 recent_text = " ".join([msg.get("content", "") for msg in history[-3:] if msg.get("role") == "user"])
+                if recent_text and len(recent_text.strip()) > 0:
+                    text_to_detect = recent_text
 
-                # Vietnamese indicators (diacritics)
-                if any(c in recent_text for c in "àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ"):
-                    return "vi"
+            # Priority 2: If no history, use current query
+            if not text_to_detect and current_query and len(current_query.strip()) > 0:
+                text_to_detect = current_query
+                self.logger.info(f"{LogEmoji.INFO} No history available, detecting language from current query")
 
-                # Thai indicators
-                if any(c in recent_text for c in "กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรลวศษสหฬอฮ"):
-                    return "th"
+            # Perform language detection if we have text
+            if text_to_detect:
+                # Use langdetect AI library for accurate detection
+                detected = detect(text_to_detect)
 
-                # Japanese indicators
-                if any(c in recent_text for c in "ぁあぃいぅうぇえぉおかがきぎくぐけげこごさざしじすずせぜそぞただちぢっつづてでとどなにぬねのはばぱひびぴふぶぷへべぺほぼぽまみむめもゃやゅゆょよらりるれろゎわゐゑをんゔ"):
-                    return "ja"
+                # Map langdetect codes to our supported codes
+                lang_mapping = {
+                    'vi': 'vi',
+                    'en': 'en',
+                    'th': 'th',
+                    'ja': 'ja',
+                    'zh-cn': 'zh',
+                    'zh-tw': 'zh',
+                    'ko': 'ko'
+                }
 
-            # Default to English if no clear indicators
-            return "en"
+                result = lang_mapping.get(detected, 'en')
+                self.logger.info(f"{LogEmoji.SUCCESS} Detected language: {result} (raw: {detected})")
+                return result
 
+            # Fallback to Vietnamese for this Vietnamese real estate system
+            self.logger.warning(f"{LogEmoji.WARNING} No text to detect language, defaulting to 'vi' (primary market)")
+            return "vi"
+
+        except LangDetectException as e:
+            self.logger.warning(f"{LogEmoji.WARNING} Language detection failed: {e}, defaulting to 'vi'")
+            return "vi"
         except Exception as e:
-            self.logger.warning(f"{LogEmoji.WARNING} Language detection failed: {e}, defaulting to 'en'")
-            return "en"
+            self.logger.error(f"{LogEmoji.ERROR} Unexpected error in language detection: {e}, defaulting to 'vi'")
+            return "vi"
 
     async def _generate_completion_message(
         self,
         entities: Dict,
         overall_score: float,
-        history: List[Dict] = None
+        history: List[Dict] = None,
+        query: str = ""
     ) -> str:
         """
         Generate completion/closing message when posting is ready.
@@ -2799,12 +2824,13 @@ Nearby districts:"""
             entities: Final extracted entities
             overall_score: Final completeness score
             history: Conversation history for language detection
+            query: Current user query for language detection
 
         Returns:
             Completion message in user's language
         """
         try:
-            language = self._detect_language(history, entities)
+            language = self._detect_language(history, entities, current_query=query)
 
             # Build entity summary
             entity_summary = []
@@ -2851,7 +2877,7 @@ Generate a warm, congratulatory closing message in **{language} language** that:
             self.logger.info(f"{LogEmoji.INFO} Generating completion message in '{language}'...")
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
@@ -2905,7 +2931,7 @@ Generate a warm, congratulatory closing message in **{language} language** that:
         """
         try:
             # Detect user's language and frustration
-            language = self._detect_language(history, entities)
+            language = self._detect_language(history, entities, current_query=query)
             is_frustrated = self._detect_user_frustration(query, history) if query else False
 
             if is_frustrated:
@@ -3002,7 +3028,7 @@ Generate a friendly, structured response in **{language} language** that include
             self.logger.info(f"{LogEmoji.INFO} Generating multilingual feedback in '{language}'...")
 
             response = await self.http_client.post(
-                f"{self.core_gateway_url}/v1/chat/completions",
+                f"{self.core_gateway_url}/chat/completions",
                 json={
                     "model": "gpt-4o-mini",
                     "messages": [{"role": "user", "content": prompt}],
@@ -3437,11 +3463,12 @@ Generate a friendly, structured response in **{language} language** that include
 
             async with self.db_pool.acquire() as conn:
                 # Get last N messages from conversation
+                # Note: message.data is JSON containing role info
                 rows = await conn.fetch(
                     """
-                    SELECT role, content, created_at
-                    FROM messages
-                    WHERE conversation_id = $1
+                    SELECT data->>'role' as role, content, created_at
+                    FROM message
+                    WHERE channel_id = $1
                     ORDER BY created_at DESC
                     LIMIT $2
                     """,
@@ -3473,39 +3500,60 @@ Generate a friendly, structured response in **{language} language** that include
             user_uuid = self._string_to_uuid(user_id)
             conv_uuid = self._string_to_uuid(conversation_id)
 
+            # Using current Unix timestamp in milliseconds
+            current_time = int(time.time() * 1000)
+
             async with self.db_pool.acquire() as conn:
                 # Ensure user exists first (required for foreign key constraint)
                 await conn.execute(
                     """
-                    INSERT INTO users (user_id, email, created_at)
-                    VALUES ($1, $2, NOW())
-                    ON CONFLICT (user_id) DO NOTHING
+                    INSERT INTO "user" (id, name, email, role, profile_image_url, created_at, updated_at, last_active_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (id) DO UPDATE SET last_active_at = $8
                     """,
                     user_uuid,
-                    f"{user_id}@system.local"  # Placeholder email for system-generated users
+                    user_id,  # name
+                    f"{user_id}@system.local",  # email
+                    "user",  # role
+                    "",  # profile_image_url
+                    current_time,
+                    current_time,
+                    current_time
                 )
 
-                # Ensure conversation exists (idempotent)
+                # Ensure chat exists (idempotent)
                 await conn.execute(
                     """
-                    INSERT INTO conversations (conversation_id, user_id, created_at, updated_at)
-                    VALUES ($1, $2, NOW(), NOW())
-                    ON CONFLICT (conversation_id) DO NOTHING
+                    INSERT INTO chat (id, user_id, title, archived, created_at, updated_at, meta)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (id) DO UPDATE SET updated_at = $6
                     """,
                     conv_uuid,
-                    user_uuid
+                    user_uuid,
+                    "Property Posting",  # Default title
+                    False,  # archived
+                    current_time,
+                    current_time,
+                    json.dumps({})
                 )
 
-                # Insert message
+                # Insert message with proper schema
+                # Generate unique message ID
+                msg_id = str(uuid.uuid4())
+
                 await conn.execute(
                     """
-                    INSERT INTO messages (conversation_id, role, content, metadata, created_at)
-                    VALUES ($1, $2, $3, $4, NOW())
+                    INSERT INTO message (id, user_id, channel_id, content, data, meta, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     """,
-                    conv_uuid,
-                    role,
+                    msg_id,
+                    user_uuid,
+                    conv_uuid,  # channel_id links to chat.id
                     content,
-                    json.dumps(metadata or {})
+                    json.dumps({"role": role}),  # Store role in data field
+                    json.dumps(metadata or {}),
+                    current_time,
+                    current_time
                 )
 
         except Exception as e:

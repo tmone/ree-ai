@@ -2,8 +2,12 @@
 Classification Service - Layer 2 AI Services
 Classifies user queries into filter/semantic/both modes using LLM
 Enhanced with Redis caching for 400x performance improvement
+UPDATED 2025-11-16: Added CHAT intent detection for general conversations
+UPDATED 2025-11-16 v2: Fixed CHAT vs ACTION intent priority (actions take precedence)
+UPDATED 2025-11-16 v3: Refactored to use language-agnostic English prompts (i18n ready)
 """
 import httpx
+import os
 from typing import List, Dict, Optional
 from pydantic import BaseModel
 from fastapi import HTTPException
@@ -13,6 +17,17 @@ from shared.models.core_gateway import LLMRequest, Message, ModelType
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.utils.redis_cache import get_cache
+
+
+def load_prompt(filename: str) -> str:
+    """Load prompt template from file"""
+    prompt_path = os.path.join(os.path.dirname(__file__), '../../shared/prompts', filename)
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        # Fallback to inline if file not found
+        return None
 
 
 class ClassifyRequest(BaseModel):
@@ -105,7 +120,12 @@ class ClassificationService(BaseService):
                     return ClassifyResponse(**cached_result)
 
                 # Build smart prompt for LLM with multi-intent detection
-                system_prompt = """You are an expert at classifying real estate queries.
+                # Load language-agnostic English prompt (works with all languages)
+                system_prompt = load_prompt('classification_prompt_en.txt')
+
+                # Fallback to inline if file not found
+                if not system_prompt:
+                    system_prompt = """You are an expert at classifying real estate queries in ANY language.
 
 Your tasks:
 1. Classify query MODE (filter/semantic/both)
@@ -139,25 +159,55 @@ Detect ALL intents in the query. **CRITICAL**: Distinguish between POSTING vs SE
 - **SEARCH_BUY**: User wants to FIND properties to BUY ("tìm nhà mua", "cần mua nhà", "muốn mua căn hộ", "tìm mua")
 - **SEARCH_RENT**: User wants to FIND properties to RENT ("tìm nhà thuê", "cần thuê nhà", "muốn thuê căn hộ", "tìm thuê")
 
-**SECONDARY INTENTS (Can combine with primary):**
-- **PRICE_SUGGESTION**: User wants market price info ("giá thị trường", "giá khu vực này", "bao nhiêu một m2")
-- **COMPARE**: User wants to compare properties ("so sánh", "khác gì", "tốt hơn")
-- **VALUATION**: User wants property valuation ("định giá", "nhà này giá bao nhiêu")
-- **TREND_ANALYSIS**: User wants market trends ("xu hướng thị trường", "giá đang tăng hay giảm")
-- **CONSULTATION**: User asks for advice ("nên mua", "nên chọn", "đầu tư")
+**GENERAL CHAT INTENT (Use with caution - don't over-classify as CHAT):**
+- **CHAT**: General conversation, greetings, questions NOT about real estate transactions
+  - Greetings: "xin chào", "hi", "hello", "chào bạn", "cảm ơn", "tạm biệt"
+  - General questions: "hôm nay thứ mấy", "mấy giờ rồi", "bạn là ai", "bạn có thể giúp gì"
+  - Non-real-estate topics: "thời tiết thế nào", "ăn gì ngon", "đi đâu chơi"
+  - General real estate knowledge (NOT specific actions): "định nghĩa bất động sản là gì", "phân loại loại hình BĐS"
 
-**DETECTION RULES:**
-1. Look for OWNERSHIP keywords: "tôi có", "nhà của tôi", "cần bán", "cần cho thuê" → POST intent
-2. Look for SEARCH keywords: "tìm", "cần mua", "cần thuê", "muốn mua" → SEARCH intent
-3. Look for TRANSACTION TYPE: "bán" → SALE, "cho thuê/thuê" → RENT
-4. Combine: POST + SALE = POST_SALE, POST + RENT = POST_RENT, etc.
+  **IMPORTANT**: Questions about HOW TO post/rent/sell properties should be classified as the ACTION intent (POST_SALE/POST_RENT/SEARCH_*), NOT CHAT:
+  - ❌ "Làm thế nào để cho thuê nhà?" → POST_RENT (NOT CHAT - this is action intent!)
+  - ❌ "Cho thuê nhà như thế nào?" → POST_RENT (NOT CHAT!)
+  - ✅ "Thị trường BĐS hiện tại thế nào?" → CHAT (general knowledge)
+
+**SECONDARY INTENTS (Can combine with primary):**
+- **PRICE_CONSULTATION**: User wants market price info or property valuation ("giá thị trường", "giá khu vực này", "bao nhiêu một m2", "định giá nhà", "ước tính giá")
+- **COMPARE**: User wants to compare properties ("so sánh", "khác gì", "tốt hơn")
+- **TREND_ANALYSIS**: User wants market trends ("xu hướng thị trường", "giá đang tăng hay giảm")
+- **CONSULTATION**: User asks for advice about specific property transactions ("nên mua", "nên chọn", "đầu tư")
+
+**DETECTION RULES (Priority Order):**
+1. **Check for ACTION keywords FIRST** (posting/searching):
+   - "đăng tin", "cho thuê", "cần bán", "muốn cho thuê", "làm thế nào để cho thuê" → POST_SALE/POST_RENT
+   - "tìm nhà", "cần mua", "muốn thuê", "tìm kiếm" → SEARCH_BUY/SEARCH_RENT
+
+2. **Then check CHAT intent** (only if NOT an action):
+   - Greetings: "xin chào", "hi", "hello", "chào", "cảm ơn" → CHAT
+   - General questions: "hôm nay", "thứ mấy", "mấy giờ", "bạn là ai" → CHAT
+   - Non-real-estate: "thời tiết", "ăn gì", topics not about properties → CHAT
+   - General knowledge (not specific actions): "thị trường BĐS thế nào", "xu hướng đầu tư" → CHAT
+
+3. Determine transaction type:
+   - "bán" → SALE, "cho thuê/thuê" → RENT
+
+4. Combine to form final intent:
+   - POST + SALE = POST_SALE
+   - POST + RENT = POST_RENT
+   - SEARCH + BUY = SEARCH_BUY
+   - SEARCH + RENT = SEARCH_RENT
 
 Examples:
+- "Xin chào!" → intents: ["CHAT"], primary: "CHAT"
+- "Hôm nay là thứ mấy?" → intents: ["CHAT"], primary: "CHAT"
+- "Thị trường BĐS hiện tại thế nào?" → intents: ["CHAT"], primary: "CHAT"
+- "Làm thế nào để cho thuê nhà?" → intents: ["POST_RENT"], primary: "POST_RENT" (NOT CHAT!)
+- "Cho thuê nhà như thế nào?" → intents: ["POST_RENT"], primary: "POST_RENT" (NOT CHAT!)
 - "Tôi có nhà cần bán ở Q7" → intents: ["POST_SALE"], primary: "POST_SALE"
 - "Đăng tin cho thuê căn hộ 2PN" → intents: ["POST_RENT"], primary: "POST_RENT"
 - "Tìm căn hộ 2PN Q7 để mua" → intents: ["SEARCH_BUY"], primary: "SEARCH_BUY"
 - "Cần thuê nhà Q2" → intents: ["SEARCH_RENT"], primary: "SEARCH_RENT"
-- "Tìm nhà 3 tỷ và cho tôi giá thị trường Q2" → intents: ["SEARCH_BUY", "PRICE_SUGGESTION"], primary: "SEARCH_BUY"
+- "Tìm nhà 3 tỷ và cho tôi giá thị trường Q2" → intents: ["SEARCH_BUY", "PRICE_CONSULTATION"], primary: "SEARCH_BUY"
 
 IMPORTANT:
 - Respond in JSON format ONLY
@@ -173,7 +223,8 @@ Response format:
   "primary_intent": "SEARCH"
 }"""
 
-                user_prompt = f"""Classify this Vietnamese real estate query:
+                # Language-agnostic user prompt (works with any language)
+                user_prompt = f"""Classify this real estate query (language: auto-detect):
 
 Query: "{request.query}"
 
@@ -270,7 +321,26 @@ Respond with JSON only."""
         """
         query_lower = query.lower()
 
-        # Detect intent first (POST vs SEARCH, SALE vs RENT)
+        # PRIORITY 1: Check for CHAT intent first (greetings, general questions)
+        chat_keywords = [
+            "xin chào", "hi", "hello", "chào bạn", "cảm ơn", "tạm biệt", "bye",
+            "hôm nay", "thứ mấy", "mấy giờ", "bạn là ai", "bạn có thể",
+            "thời tiết", "để xây nhà", "thủ tục", "cách đầu tư", "làm thế nào"
+        ]
+
+        if any(kw in query_lower for kw in chat_keywords):
+            # Check if it's REALLY about property transaction
+            # If query mentions specific property search/posting, NOT chat
+            if not any(kw in query_lower for kw in ["tìm nhà", "tìm căn hộ", "mua nhà", "thuê nhà", "đăng tin"]):
+                return {
+                    "mode": "semantic",
+                    "confidence": 0.8,
+                    "reasoning": "General conversation or greeting detected",
+                    "intents": ["CHAT"],
+                    "primary_intent": "CHAT"
+                }
+
+        # PRIORITY 2: Detect intent (POST vs SEARCH, SALE vs RENT)
         posting_keywords = ["đăng tin", "tôi có", "nhà của tôi", "cần bán", "cần cho thuê", "muốn đăng"]
         search_keywords = ["tìm", "cần mua", "cần thuê", "muốn mua", "muốn thuê", "tìm kiếm"]
 

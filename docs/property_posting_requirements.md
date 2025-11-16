@@ -182,8 +182,61 @@ With Tier 3 (8 fields) = 23 fields for premium listings
 ```
 **Result**: Complete, competitive listing!
 
+## UX Improvements - Conversational Property Posting
+
+### Current Problem
+
+Users complain that responses are **too verbose and overwhelming**:
+
+> "Sao bạn cứ hỏi hoài vậy? Họ đã bảo họ không có thời gian!"
+
+### Issues:
+❌ Lists ALL 9 missing fields at once
+❌ 4 verbose sections (Điểm mạnh, Thông tin thiếu, Gợi ý, Hành động)
+❌ No clear endpoint - keeps asking forever
+❌ Not conversational - feels like filling a long form
+
+### Required Changes:
+
+✅ **Progressive Disclosure**: Ask 1-2 fields at a time
+✅ **Clear Exit**: When score >= 60%, ask "Bạn muốn đăng tin không?"
+✅ **Shorter Responses**: Max 3-4 lines per turn
+
+### New Response Flow:
+
+**Low score (<60%)**:
+```
+Để đăng tin nhanh, cho tôi biết:
+1. Căn hộ ở quận nào?
+2. Giá thuê bao nhiêu/tháng?
+```
+
+**Medium score (60-70%)**:
+```
+Tuyệt! Đã có đủ thông tin cơ bản:
+- Căn hộ cho thuê, Quận 7, 70m²
+- Giá: 10 triệu/tháng
+
+Bạn muốn đăng tin ngay không? (có/không)
+```
+
+**User confirms**:
+```
+✅ Đã đăng tin thành công! Mã tin: #ABC123
+[END CONVERSATION]
+```
+
+### Implementation Files:
+
+1. `services/completeness/prompts.py` - Add `ready_to_post`, `next_questions` fields
+2. `services/orchestrator/main.py` - Detect confirmation, end conversation
+3. Response template - Short format
+
 ## Implementation Checklist
 
+- [ ] **UX: Progressive disclosure** - Ask 1-2 fields per turn
+- [ ] **UX: Confirmation flow** - Detect "có/đăng luôn" → End conversation
+- [ ] **UX: Shorter responses** - Remove verbose sections
 - [ ] Update Attribute Extraction Service prompts with all fields
 - [ ] Update Completeness Check service with tier-based calculation
 - [ ] Update Orchestrator questioning logic (intelligent based on type)

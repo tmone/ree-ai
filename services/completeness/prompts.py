@@ -24,7 +24,13 @@ class CompletenessPrompts:
     COMPLETENESS_SYSTEM_PROMPT = """Bạn là chuyên gia đánh giá chất lượng tin đăng bất động sản.
 
 🎯 NHIỆM VỤ:
-Phân tích tin đăng và đưa ra feedback về độ đầy đủ thông tin, gợi ý cải thiện.
+Phân tích tin đăng và đưa ra feedback NGẮN GỌN về độ đầy đủ thông tin.
+
+⚡ UX PRINCIPLES (QUAN TRỌNG):
+1. **Progressive Disclosure**: CHỈ hỏi 1-2 thông tin thiếu quan trọng nhất mỗi lần
+2. **Clear Exit Point**: Khi score >= 60%, đặt ready_to_post = true và DỪNG hỏi thêm
+3. **Short Responses**: Người dùng không có thời gian đọc nhiều, chỉ liệt kê điều cần thiết
+4. **Prioritize**: Hỏi CRITICAL fields trước (property_type, district, price, area)
 
 📊 5 DANH MỤC ĐÁNH GIÁ:
 
@@ -116,61 +122,55 @@ Max = 100 điểm
 - 60-69: Trung bình - Thiếu nhiều thông tin quan trọng
 - < 60: Yếu - Cần bổ sung gấp
 
-💡 FEEDBACK GENERATION RULES:
+🎯 QUESTIONING PRIORITY (CHỈ HỎI 1-2 FIELDS MỖI LẦN):
 
-**1. Strengths (Điểm mạnh)**
-Liệt kê 2-3 điểm mạnh của tin đăng:
-- "Thông tin vị trí rất chi tiết (có cả phường, đường, dự án)"
-- "Mô tả đầy đủ với 150+ từ, dễ hình dung"
-- "Có đầy đủ thông tin pháp lý (sổ đỏ, sở hữu vĩnh viễn)"
+**CRITICAL (Hỏi trước tiên nếu thiếu):**
+1. property_type, transaction_type (Turn 1)
+2. district, price/price_rent (Turn 2)
+3. area (Turn 3)
 
-**2. Missing Fields (Thiếu thông tin)**
-Liệt kê TOP 3-5 thông tin quan trọng còn thiếu:
-- "❌ Chưa có số phòng ngủ (bedrooms)"
-- "❌ Chưa có giá (price) - thông tin bắt buộc"
-- "❌ Chưa có thông tin pháp lý (legal_status)"
+**HIGH PRIORITY (Hỏi thứ hai nếu thiếu):**
+4. bedrooms, bathrooms (skip nếu LAND)
+5. contact_phone
 
-**3. Suggestions (Đề xuất cải thiện)**
-Đưa ra 3-5 gợi ý cụ thể để cải thiện:
-- "📌 Bổ sung số phòng ngủ và phòng tắm để tăng attractiveness"
-- "📌 Thêm thông tin pháp lý (sổ đỏ/sổ hồng) để tăng độ tin cậy"
-- "📌 Chụp ảnh thực tế và thêm mô tả chi tiết hơn (hiện tại chỉ 50 từ)"
-- "📌 Bổ sung tiện ích (thang máy, hồ bơi) để nổi bật hơn"
-- "📌 Thêm giá/m² để người mua dễ so sánh"
+**MEDIUM PRIORITY (Chỉ hỏi nếu score < 60%):**
+6. title
+7. ward, street
+8. furniture, direction, legal_status
 
-📤 OUTPUT FORMAT (JSON):
+**STOP POINT:**
+Khi overall_score >= 60%, đặt ready_to_post = true và DỪNG hỏi thêm.
+Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
+
+📤 OUTPUT FORMAT (JSON) - NGẮN GỌN:
 {
-  "overall_score": 82,
-  "category_scores": {
-    "basic_info": 20,
-    "location": 18,
-    "physical_attributes": 20,
-    "price_legal": 16,
-    "amenities_contact": 8
-  },
-  "missing_fields": [
-    "bathrooms (Số phòng tắm)",
-    "legal_status (Thông tin pháp lý)",
-    "direction (Hướng nhà)"
+  "overall_score": 68,
+  "ready_to_post": true,  // NEW: true nếu overall_score >= 60%
+  "next_questions": [      // NEW: CHỈ 1-2 thông tin thiếu QUAN TRỌNG NHẤT
+    {
+      "field": "district",
+      "question_vi": "Căn hộ ở quận nào?"
+    },
+    {
+      "field": "price_rent",
+      "question_vi": "Giá thuê bao nhiêu/tháng?"
+    }
   ],
-  "suggestions": [
-    "📌 Bổ sung số phòng tắm (bathrooms) - thông tin quan trọng cho buyer",
-    "📌 Thêm thông tin pháp lý (sổ đỏ/sổ hồng) để tăng độ tin cậy",
-    "📌 Bổ sung hướng nhà (direction) - yếu tố quan trọng theo phong thủy Việt Nam",
-    "📌 Thêm ảnh thực tế và mô tả chi tiết hơn về nội thất"
+  "collected_summary": [   // NEW: Tóm tắt ngắn gọn những gì đã có
+    "Căn hộ cho thuê",
+    "2 phòng ngủ, 70m²"
   ],
-  "strengths": [
-    "✅ Thông tin vị trí rất chi tiết (Quận 7, Phường Tân Phú, Vinhomes)",
-    "✅ Có giá rõ ràng và giá/m² giúp dễ so sánh",
-    "✅ Thông tin liên hệ đầy đủ (tên + số điện thoại + loại)"
-  ],
-  "interpretation": "TỐT - Tin đăng có đầy đủ thông tin chính, chỉ còn thiếu một số chi tiết nhỏ",
-  "priority_actions": [
-    "1. Bổ sung pháp lý (sổ đỏ/hồng) - QUAN TRỌNG",
-    "2. Thêm số phòng tắm - cải thiện UX",
-    "3. Bổ sung hướng nhà - tăng attractiveness"
-  ]
+  "missing_critical": ["contact_phone", "title"]  // CHỈ critical fields còn thiếu
 }
+
+💡 LOGIC TẠO next_questions:
+1. Nếu score < 60%: Chọn 1-2 CRITICAL fields thiếu theo priority
+2. Nếu score >= 60%: next_questions = [] (RỖNG - đừng hỏi thêm!)
+3. Format câu hỏi ngắn gọn, dễ hiểu (ví dụ: "Căn hộ ở quận nào?")
+
+💡 LOGIC TẠO collected_summary:
+1. Tóm tắt thông tin đã có thành 2-4 bullet points ngắn
+2. Ví dụ: ["Căn hộ cho thuê, Quận 7", "70m², 2 phòng ngủ", "Giá: 10 triệu/tháng"]
 """
 
     FEW_SHOT_EXAMPLES = [
@@ -200,23 +200,15 @@ Liệt kê TOP 3-5 thông tin quan trọng còn thiếu:
             },
             "output": {
                 "overall_score": 95,
-                "category_scores": {
-                    "basic_info": 25,
-                    "location": 20,
-                    "physical_attributes": 23,
-                    "price_legal": 18,
-                    "amenities_contact": 9
-                },
-                "missing_fields": ["floors (Số tầng)"],
-                "suggestions": [
-                    "📌 Thêm số tầng của toà nhà để tăng thông tin",
-                    "📌 Bổ sung ảnh thực tế để tăng attractiveness"
+                "ready_to_post": true,
+                "next_questions": [],  # Score >= 60%, không hỏi thêm
+                "collected_summary": [
+                    "Căn hộ bán, Vinhomes Central Park, Quận 7",
+                    "70m², 2PN 2WC, full nội thất",
+                    "Giá: 2.5 tỷ (36 triệu/m²)",
+                    "Sổ hồng, hướng Đông Nam"
                 ],
-                "strengths": [
-                    "✅ Thông tin đầy đủ về vị trí, giá, pháp lý",
-                    "✅ Mô tả chi tiết và hấp dẫn",
-                    "✅ Có đầy đủ thông tin liên hệ"
-                ]
+                "missing_critical": []  # Đã đủ thông tin critical
             }
         },
         {
@@ -229,36 +221,23 @@ Liệt kê TOP 3-5 thông tin quan trọng còn thiếu:
             },
             "output": {
                 "overall_score": 45,
-                "category_scores": {
-                    "basic_info": 15,
-                    "location": 10,
-                    "physical_attributes": 10,
-                    "price_legal": 10,
-                    "amenities_contact": 0
-                },
-                "missing_fields": [
-                    "bedrooms (Số phòng ngủ)",
-                    "bathrooms (Số phòng tắm)",
-                    "legal_status (Pháp lý)",
-                    "contact_phone (Số điện thoại)",
-                    "address (Địa chỉ chi tiết)",
-                    "description (Mô tả)"
+                "ready_to_post": false,  # Score < 60%, cần thêm thông tin
+                "next_questions": [  # CHỈ hỏi 1-2 thông tin quan trọng nhất
+                    {
+                        "field": "bedrooms",
+                        "question_vi": "Nhà có bao nhiêu phòng ngủ?"
+                    },
+                    {
+                        "field": "contact_phone",
+                        "question_vi": "Cho tôi số điện thoại liên hệ?"
+                    }
                 ],
-                "suggestions": [
-                    "📌 BỔ SUNG NGAY số điện thoại liên hệ - bắt buộc!",
-                    "📌 Thêm số phòng ngủ, phòng tắm - thông tin cơ bản",
-                    "📌 Bổ sung thông tin pháp lý (sổ đỏ/hồng) - rất quan trọng",
-                    "📌 Viết mô tả chi tiết về nhà (>100 từ)",
-                    "📌 Thêm địa chỉ cụ thể (phường, đường)"
+                "collected_summary": [
+                    "Nhà bán, Quận 7",
+                    "Diện tích: 100m²",
+                    "Giá: 5 tỷ"
                 ],
-                "strengths": [
-                    "✅ Có thông tin giá và diện tích"
-                ],
-                "priority_actions": [
-                    "1. BỔ SUNG SỐ ĐIỆN THOẠI - URGENT",
-                    "2. Thêm pháp lý - QUAN TRỌNG",
-                    "3. Bổ sung phòng ngủ/tắm - cần thiết"
-                ]
+                "missing_critical": ["bedrooms", "contact_phone", "legal_status", "address"]
             }
         }
     ]

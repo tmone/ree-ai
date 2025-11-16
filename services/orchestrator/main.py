@@ -545,6 +545,7 @@ class Orchestrator(BaseService):
             }
 
         @self.app.post("/chat/completions")
+        @self.app.post("/v1/chat/completions")  # OpenAI-compatible alias for Open WebUI
         async def openai_compatible_chat(request: Dict[str, Any]):
             """
             OpenAI-compatible endpoint with multimodal support.
@@ -3003,10 +3004,10 @@ The user appears frustrated or confused. Adjust your response to:
 Generate a friendly, structured response in **{language} language** that includes:
 
 1. **Greeting & Acknowledgment**: Thank the user for wanting to post a property{' (with apology if frustrated)' if is_frustrated else ''}
-2. **Summary**: Show what information you understood (property type, location, size, price, etc.)
+2. **Brief Summary**: ONLY show a SHORT 1-line summary of the property (e.g., "căn hộ 80m² ở Quận 7, giá 3 tỷ"). DO NOT list all fields as bullet points.
 3. **Completeness Score**: Display the score (X/100) and interpretation
 4. **Strengths**: List 2-3 strong points (if score >= 60)
-5. **Missing Information**: List missing required fields with ❌ emoji
+5. **Missing Information**: List missing required fields with ❌ emoji - ONLY include fields that are ACTUALLY missing, NOT fields already provided
 6. **Suggestions**: Provide 2-3 improvement suggestions with 💡 emoji
 7. **Priority Actions**: If score < 70, list urgent items with 🔥 emoji
 8. **Call to Action**:
@@ -3014,6 +3015,11 @@ Generate a friendly, structured response in **{language} language** that include
    - If score 60-79: Ask to add important details
    - If score < 60: Request essential information
 9. **Closing Question**: Ask if user can provide missing information{' or corrections' if is_frustrated else ''}
+
+**CRITICAL RULES**:
+- In "Missing Information" section, ONLY list fields that are NOT in the "Extracted Information" list above
+- DO NOT ask for property_type, district, area, price, etc. if they are already in "Extracted Information"
+- Be concise in summary - don't repeat all extracted fields as bullet points
 
 **FORMAT REQUIREMENTS**:
 - Use markdown formatting (**, -, emojis)

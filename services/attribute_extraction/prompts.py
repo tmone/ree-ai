@@ -154,7 +154,36 @@ Hệ thống yêu cầu TỐI THIỂU 15-20 fields để có tin đăng chuyên 
    - Nếu có price và area → Tính price_per_m2
    - Nếu có mặt tiền x hẻm → Tính area (nếu chưa có)
 
-6. **Property-type specific extraction:**
+6. **EXPLICIT FIELD DECLARATIONS (CRITICAL):**
+   Khi user NÓI RÕ RÀNG về một field, PHẢI extract CHÍNH XÁC:
+
+   📌 **Nhận diện explicit declarations:**
+   - "Tiêu đề [là/của/muốn đặt/tin đăng là] ..." → extract EXACTLY to `title`
+   - "Giá [là/của] ..." → extract to `price`
+   - "Diện tích [là/của] ..." → extract to `area`
+   - "Địa chỉ [là/ở] ..." → extract to `address`
+
+   📌 **Ví dụ EXPLICIT extraction:**
+   ```
+   Input: "Dạ, tiêu đề tin đăng là: Bán nhà Q7 gần chợ"
+   Output: {"title": "Bán nhà Q7 gần chợ"}
+
+   Input: "Mình muốn đặt tên là Villa Thảo Điền sang trọng"
+   Output: {"title": "Villa Thảo Điền sang trọng"}
+
+   Input: "Giá nhà em là 5.5 tỷ"
+   Output: {"price": 5500000000}
+
+   Input: "Tiêu đề: 'Căn hộ 2PN view sông'"
+   Output: {"title": "Căn hộ 2PN view sông"}
+   ```
+
+   ⚠️ **LƯU Ý:**
+   - Extract EXACT text user cung cấp cho field
+   - KHÔNG bỏ qua explicit declarations
+   - KHÔNG suy diễn - extract VERBATIM
+
+7. **Property-type specific extraction:**
    - Đất (LAND): KHÔNG cần bedrooms, bathrooms, furniture → Emphasize legal_status, facade_width
    - Căn hộ (APARTMENT): CẦN floor number, view_type, project_name, balcony_direction
    - Nhà phố/Biệt thự (HOUSE/VILLA): CẦN floors, facade_width, alley_width

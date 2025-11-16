@@ -28,6 +28,17 @@ from shared.models.core_gateway import LLMRequest, Message, ModelType, FileAttac
 from shared.utils.logger import LogEmoji
 from shared.config import settings
 
+
+
+def load_prompt(filename: str) -> str:
+    """Load prompt template from shared/prompts directory"""
+    prompt_path = os.path.join(os.path.dirname(__file__), '../../shared/prompts', filename)
+    try:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
 # NEW: Import ReAct components (Phase 1-3)
 # FIX BUG#2+#4: Add project root to path for module imports
 import sys
@@ -1244,55 +1255,53 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
         try:
             # Build messages with history context
             if files and len(files) > 0:
-                # Multimodal prompt (vision analysis)
-                system_prompt = """Bạn là trợ lý bất động sản chuyên nghiệp với khả năng phân tích hình ảnh.
+                # Load vision analysis prompt
+                system_prompt = load_prompt('vision_analysis_en.txt')
+                if not system_prompt:
+                    # Fallback to inline English prompt
+                    system_prompt = """You are a professional real estate assistant with image analysis capabilities.
 
-NHIỆM VỤ KHI PHÂN TÍCH HÌNH ẢNH BẤT ĐỘNG SẢN:
-1. MÔ TẢ chi tiết căn hộ/nhà từ hình ảnh:
-   - Loại hình: Căn hộ, biệt thự, nhà phố, đất nền
-   - Phong cách thiết kế và nội thất
-   - Diện tích ước tính
-   - View và hướng (nếu nhìn thấy)
-   - Tiện ích trong ảnh (hồ bơi, gym, ban công...)
+**CRITICAL - LANGUAGE:**
+Respond in the SAME language the user uses (Vietnamese→Vietnamese, English→English)
 
-2. ĐÁNH GIÁ chất lượng và giá trị:
-   - Tình trạng bất động sản
-   - Mức độ sang trọng/cao cấp
-   - Ước tính giá dựa trên vị trí và đặc điểm
-
-3. TƯ VẤN nếu người dùng hỏi:
-   - Phù hợp với nhu cầu gì
-   - Điểm mạnh/yếu của BĐS
-   - Khuyến nghị đầu tư
-
-LUÔN trả lời bằng tiếng Việt, chi tiết và chuyên nghiệp."""
+Analyze real estate images and provide detailed descriptions of property type, design style, amenities, and value estimates."""
             else:
-                # Text-only prompt
-                system_prompt = """Bạn là trợ lý bất động sản thông minh và chuyên nghiệp.
+                # Load language-agnostic English prompt
+                system_prompt = load_prompt('chat_handler_prompt_en.txt')
+                if not system_prompt:
+                    # Fallback to inline English prompt
+                    system_prompt = """You are a friendly, enthusiastic AI assistant with expertise in real estate.
 
-HƯỚNG DẪN SỬ DỤNG LỊCH SỬ HỘI THOẠI:
+IMPORTANT - RESPOND NATURALLY AND FLEXIBLY:
 
-1. **Phân biệt loại câu hỏi:**
-   - Greeting/Chào hỏi (xin chào, hi, cảm ơn): TRẢ LỜI ĐƠN GIẢN, không reference context cũ
-   - Câu hỏi mới (tìm nhà ở X, giá bao nhiêu): TRẢ LỜI TRỰC TIẾP theo câu hỏi
-   - Câu hỏi follow-up (căn đó như thế nào?, còn view không?): SỬ DỤNG context trước đó
+**CRITICAL - LANGUAGE:**
+Respond in the SAME language the user uses:
+- If user writes in Vietnamese → Respond in Vietnamese
+- If user writes in English → Respond in English
+Auto-detect the user's language and match it
 
-2. **Khi nào KHÔNG sử dụng context:**
-   - User nói "xin chào", "hi", "hello", "cảm ơn"
-   - User bắt đầu topic hoàn toàn mới
-   - User hỏi về thứ không liên quan context cũ
+1. **For greetings/emotions:**
+   - Show empathy, comfort naturally like a friend
+   - Greet warmly, ask how they're doing
+   - Respond politely, ask if you can help with anything else
 
-3. **Khi nào SỬ DỤNG context:**
-   - User hỏi "căn đó", "dự án đó", "khu vực đó"
-   - User hỏi chi tiết về property vừa tìm
-   - User hỏi follow-up rõ ràng
+2. **For general questions:**
+   - Be honest about limitations (e.g., real-time info)
+   - Introduce yourself naturally and friendly
+   - Give helpful advice about real estate processes
 
-VÍ DỤ TỐT:
-- User trước: "Tìm nhà ở Quận 2"
-- User hiện tại: "Xin chào" → Response: "Xin chào! Tôi là trợ lý bất động sản. Tôi có thể giúp gì cho bạn?" (KHÔNG nhắc Quận 2)
-- User hiện tại: "Căn đó có view không?" → Response: "Căn hộ ở Quận 2 mà bạn vừa hỏi..." (CÓ reference)
+3. **For real estate questions:**
+   - Answer specifically, in detail, helpfully
+   - Encourage them to provide criteria for property search
+   - Give professional recommendations
 
-LUÔN trả lời phù hợp với ngữ cảnh câu hỏi hiện tại."""
+GUIDING PRINCIPLES:
+- EMPATHETIC and care about user emotions
+- NATURAL like chatting with friends
+- HELPFUL and professional when discussing real estate
+- FLEXIBLE, not rigid templates
+
+Respond like a real person, not a mechanical chatbot!"""
 
             messages_data = [
                 {"role": "system", "content": system_prompt}

@@ -2913,6 +2913,59 @@ Nearby districts:"""
             self.logger.error(f"{LogEmoji.ERROR} Unexpected error in language detection: {e}, defaulting to 'vi'")
             return "vi"
 
+    async def _semantic_chunk_description(self, text: str) -> List[Dict]:
+        """
+        Call semantic chunking service to chunk property description.
+
+        Uses 6-step semantic chunking pipeline:
+        1. Sentence segmentation
+        2. Generate embeddings per sentence
+        3. Calculate cosine similarity
+        4. Combine sentences (threshold 0.75)
+        5. Add overlap
+        6. Create chunk embeddings
+
+        Args:
+            text: Property description text
+
+        Returns:
+            List of chunks with text and embeddings
+        """
+        try:
+            if not text or len(text) < 20:
+                # Too short to chunk
+                return []
+
+            self.logger.info(f"{LogEmoji.AI} [Semantic Chunking] Chunking description ({len(text)} chars)...")
+
+            response = await self.http_client.post(
+                "http://semantic-chunking:8082/chunk",
+                json={
+                    "text": text,
+                    "threshold": 0.75,  # CTO spec: cosine similarity >= 0.75
+                    "overlap": 1  # 1 sentence overlap
+                },
+                timeout=10.0
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                chunks = result.get("chunks", [])
+                self.logger.info(
+                    f"{LogEmoji.SUCCESS} [Semantic Chunking] Created {len(chunks)} chunks"
+                )
+                return chunks
+            else:
+                self.logger.warning(
+                    f"{LogEmoji.WARNING} [Semantic Chunking] Service error: {response.status_code}"
+                )
+                return []
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} [Semantic Chunking] Failed: {e}")
+            # Fallback: no chunking
+            return []
+
     async def _save_property_to_db(
         self,
         entities: Dict,
@@ -2955,12 +3008,20 @@ Nearby districts:"""
 
             fallback_description = " ".join(fallback_description_parts)
 
+            # 🔧 NEW: Semantic Chunking for description
+            description_text = entities.get("description", fallback_description)
+            chunks = await self._semantic_chunk_description(description_text)
+
             # Build property data from entities (map to PropertyCreate format)
             property_data = {
                 "title": entities.get("title", fallback_title),
-                "description": entities.get("description", fallback_description),
+                "description": description_text,
                 "property_type": entities.get("property_type", "apartment"),
                 "listing_type": listing_type,
+
+                # 🔧 NEW: Add chunks and embeddings
+                "chunks": chunks,
+                "chunk_count": len(chunks),
 
                 # Location
                 "district": entities.get("district", "Unknown"),

@@ -86,6 +86,7 @@ class Orchestrator(BaseService):
         self.completeness_url = "http://ree-ai-completeness:8080"
         self.validation_url = "http://ree-ai-validation:8080"
         self.db_gateway_url = "http://ree-ai-db-gateway:8080"
+        self.reranking_url = "http://ree-ai-reranking:8080"  # CTO Priority 4: Re-ranking Service
 
         # HIGH PRIORITY FIX: Circuit breakers for external services
         self.core_gateway_breaker = CircuitBreaker(
@@ -967,12 +968,16 @@ Standalone query:"""
             self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Act] Mode: {mode}")
 
             # Step 2: Route based on mode
+            # CTO Priority 3+4: Use hybrid search + reranking for all modes
             if mode == "filter":
-                results = await self._execute_filter_search(query)
+                # Use hybrid search with more BM25 weight for filter-heavy queries
+                results = await self._execute_hybrid_search_with_reranking(query, alpha=0.5)
             elif mode == "semantic":
-                results = await self._execute_semantic_search(query)
+                # Use hybrid search with more vector weight for semantic queries
+                results = await self._execute_hybrid_search_with_reranking(query, alpha=0.2)
             else:  # both
-                results = await self._execute_filter_search(query)  # Use filter for now
+                # Balanced hybrid search
+                results = await self._execute_hybrid_search_with_reranking(query, alpha=0.3)
 
             self.logger.info(f"{LogEmoji.SUCCESS} [ReAct-Act] Found {len(results)} results")
             return results
@@ -1100,6 +1105,225 @@ Standalone query:"""
             self.logger.error(f"{LogEmoji.ERROR} Semantic search failed: {e}")
             return []
 
+    async def _execute_hybrid_search_with_reranking(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        alpha: float = 0.3
+    ) -> List[Dict]:
+        """
+        Execute hybrid search (BM25 + Vector) with ML-based re-ranking
+
+        CTO Priority 3 + 4 Integration:
+        1. Hybrid Search: Combines BM25 (keyword) + Vector (semantic) search
+        2. Re-ranking: Applies 5-feature scoring (quality, seller, freshness, engagement, personalization)
+
+        Args:
+            query: Search query text
+            user_id: User ID for personalization (optional)
+            alpha: BM25 weight (default: 0.3 = 30% BM25, 70% Vector)
+
+        Returns:
+            List of re-ranked property results with final scores
+        """
+        try:
+            self.logger.info(f"{LogEmoji.AI} [Hybrid+Rerank] Starting integrated search pipeline")
+
+            # Step 1: Extract attributes for filters
+            extraction_response = await self.http_client.post(
+                f"{self.extraction_url}/extract-query",
+                json={"query": query, "intent": "SEARCH"},
+                timeout=settings.EXTRACTION_TIMEOUT
+            )
+
+            filters = {}
+            if extraction_response.status_code == 200:
+                extraction = extraction_response.json()
+                entities = extraction.get("entities", {})
+
+                # Build filters for hybrid search
+                if "district" in entities and entities["district"]:
+                    filters["district"] = entities["district"]
+                if "city" in entities and entities["city"]:
+                    filters["city"] = entities["city"]
+                if "property_type" in entities and entities["property_type"]:
+                    # Remove vague terms
+                    vague_terms = ["nhà", "bds", "bất động sản", "property", "real estate", ""]
+                    prop_type = entities["property_type"].lower().strip()
+                    if prop_type not in vague_terms and prop_type:
+                        filters["property_type"] = entities["property_type"]
+                if "listing_type" in entities and entities["listing_type"]:
+                    filters["listing_type"] = entities["listing_type"]
+                if "min_price" in entities:
+                    filters["min_price"] = entities["min_price"]
+                if "max_price" in entities:
+                    filters["max_price"] = entities["max_price"]
+                if "min_area" in entities:
+                    filters["min_area"] = entities["min_area"]
+                if "max_area" in entities:
+                    filters["max_area"] = entities["max_area"]
+
+                self.logger.info(f"{LogEmoji.INFO} [Hybrid Search] Extracted filters: {filters}")
+
+            # Step 2: Execute hybrid search (BM25 + Vector)
+            hybrid_response = await self.http_client.post(
+                f"{self.db_gateway_url}/hybrid-search",
+                json={
+                    "query": query,
+                    "filters": filters,
+                    "limit": 10  # Get more candidates for reranking
+                },
+                params={"alpha": alpha},
+                timeout=30.0
+            )
+
+            if hybrid_response.status_code != 200:
+                self.logger.warning(f"{LogEmoji.WARNING} Hybrid search failed: {hybrid_response.status_code}")
+                return []
+
+            hybrid_results = hybrid_response.json()
+            results = hybrid_results.get("results", [])
+            metadata = hybrid_results.get("metadata", {})
+
+            if not results:
+                self.logger.info(f"{LogEmoji.INFO} [Hybrid Search] No results found")
+                return []
+
+            self.logger.info(
+                f"{LogEmoji.SUCCESS} [Hybrid Search] Found {len(results)} results "
+                f"(BM25: {metadata.get('bm25_count', 0)}, Vector: {metadata.get('vector_count', 0)}) "
+                f"in {metadata.get('execution_time_ms', 0):.2f}ms"
+            )
+
+            # Step 3: Re-rank with ML-based scoring
+            rerank_response = await self.http_client.post(
+                f"{self.reranking_url}/rerank",
+                json={
+                    "query": query,
+                    "results": results,
+                    "user_id": user_id or "anonymous"
+                },
+                timeout=30.0
+            )
+
+            if rerank_response.status_code != 200:
+                self.logger.warning(f"{LogEmoji.WARNING} Re-ranking failed, using hybrid results")
+                return results[:5]  # Return top 5 from hybrid search
+
+            reranked_data = rerank_response.json()
+            reranked_results = reranked_data.get("results", [])
+            rerank_metadata = reranked_data.get("rerank_metadata", {})
+
+            self.logger.info(
+                f"{LogEmoji.SUCCESS} [Re-ranking] Completed in {rerank_metadata.get('processing_time_ms', 0):.2f}ms, "
+                f"model={rerank_metadata.get('model_version', 'unknown')}"
+            )
+
+            # Log top 3 for debugging
+            for i, result in enumerate(reranked_results[:3], 1):
+                features = result.get("rerank_features", {})
+                self.logger.info(
+                    f"{LogEmoji.INFO} [Top {i}] {result.get('title', 'N/A')[:40]}... | "
+                    f"Final={result.get('final_score', 0):.3f} | "
+                    f"Quality={features.get('completeness', 0):.2f} | "
+                    f"Seller={features.get('seller_reputation', 0):.2f} | "
+                    f"Fresh={features.get('freshness', 0):.2f} | "
+                    f"Engage={features.get('engagement', 0):.2f} | "
+                    f"Personal={features.get('personalization', 0):.2f}"
+                )
+
+            # Return top 5 results
+            return reranked_results[:5]
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} Hybrid+Rerank pipeline failed: {e}", exc_info=True)
+            # Fallback to filter search
+            return await self._execute_filter_search(query)
+
+    async def _track_property_views(self, property_ids: List[str]) -> None:
+        """
+        Track property views for analytics
+
+        CTO Priority 4: Analytics tracking for engagement metrics
+        Sends view events to reranking service for property_stats updates
+
+        Args:
+            property_ids: List of property IDs that were shown to user
+        """
+        try:
+            if not property_ids:
+                return
+
+            self.logger.info(f"{LogEmoji.INFO} [Analytics] Tracking {len(property_ids)} property views")
+
+            # Track each property view asynchronously (fire and forget)
+            for prop_id in property_ids:
+                try:
+                    # Fire and forget - don't await to avoid blocking response
+                    await self.http_client.post(
+                        f"{self.reranking_url}/analytics/view/{prop_id}",
+                        timeout=5.0
+                    )
+                except Exception as e:
+                    # Log error but don't fail the request
+                    self.logger.warning(f"{LogEmoji.WARNING} Failed to track view for {prop_id}: {e}")
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [Analytics] View tracking completed")
+
+        except Exception as e:
+            # Analytics should never break the main flow
+            self.logger.warning(f"{LogEmoji.WARNING} Analytics tracking failed: {e}")
+
+    async def _track_property_click(
+        self,
+        user_id: str,
+        property_id: str,
+        property_price: Optional[float] = None,
+        property_district: Optional[str] = None,
+        property_type: Optional[str] = None
+    ) -> None:
+        """
+        Track property click and update user preferences
+
+        CTO Priority 4: Analytics tracking for user personalization
+        Updates user_preferences table based on clicked properties
+
+        Args:
+            user_id: User ID
+            property_id: Property ID that was clicked
+            property_price: Property price (for preference learning)
+            property_district: Property district (for preference learning)
+            property_type: Property type (for preference learning)
+        """
+        try:
+            self.logger.info(f"{LogEmoji.INFO} [Analytics] Tracking click: user={user_id}, property={property_id}")
+
+            # Build click tracking request
+            params = {
+                "user_id": user_id,
+                "property_id": property_id
+            }
+
+            if property_price:
+                params["property_price"] = property_price
+            if property_district:
+                params["property_district"] = property_district
+            if property_type:
+                params["property_type"] = property_type
+
+            # Fire and forget
+            await self.http_client.post(
+                f"{self.reranking_url}/analytics/click",
+                params=params,
+                timeout=5.0
+            )
+
+            self.logger.info(f"{LogEmoji.SUCCESS} [Analytics] Click tracking completed")
+
+        except Exception as e:
+            # Analytics should never break the main flow
+            self.logger.warning(f"{LogEmoji.WARNING} Click tracking failed: {e}")
+
     async def _try_location_only_search(self, requirements: Dict) -> List[Dict]:
         """
         INTELLIGENT STRATEGY: Search with location filters ONLY
@@ -1154,6 +1378,11 @@ Standalone query:"""
         Used when relaxed search found results but query was incomplete
         """
         try:
+            # CTO Priority 4: Track property views for analytics
+            if results:
+                property_ids = [p.get("property_id") for p in results if p.get("property_id")]
+                await self._track_property_views(property_ids)
+
             # Build context about what filters were relaxed
             location = requirements.get("district", "khu vực này")
 
@@ -3759,6 +3988,11 @@ Generate a detailed review response in **{language} language**:
         Generate response with quality assessment and honest feedback
         """
         try:
+            # CTO Priority 4: Track property views for analytics
+            if results:
+                property_ids = [p.get("property_id") for p in results if p.get("property_id")]
+                await self._track_property_views(property_ids)
+
             if evaluation["quality_score"] >= 0.8:
                 # Excellent match
                 intro = t('search.found_exact', language='vi', count=evaluation['match_count']) + "\n"

@@ -104,21 +104,26 @@ class ClassificationService(BaseService):
             try:
                 self.logger.info(f"{LogEmoji.TARGET} Classifying query: '{request.query}'")
 
-                # NEW: Check cache first
-                # Normalize query for consistent cache keys
-                normalized_query = request.query.lower().strip()
-                cache_key = f"classify:{self.cache._hash_key(normalized_query)}"
+                # NEW: Check cache first (ONLY if no context)
+                # When context is provided, skip cache to ensure context-aware classification
+                cached_result = None
+                if not request.context:
+                    # Normalize query for consistent cache keys
+                    normalized_query = request.query.lower().strip()
+                    cache_key = f"classify:{self.cache._hash_key(normalized_query)}"
 
-                # Try to get from cache
-                await self.cache.connect()
-                cached_result = await self.cache.get(cache_key)
+                    # Try to get from cache
+                    await self.cache.connect()
+                    cached_result = await self.cache.get(cache_key)
 
-                if cached_result:
-                    self.logger.info(
-                        f"{LogEmoji.SUCCESS} Cache HIT! Returning cached classification: "
-                        f"{cached_result['mode']} (saved ~2-4s + LLM cost)"
-                    )
-                    return ClassifyResponse(**cached_result)
+                    if cached_result:
+                        self.logger.info(
+                            f"{LogEmoji.SUCCESS} Cache HIT! Returning cached classification: "
+                            f"{cached_result['mode']} (saved ~2-4s + LLM cost)"
+                        )
+                        return ClassifyResponse(**cached_result)
+                else:
+                    self.logger.info(f"{LogEmoji.INFO} Context provided ({len(request.context)} messages) - skipping cache for context-aware classification")
 
                 # Build smart prompt for LLM with multi-intent detection
                 # Load language-agnostic English prompt (works with all languages)

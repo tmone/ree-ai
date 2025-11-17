@@ -110,6 +110,10 @@ class PropertyDocument(BaseModel):
     # Embedding for semantic search
     embedding: Optional[List[float]] = None
 
+    # Semantic chunking (CTO Architecture Priority 1)
+    chunks: Optional[List[Dict[str, Any]]] = None  # List of chunks with text + embeddings
+    chunk_count: int = 0  # Number of chunks
+
 
 class PropertyCreate(BaseModel):
     """Request to create a new property"""
@@ -144,6 +148,10 @@ class PropertyCreate(BaseModel):
 
     # Save as draft or publish immediately
     publish_immediately: bool = False
+
+    # Semantic chunking (CTO Architecture Priority 1)
+    chunks: Optional[List[Dict[str, Any]]] = None  # List of chunks with text + embeddings
+    chunk_count: int = 0  # Number of chunks
 
 
 class PropertyUpdate(BaseModel):

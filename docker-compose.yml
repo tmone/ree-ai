@@ -508,20 +508,24 @@ services:
       - real
       - all
 
-  # Reranking Service (Layer 3)
+  # Reranking Service (Layer 6) - CTO Priority 4
   reranking:
     build:
       context: .
       dockerfile: services/reranking/Dockerfile
     container_name: ree-ai-reranking
     environment:
-      - USE_REAL_CORE_GATEWAY=${USE_REAL_CORE_GATEWAY:-false}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DEBUG=${DEBUG:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
-      - "8088:8080"
+      - "8087:8080"
     depends_on:
-      - core-gateway
+      - postgres
     networks:
       - ree-ai-network
     profiles:

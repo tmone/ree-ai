@@ -1,0 +1,21 @@
+{
+  "property_info": {
+    "property_type": "apartment",
+    "bedrooms": 2,
+    "bathrooms": 2,
+    "area": 80.0,
+    "district": "District 2",
+    "city": "Ho Chi Minh City",
+    "amenities": ["pool", "gym"],
+    "floor": 15,
+    "building": "Vinhomes Central Park"
+  },
+  "user_query": "Căn hộ 2 phòng ngủ ở Quận 2 giá bao nhiêu?",
+  "language": "vi",
+  "options": {
+    "include_trend": true,
+    "include_comparison": true,
+    "max_samples": 20,
+    "radius_km": 2.0
+  }
+}

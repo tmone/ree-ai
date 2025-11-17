@@ -200,7 +200,7 @@ Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
             },
             "output": {
                 "overall_score": 95,
-                "ready_to_post": true,
+                "ready_to_post": True,
                 "next_questions": [],  # Score >= 60%, không hỏi thêm
                 "collected_summary": [
                     "Căn hộ bán, Vinhomes Central Park, Quận 7",
@@ -221,7 +221,7 @@ Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
             },
             "output": {
                 "overall_score": 45,
-                "ready_to_post": false,  # Score < 60%, cần thêm thông tin
+                "ready_to_post": False,  # Score < 60%, cần thêm thông tin
                 "next_questions": [  # CHỈ hỏi 1-2 thông tin quan trọng nhất
                     {
                         "field": "bedrooms",

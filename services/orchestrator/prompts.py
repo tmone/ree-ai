@@ -4,6 +4,7 @@ Custom prompts for intelligent routing and intent detection
 """
 from typing import Dict, List, Optional
 from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from shared.utils.i18n import t
 
 # Import shared prompts
 import sys
@@ -180,7 +181,10 @@ Now classify the following query:
     ]
 
     # Routing decision prompt
-    ROUTING_DECISION_SYSTEM = """Bạn là REE AI Router - Quyết định service nào xử lý request.
+    @staticmethod
+    def get_routing_decision_system() -> str:
+        """Get routing decision system prompt with i18n"""
+        return f"""{t('chat.system_prompt_router', language='vi')}
 
 🎯 ROUTING RULES:
 
@@ -264,7 +268,7 @@ Now classify the following query:
         """Build LangChain prompt for routing decision"""
         return ChatPromptTemplate.from_messages([
             SystemMessagePromptTemplate.from_template(
-                OrchestratorPrompts.ROUTING_DECISION_SYSTEM
+                OrchestratorPrompts.get_routing_decision_system()
             ),
             HumanMessagePromptTemplate.from_template(
                 "Intent detected: {intent}\n"

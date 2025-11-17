@@ -367,8 +367,9 @@ class ConversationContext:
 
         # ✅ ALLOWED: Contextual nudge based on user behavior
         suggestion = (
-            f"Dựa trên lịch sử tìm kiếm của bạn ({location}, {budget_str}), "
-            f"tôi có thể gợi ý thêm các bất động sản mới đăng trong 7 ngày qua."
+            t('conversation_context.suggest_new_properties', language='vi',
+              location=location, budget_str=budget_str) +
+            "tôi có thể gợi ý thêm các bất động sản mới đăng trong 7 ngày qua."
         )
 
         return suggestion

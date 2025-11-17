@@ -12,6 +12,7 @@ from shared.models.reasoning import (
     AmbiguityDetectionResult
 )
 from shared.utils.logger import LogEmoji
+from shared.utils.i18n import t
 import logging
 
 
@@ -271,7 +272,7 @@ class ReasoningEngine:
             messages = [
                 {
                     "role": "system",
-                    "content": "Bạn là trợ lý tư vấn bất động sản thông minh tại Việt Nam. Hãy trả lời chuyên nghiệp, thân thiện và chi tiết."
+                    "content": t('chat.system_prompt_advisor', language='vi')
                 }
             ]
 
@@ -345,7 +346,7 @@ class ReasoningEngine:
         """
         # Get the last observation result
         if not chain.steps:
-            return "Xin lỗi, không thể xử lý yêu cầu của bạn."
+            return t('errors.no_request', language='vi')
 
         # FIX BUG #10A: Find the last step with an observation (not just the last step)
         # The last step is usually a "conclusion" thought without observation
@@ -356,10 +357,10 @@ class ReasoningEngine:
                 break
 
         if not last_step_with_obs or not last_step_with_obs.observation:
-            return "Xin lỗi, không thể xử lý yêu cầu của bạn."
+            return t('errors.no_request', language='vi')
 
         if not last_step_with_obs.observation.success:
-            return "Xin lỗi, đã xảy ra lỗi khi xử lý yêu cầu. Vui lòng thử lại."
+            return t('errors.retry_error', language='vi')
 
         result = last_step_with_obs.observation.result
 

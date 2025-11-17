@@ -14,6 +14,7 @@ from services.orchestrator.utils.extraction_helpers import (
     extract_entities_for_logging
 )
 from shared.utils.logger import LogEmoji
+from shared.utils.i18n import t
 
 
 class SearchHandler(BaseHandler):
@@ -126,4 +127,4 @@ class SearchHandler(BaseHandler):
             self.log_handler_complete(request_id, "SearchHandler", duration_ms)
 
             # Fallback response
-            return "Xin lỗi, tôi không thể tìm kiếm bất động sản lúc này. Vui lòng thử lại sau."
+            return t('search.service_unavailable', language='vi')

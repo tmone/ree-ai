@@ -258,7 +258,7 @@ async def search_properties(request: SearchRequest):
 
                 filter_clauses.append({
                     "term": {
-                        "city": normalized_city  # Field is already keyword type, no .keyword suffix
+                        "city.keyword": normalized_city  # FIX: Use .keyword sub-field for exact match
                     }
                 })
                 logger.info(f"✅ Applied city filter: {normalized_city} (input: {request.filters.city})")
@@ -270,7 +270,7 @@ async def search_properties(request: SearchRequest):
 
                 filter_clauses.append({
                     "term": {
-                        "district": normalized_district  # Field is already keyword type, no .keyword suffix
+                        "district.keyword": normalized_district  # FIX: Use .keyword sub-field for exact match
                     }
                 })
                 logger.info(f"✅ Applied district filter: {normalized_district} (input: {request.filters.district})")
@@ -419,78 +419,162 @@ async def vector_search_properties(request: SearchRequest):
     """
     Semantic search using vector embeddings and k-NN similarity
     Best for vague/descriptive queries like 'yên tĩnh', 'gần trường quốc tế', 'view đẹp'
+
+    FALLBACK: If properties_vector index doesn't exist, use BM25 text search on properties index
     """
     start_time = time.time()
 
     if not opensearch_client:
         raise HTTPException(status_code=503, detail="OpenSearch not available")
 
-    if not embedding_model:
-        raise HTTPException(status_code=503, detail="Embedding model not loaded. Semantic search unavailable.")
-
     try:
         logger.info(f"🔍 Vector Search Request: query='{request.query}'")
 
-        # Generate embedding for query
-        query_embedding = embedding_model.encode(request.query, convert_to_numpy=True)
+        # Check if properties_vector index exists
+        try:
+            await opensearch_client.indices.exists(index="properties_vector")
+            vector_index_exists = True
+        except:
+            vector_index_exists = False
 
-        # Build k-NN search query
-        search_body = {
-            "size": request.limit,
-            "query": {
-                "knn": {
-                    "embedding": {
-                        "vector": query_embedding.tolist(),
-                        "k": request.limit * 2  # Retrieve more candidates for better results
+        # FALLBACK: Use BM25 text search if vector index doesn't exist or embedding model not loaded
+        if not vector_index_exists or not embedding_model:
+            logger.warning(f"⚠️ Vector index not available, falling back to BM25 text search on 'properties' index")
+
+            # Build BM25 text search query
+            search_body = {
+                "size": request.limit,
+                "query": {
+                    "bool": {
+                        "should": [
+                            {"multi_match": {"query": request.query, "fields": ["title^3", "description^2", "district", "city"], "type": "best_fields"}},
+                        ],
+                        "minimum_should_match": 0  # Allow match_all if query is empty
                     }
                 }
             }
-        }
 
-        # Add filters if provided (combine with k-NN using bool query)
-        if request.filters:
+            # Add filters if provided
             filter_clauses = []
 
-            # District filter
-            if request.filters.region:
-                filter_clauses.append({
-                    "multi_match": {
-                        "query": request.filters.region,
-                        "fields": ["district", "location"]
-                    }
-                })
+            if request.filters:
+                # Property type filter
+                if request.filters.property_type:
+                    filter_clauses.append({
+                        "term": {"property_type.keyword": request.filters.property_type}
+                    })
 
-            # Property type filter
-            if request.filters.property_type:
-                filter_clauses.append({
-                    "multi_match": {
-                        "query": request.filters.property_type,
-                        "fields": ["title", "description"]
-                    }
-                })
+                # Listing type filter
+                if request.filters.listing_type:
+                    filter_clauses.append({
+                        "term": {"listing_type.keyword": request.filters.listing_type}
+                    })
 
-            # Bedrooms filter
-            if request.filters.min_bedrooms:
-                filter_clauses.append({
-                    "range": {
-                        "bedrooms": {"gte": request.filters.min_bedrooms}
-                    }
-                })
+                # District filter
+                if request.filters.district:
+                    filter_clauses.append({
+                        "term": {"district.keyword": request.filters.district.title()}
+                    })
 
-            # If we have filters, combine with k-NN using bool query
+                # City filter
+                if request.filters.city:
+                    filter_clauses.append({
+                        "term": {"city.keyword": request.filters.city.title()}
+                    })
+
+                # Bedrooms filter
+                if request.filters.bedrooms:
+                    filter_clauses.append({
+                        "term": {"bedrooms": request.filters.bedrooms}
+                    })
+
+                # Price range filters
+                if request.filters.min_price or request.filters.max_price:
+                    price_range = {}
+                    if request.filters.min_price:
+                        price_range["gte"] = request.filters.min_price
+                    if request.filters.max_price:
+                        price_range["lte"] = request.filters.max_price
+                    filter_clauses.append({
+                        "range": {"price": price_range}
+                    })
+
+            # Apply filters if any
             if filter_clauses:
-                search_body["query"] = {
-                    "bool": {
-                        "must": [search_body["query"]],  # k-NN as must clause
-                        "filter": filter_clauses
+                search_body["query"]["bool"]["filter"] = filter_clauses
+
+            # If query is empty and no filters, use match_all
+            if not request.query and not filter_clauses:
+                search_body["query"] = {"match_all": {}}
+
+            # Execute BM25 search on properties index
+            response = await opensearch_client.search(
+                index="properties",
+                body=search_body
+            )
+
+        else:
+            # VECTOR SEARCH PATH (original k-NN logic)
+            # Generate embedding for query
+            query_embedding = embedding_model.encode(request.query, convert_to_numpy=True)
+
+            # Build k-NN search query
+            search_body = {
+                "size": request.limit,
+                "query": {
+                    "knn": {
+                        "embedding": {
+                            "vector": query_embedding.tolist(),
+                            "k": request.limit * 2  # Retrieve more candidates for better results
+                        }
                     }
                 }
+            }
 
-        # Execute vector search on properties_vector index
-        response = await opensearch_client.search(
-            index="properties_vector",  # Use vector index with embeddings
-            body=search_body
-        )
+            # Add filters if provided (combine with k-NN using bool query)
+            if request.filters:
+                filter_clauses = []
+
+                # District filter
+                if request.filters.region:
+                    filter_clauses.append({
+                        "multi_match": {
+                            "query": request.filters.region,
+                            "fields": ["district", "location"]
+                        }
+                    })
+
+                # Property type filter
+                if request.filters.property_type:
+                    filter_clauses.append({
+                        "multi_match": {
+                            "query": request.filters.property_type,
+                            "fields": ["title", "description"]
+                        }
+                    })
+
+                # Bedrooms filter
+                if request.filters.min_bedrooms:
+                    filter_clauses.append({
+                        "range": {
+                            "bedrooms": {"gte": request.filters.min_bedrooms}
+                        }
+                    })
+
+                # If we have filters, combine with k-NN using bool query
+                if filter_clauses:
+                    search_body["query"] = {
+                        "bool": {
+                            "must": [search_body["query"]],  # k-NN as must clause
+                            "filter": filter_clauses
+                        }
+                    }
+
+            # Execute vector search on properties_vector index
+            response = await opensearch_client.search(
+                index="properties_vector",  # Use vector index with embeddings
+                body=search_body
+            )
 
         # Convert results to PropertyResult objects
         results = []

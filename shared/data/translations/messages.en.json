@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "language": "en",
+  "last_updated": "2025-11-17",
+
+  "errors": {
+    "system_error": "Sorry, the system is experiencing issues. Please try again later.",
+    "connection_error": "Sorry, connection error occurred. Please try again later.",
+    "data_error": "Sorry, data processing error occurred. Please try again.",
+    "unknown_error": "Sorry, an unknown error occurred. Please contact support.",
+    "retry_error": "Sorry, an error occurred. Please try again.",
+    "extraction_error": "Sorry, I encountered an issue analyzing your request.",
+    "no_request": "Sorry, unable to process your request."
+  },
+
+  "property_posting": {
+    "greeting": "Hello! 👋",
+    "acknowledgment_sale": "Great! You want to post a property for sale!",
+    "acknowledgment_rent": "Great! You want to post a property for rent!",
+    "acknowledgment": "Great! You want to post a property for {transaction_type}!",
+
+    "ask_property_type": "What type of property? (Apartment/House/Land/Villa/Office)",
+    "ask_location": "Where is it located? (District/Area)",
+    "ask_price": "What's the {transaction_type} price?",
+    "ask_more_info": "Can you provide more details? 😊",
+    "provide_comfortably": "Feel free to provide information at your own pace, I'll help you step by step! 😊",
+
+    "summary_recorded": "Recorded: {summary}",
+    "to_attract_more": "To make your listing more attractive, you can add:",
+
+    "completion_score": "Completeness: {score}/100 - {interpretation}",
+    "strengths": "Strengths:",
+    "missing_info": "Missing:",
+    "suggestions": "Suggestions:",
+    "priority_actions": "Priority actions:",
+
+    "thank_you": "Thank you!",
+    "thank_you_providing": "Thank you for providing information!",
+    "congratulations_complete": "Excellent! Your information is quite complete 🎉",
+    "almost_done": "Almost done!",
+
+    "ready_to_publish": "✅ Complete! Your posting information is ready ({score}/100). 🎉 Your property is ready to be published!",
+    "property_ready": "Your property listing is ready to be published.",
+
+    "extraction_error_detail": "Could you provide more details about the property you need a price consultation for?",
+
+    "fallback_completeness": "Thank you for providing information! Completeness: {score}/100.",
+    "fallback_please_add": "Please add: {missing_fields}",
+    "fallback_complete": "Information is complete!"
+  },
+
+  "search": {
+    "found_properties": "I found {count} matching properties",
+    "found_exact": "I found {count} properties that **match very well** with your requirements:",
+    "found_good": "I found {match_count}/{total_count} properties matching your requirements:",
+    "found_partial": "Found {total_count} properties, but only {match_count} partially match:",
+    "no_results": "Sorry, I couldn't find properties matching your requirements. Could you provide more information or broaden your search criteria?",
+    "no_results_expand": "No matching properties found. Would you like to broaden your search criteria?",
+    "no_property_type": "Currently there are no {property_type} matching your requirements in the system.",
+    "no_units_in_district": ", but **no units in {district}**.",
+    "clarification_header": "Would you like me to:",
+    "expand_search_city": "Expand search to **all of {city}**",
+    "provide_details": "Provide more details about \"{requirement}\"",
+    "adjust_bedrooms": "Adjust bedroom count ({bedrooms} ± 1 room)",
+    "nearby_alternatives": "Here are {count} nearby properties that might match:",
+    "how_can_help": "How can I help you?",
+    "search_nearby_districts": "Search in **nearby districts** ({districts})",
+    "service_unavailable": "Sorry, I cannot search for properties right now. Please try again later.",
+    "found_some_provide_more_info": "I found some matching properties. Could you provide more details to help me search more accurately?"
+  },
+
+  "price_consultation": {
+    "starting_analysis": "Analyzing price...",
+    "market_comparison": "Market comparison",
+    "price_range": "Price range: {min_price} - {max_price}",
+    "average_price": "Average price: {price}",
+    "consultation_result": "Price consultation result"
+  },
+
+  "chat": {
+    "system_prompt": "You are REE AI's real estate assistant. Answer questions in a friendly, professional, and helpful manner.",
+    "system_prompt_advisor": "You are an intelligent real estate consulting assistant in Vietnam. Answer professionally, friendly, and in detail.",
+    "system_prompt_quality_evaluator": "You are a real estate search result quality evaluation assistant.",
+    "system_prompt_router": "You are REE AI Router - Decide which service handles the request.",
+    "greeting": "Hello! How can I help you?",
+    "how_can_help": "How can I help you today?",
+    "service_unavailable": "Sorry, I cannot answer this question right now. Please try again later."
+  },
+
+  "conversation_context": {
+    "based_on_history": "Based on your search history ({location}, {budget}), I can suggest newly posted properties from the past 7 days.",
+    "suggest_new_properties": "Based on your search history ({location}, {budget_str}), "
+  },
+
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "continue": "Continue",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "loading": "Loading...",
+    "processing": "Processing...",
+    "please_wait": "Please wait..."
+  }
+}

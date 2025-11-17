@@ -10,6 +10,7 @@ import time
 from typing import Dict, Any, List, Optional
 from services.orchestrator.handlers.base_handler import BaseHandler
 from shared.utils.logger import LogEmoji
+from shared.utils.i18n import t
 
 
 class ChatHandler(BaseHandler):
@@ -89,7 +90,7 @@ class ChatHandler(BaseHandler):
             self.log_handler_complete(request_id, "ChatHandler", duration_ms)
 
             # Fallback response
-            return "Xin lỗi, tôi không thể trả lời câu hỏi này lúc này. Vui lòng thử lại sau."
+            return t('chat.service_unavailable', language='vi')
 
     def _build_messages(
         self,
@@ -111,8 +112,7 @@ class ChatHandler(BaseHandler):
         messages = [
             {
                 "role": "system",
-                "content": "Bạn là trợ lý AI chuyên về bất động sản của REE AI. "
-                           "Hãy trả lời câu hỏi một cách thân thiện, chuyên nghiệp và hữu ích."
+                "content": t('chat.system_prompt', language='vi')
             }
         ]
 

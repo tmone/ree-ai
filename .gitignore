@@ -90,5 +90,10 @@ monitoring/data/
 grafana/data/
 prometheus/data/
 
-# Personal notes
+# Personal notes and Claude instructions
 CLAUDE.md
+CLAUDE.*
+docs/claude/
+
+# Test results
+tests/

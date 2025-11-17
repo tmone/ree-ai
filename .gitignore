@@ -133,6 +133,27 @@ quick-deploy.*
 docker-compose.prebuilt.yml
 docker-compose.production*.yml
 
+# Development/test scripts (NOT for production)
+scripts/analyze_*.py
+scripts/view_*.py
+scripts/extract_*.py
+scripts/monitor_*.py
+scripts/show_*.py
+scripts/update_*.py
+scripts/*crawler*.py
+scripts/simple_*.py
+scripts/quick_*.py
+scripts/check_database_permissions.py
+scripts/setup_flow1_database.py
+scripts/test_*.py
+scripts/test_*.sql
+scripts/demo_*.sql
+scripts/user_responses.txt
+scripts/templates/test_*.html
+scripts/*.bat
+scripts/*.ps1
+scripts/README_TEST_VIEWER.md
+
 # Debug tools
 tools/debug_*.py
 temp_*.py

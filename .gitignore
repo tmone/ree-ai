@@ -71,8 +71,7 @@ backups/
 docs/backup/  # Archived/outdated documentation
 
 # Development/analysis data
-data/site_analysis/
-shared/data/site_analysis/
+# (Removed - site_analysis is production master data for crawler)
 
 # Temporary directory for local testing and verification
 # Scripts here are for development only, NOT committed to repo

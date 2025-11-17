@@ -65,6 +65,19 @@ class MappedAttribute(BaseModel):
         None,
         description="Original text extracted from user input"
     )
+    # CTO Architecture Priority 2: Enhanced tracking
+    source_span: Optional[Dict[str, int]] = Field(
+        None,
+        description="Character positions in original text {'start': 0, 'end': 10}"
+    )
+    normalized_value: Optional[str] = Field(
+        None,
+        description="Standardized value (e.g., '5000000000' for '5 tỷ')"
+    )
+    unit: Optional[str] = Field(
+        None,
+        description="Unit of measurement (e.g., 'VND', 'm2', 'sqm')"
+    )
 
     class Config:
         json_schema_extra = {
@@ -165,6 +178,13 @@ class RawExtraction(BaseModel):
     price: Optional[float] = Field(None, gt=0, description="Price in VND")
     floor: Optional[int] = Field(None, ge=0, description="Floor number")
     total_floors: Optional[int] = Field(None, ge=1, description="Total floors in building")
+
+    # CTO Architecture Priority 2: Enhanced extraction metadata
+    confidence: float = Field(default=0.95, ge=0.0, le=1.0, description="Extraction confidence score")
+    numeric_source_spans: Optional[Dict[str, Dict[str, int]]] = Field(
+        None,
+        description="Source positions for numeric fields {'price': {'start': 10, 'end': 15}}"
+    )
 
     # Free-form text fields
     title: Optional[str] = Field(None, description="Property title")

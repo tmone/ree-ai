@@ -70,6 +70,11 @@ backup/
 backups/
 docs/backup/  # Archived/outdated documentation
 
+# Development/analysis data
+data/site_analysis/
+shared/data/site_analysis/
+shared/data/translations/
+
 # Temporary directory for local testing and verification
 # Scripts here are for development only, NOT committed to repo
 temp/
@@ -140,19 +145,25 @@ scripts/extract_*.py
 scripts/monitor_*.py
 scripts/show_*.py
 scripts/update_*.py
+scripts/run_analysis.py
 scripts/*crawler*.py
+scripts/*crawl*.py
 scripts/simple_*.py
-scripts/quick_*.py
+scripts/quick*.py
+scripts/web_*.py
 scripts/check_database_permissions.py
 scripts/setup_flow1_database.py
 scripts/test_*.py
 scripts/test_*.sql
 scripts/demo_*.sql
 scripts/user_responses.txt
+scripts/web_viewer.log
 scripts/templates/test_*.html
 scripts/*.bat
 scripts/*.ps1
-scripts/README_TEST_VIEWER.md
+scripts/*README*.md
+scripts/*SUMMARY*.md
+scripts/*COMPLETE*.md
 
 # Debug tools
 tools/debug_*.py

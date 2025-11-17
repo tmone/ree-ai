@@ -105,7 +105,11 @@ async def create_property(
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "published_at": now.isoformat() if status == PropertyStatus.ACTIVE else None,
-        "expires_at": (now + timedelta(days=90)).isoformat()  # Auto-expire after 90 days
+        "expires_at": (now + timedelta(days=90)).isoformat(),  # Auto-expire after 90 days
+
+        # Semantic chunking (CTO Architecture Priority 1)
+        "chunks": property_data.chunks or [],
+        "chunk_count": property_data.chunk_count or 0,
     }
 
     # Index in OpenSearch

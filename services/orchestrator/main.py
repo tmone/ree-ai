@@ -218,8 +218,8 @@ class Orchestrator(BaseService):
                     primary_intent = "CHAT"
                     self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent} (multimodal analysis)")
                 else:
-                    # Use classification service for intelligent intent detection
-                    classification_result = await self._classify_query(request.query)
+                    # Use classification service for intelligent intent detection with conversation context
+                    classification_result = await self._classify_query(request.query, history=history)
                     primary_intent = classification_result.get("primary_intent", "SEARCH_BUY")
                     all_intents = classification_result.get("intents", [primary_intent])
 
@@ -1439,9 +1439,13 @@ Respond like a real person, not a mechanical chatbot!"""
     # Classification & Property Posting Methods
     # ========================================
 
-    async def _classify_query(self, query: str) -> Dict:
+    async def _classify_query(self, query: str, history: Optional[List[Dict]] = None) -> Dict:
         """
         Call classification service for intelligent intent detection
+
+        Args:
+            query: Current user query
+            history: Conversation history for context-aware classification
 
         Returns dict with:
         - mode: "filter" | "semantic" | "both"
@@ -1453,9 +1457,17 @@ Respond like a real person, not a mechanical chatbot!"""
         try:
             self.logger.info(f"{LogEmoji.AI} Calling classification service...")
 
+            # Format conversation history as context for classification
+            # This allows the classifier to maintain state across turns
+            context = None
+            if history:
+                # Pass last 5 messages as list (classification service expects List[Dict])
+                context = history[-5:]
+                self.logger.info(f"{LogEmoji.INFO} Classification context: {len(context)} messages")
+
             response = await self.http_client.post(
                 f"{self.classification_url}/classify",
-                json={"query": query, "context": None},
+                json={"query": query, "context": context},
                 timeout=10.0
             )
 

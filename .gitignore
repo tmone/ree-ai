@@ -73,7 +73,6 @@ docs/backup/  # Archived/outdated documentation
 # Development/analysis data
 data/site_analysis/
 shared/data/site_analysis/
-shared/data/translations/
 
 # Temporary directory for local testing and verification
 # Scripts here are for development only, NOT committed to repo

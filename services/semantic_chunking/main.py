@@ -37,7 +37,7 @@ class SemanticChunker(BaseService):
             name="semantic_chunking",
             version="1.0.0",
             capabilities=["text_chunking", "semantic_analysis"],
-            port=8101
+            port=8080  # Match docker-compose internal port (exposed as 8082:8080)
         )
 
         # MEDIUM FIX Bug#13: Use configurable embedding model

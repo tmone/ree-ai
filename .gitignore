@@ -28,6 +28,14 @@ build/
 *.swo
 *~
 
+# AI Development Tools (Claude Code, GitHub Workflows)
+.claude/
+.github/
+
+# Reference/Example Code (not used in production)
+frontend/ree-ai-app  # Custom Next.js frontend - reference only, production uses Open WebUI
+frontend/ree-ai-app/
+
 # OS
 .DS_Store
 Thumbs.db
@@ -60,7 +68,7 @@ redis_data/
 .backup/
 backup/
 backups/
-docs/backup/
+docs/backup/  # Archived/outdated documentation
 
 # Temporary directory for local testing and verification
 # Scripts here are for development only, NOT committed to repo
@@ -97,3 +105,37 @@ docs/claude/
 
 # Test results
 tests/
+
+# AI-assisted development artifacts (for Claude Code and debugging)
+# Docker image exports
+*.tar
+*.tar.gz
+
+# Temporary deployment folders
+deployment_images/
+deployment_images_*/
+docker_images/
+
+# Debug documentation (dated files)
+docs/*2025-*.md
+docs/CLASSIFICATION_BUG_FIX*.md
+docs/CRITICAL_ISSUE_RESOLUTION*.md
+docs/DEPLOYMENT_SUCCESS*.md
+docs/OUTSTANDING_ISSUES*.md
+docs/QUICK_FIX*.md
+
+# Temporary deployment scripts
+scripts/deployment/
+build_and_deploy.*
+deploy-production.*
+configure-ports.*
+quick-deploy.*
+docker-compose.prebuilt.yml
+docker-compose.production*.yml
+
+# Debug tools
+tools/debug_*.py
+temp_*.py
+
+# Production environment (should use server-specific config)
+.env.production

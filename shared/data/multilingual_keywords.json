@@ -1,0 +1,224 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-11-17",
+  "description": "Multilingual keywords master data for REE AI - Supports Vietnamese, English, Thai, Japanese",
+
+  "confirmation_keywords": {
+    "description": "Keywords indicating user confirmation/completion",
+    "vi": [
+      "cảm ơn", "cam on",
+      "ok", "okay",
+      "được rồi", "duoc roi",
+      "xong", "đủ rồi", "du roi",
+      "hoàn thành", "hoan thanh",
+      "đăng luôn", "dang luon",
+      "đăng đi", "dang di",
+      "xác nhận", "xac nhan",
+      "đồng ý", "dong y",
+      "vâng", "vang",
+      "ổn rồi", "on roi",
+      "chính xác", "chinh xac",
+      "đúng rồi", "dung roi",
+      "tốt rồi", "tot roi"
+    ],
+    "en": [
+      "thank you", "thanks",
+      "that's enough", "enough",
+      "complete", "done", "finish",
+      "post it", "submit",
+      "confirm", "yes",
+      "correct", "approve",
+      "agreed", "looks good",
+      "ok", "okay",
+      "perfect", "great"
+    ],
+    "th": [
+      "ขอบคุณ",
+      "เสร็จแล้ว",
+      "พอแล้ว",
+      "เอาละ",
+      "ตกลง",
+      "ดีแล้ว"
+    ],
+    "ja": [
+      "ありがとう",
+      "終わり",
+      "完了",
+      "十分",
+      "はい",
+      "確認"
+    ]
+  },
+
+  "intent_keywords": {
+    "description": "Keywords for intent detection",
+
+    "post_sale": {
+      "description": "Property posting for sale",
+      "vi": [
+        "bán nhà", "ban nha",
+        "bán căn hộ", "ban can ho",
+        "bán đất", "ban dat",
+        "đăng tin bán", "dang tin ban",
+        "muốn bán", "muon ban",
+        "cần bán", "can ban",
+        "tôi có nhà bán", "toi co nha ban"
+      ],
+      "en": [
+        "sell house", "sell property",
+        "sell apartment", "sell land",
+        "post for sale", "want to sell",
+        "need to sell", "selling",
+        "i have property to sell"
+      ]
+    },
+
+    "post_rent": {
+      "description": "Property posting for rent",
+      "vi": [
+        "cho thuê", "cho thue",
+        "muốn cho thuê", "muon cho thue",
+        "cần cho thuê", "can cho thue",
+        "đăng tin cho thuê", "dang tin cho thue",
+        "tôi có nhà cho thuê", "toi co nha cho thue"
+      ],
+      "en": [
+        "rent out", "for rent",
+        "want to rent out",
+        "need to rent out",
+        "post for rent",
+        "renting out",
+        "i have property to rent"
+      ]
+    },
+
+    "search_buy": {
+      "description": "Property search for buying",
+      "vi": [
+        "tìm nhà mua", "tim nha mua",
+        "cần mua", "can mua",
+        "muốn mua", "muon mua",
+        "tìm mua", "tim mua",
+        "mua nhà", "mua can ho"
+      ],
+      "en": [
+        "find house to buy",
+        "want to buy", "need to buy",
+        "looking for property",
+        "buy house", "buy apartment",
+        "purchase property"
+      ]
+    },
+
+    "search_rent": {
+      "description": "Property search for renting",
+      "vi": [
+        "tìm nhà thuê", "tim nha thue",
+        "cần thuê", "can thue",
+        "muốn thuê", "muon thue",
+        "tìm thuê", "tim thue",
+        "thuê nhà", "thue nha"
+      ],
+      "en": [
+        "find rental", "find house to rent",
+        "want to rent", "need to rent",
+        "looking for rental",
+        "rent apartment", "rent house"
+      ]
+    },
+
+    "price_consultation": {
+      "description": "Price inquiry and consultation",
+      "vi": [
+        "giá bao nhiêu", "gia bao nhieu",
+        "hỏi giá", "hoi gia",
+        "tư vấn giá", "tu van gia",
+        "định giá", "dinh gia",
+        "giá thị trường", "gia thi truong",
+        "có hợp lý không", "co hop ly khong"
+      ],
+      "en": [
+        "what's the price", "how much",
+        "price inquiry", "price consultation",
+        "market price", "property valuation",
+        "is it reasonable", "fair price"
+      ]
+    },
+
+    "chat": {
+      "description": "General conversation",
+      "vi": [
+        "chào", "xin chào",
+        "hello", "hi",
+        "hôm nay", "thế nào",
+        "cảm ơn", "tạm biệt"
+      ],
+      "en": [
+        "hello", "hi", "hey",
+        "how are you",
+        "thank you", "bye",
+        "good morning", "good evening"
+      ]
+    }
+  },
+
+  "property_types": {
+    "description": "Property type keywords",
+    "vi": {
+      "apartment": ["căn hộ", "can ho", "chung cư", "chung cu"],
+      "house": ["nhà", "nha", "nhà phố", "nha pho"],
+      "villa": ["biệt thự", "biet thu"],
+      "land": ["đất", "dat", "mảnh đất", "manh dat"],
+      "townhouse": ["nhà phố", "nha pho"],
+      "office": ["văn phòng", "van phong"]
+    },
+    "en": {
+      "apartment": ["apartment", "condo", "flat"],
+      "house": ["house", "home"],
+      "villa": ["villa", "mansion"],
+      "land": ["land", "plot"],
+      "townhouse": ["townhouse", "row house"],
+      "office": ["office", "commercial space"]
+    }
+  },
+
+  "location_keywords": {
+    "description": "Location-related keywords",
+    "vi": {
+      "district": ["quận", "quan", "huyện", "huyen"],
+      "ward": ["phường", "phuong", "xã", "xa"],
+      "street": ["đường", "duong", "phố", "pho"],
+      "city": ["thành phố", "thanh pho", "TP"]
+    },
+    "en": {
+      "district": ["district"],
+      "ward": ["ward"],
+      "street": ["street", "road", "avenue"],
+      "city": ["city"]
+    }
+  },
+
+  "missing_info_prompts": {
+    "description": "Prompts for missing information (for feedback generation)",
+    "vi": {
+      "title": "Bổ sung tiêu đề để thu hút người xem hơn",
+      "description": "Thêm mô tả chi tiết về bất động sản để người xem dễ hình dung",
+      "price": "Cung cấp giá cả để người mua/thuê dễ quyết định",
+      "bedrooms": "Cho biết số phòng ngủ",
+      "area": "Cung cấp diện tích bất động sản",
+      "district": "Cho biết quận/huyện",
+      "contact_phone": "Thêm số điện thoại liên hệ",
+      "legal_status": "Cung cấp thông tin pháp lý để tăng độ tin cậy"
+    },
+    "en": {
+      "title": "Add a title to attract viewers",
+      "description": "Add detailed description for better understanding",
+      "price": "Provide price for easier decision making",
+      "bedrooms": "Specify number of bedrooms",
+      "area": "Provide property area",
+      "district": "Specify district/area",
+      "contact_phone": "Add contact phone number",
+      "legal_status": "Provide legal information to increase trust"
+    }
+  }
+}

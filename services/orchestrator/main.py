@@ -50,6 +50,7 @@ if str(project_root) not in sys.path:
 from services.orchestrator.knowledge_base import KnowledgeBase
 from services.orchestrator.ambiguity_detector import AmbiguityDetector
 from services.orchestrator.reasoning_engine import ReasoningEngine
+from shared.utils.multilingual_keywords import get_confirmation_keywords
 
 
 class Orchestrator(BaseService):
@@ -237,7 +238,8 @@ class Orchestrator(BaseService):
                     response_text = await self._handle_property_posting(
                         request.query,
                         primary_intent=primary_intent,
-                        history=history
+                        history=history,
+                        user_id=request.user_id
                     )
                 elif intent == "search":
                     # Case 2: Handle search with ReAct agent
@@ -1435,7 +1437,8 @@ Respond like a real person, not a mechanical chatbot!"""
         self,
         query: str,
         primary_intent: str,
-        history: List[Dict] = None
+        history: List[Dict] = None,
+        user_id: str = None
     ) -> str:
         """
         Handle property posting workflow with INTERNAL REASONING LOOP:
@@ -1594,6 +1597,20 @@ Re-extract property attributes with improved understanding. Focus on filling mis
             # Ending Condition: High completeness + User confirmation
             if overall_score >= 75 and is_user_confirming:
                 self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Conversation ending: Score {overall_score}/100 + User confirmed")
+
+                # SAVE PROPERTY TO DATABASE
+                save_result = await self._save_property_to_db(
+                    entities=entities,
+                    user_id=user_id or "anonymous",
+                    transaction_type=transaction_type
+                )
+
+                # Log save result for debugging
+                if save_result:
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] Property saved with ID: {save_result.get('property_id')}")
+                else:
+                    self.logger.warning(f"{LogEmoji.WARNING} [Property Posting] Failed to save property, but continuing with response")
+
                 return await self._generate_completion_message(
                     entities=entities,
                     overall_score=overall_score,
@@ -2727,6 +2744,7 @@ Nearby districts:"""
     def _detect_completion_confirmation(self, query: str, history: List[Dict] = None) -> bool:
         """
         Detect if user is confirming completion or wants to end conversation.
+        Uses master data for multilingual keywords.
 
         Args:
             query: Current user query
@@ -2738,20 +2756,8 @@ Nearby districts:"""
         try:
             query_lower = query.lower()
 
-            # Confirmation signals (multilingual)
-            confirmation_keywords = [
-                # Vietnamese
-                "cảm ơn", "cam on", "ok", "okay", "được rồi", "duoc roi",
-                "xong", "đủ rồi", "du roi", "hoàn thành", "hoan thanh",
-                "đăng luôn", "dang luon", "đăng đi", "dang di",
-                # English
-                "thank you", "thanks", "that's enough", "enough", "complete",
-                "done", "finish", "post it", "submit",
-                # Thai
-                "ขอบคุณ", "เสร็จแล้ว", "พอแล้ว", "เอาละ",
-                # Japanese
-                "ありがとう", "終わり", "完了", "十分"
-            ]
+            # Load confirmation keywords from master data (supports all languages)
+            confirmation_keywords = get_confirmation_keywords()
 
             # Check if user confirms
             if any(keyword in query_lower for keyword in confirmation_keywords):
@@ -2819,6 +2825,119 @@ Nearby districts:"""
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Unexpected error in language detection: {e}, defaulting to 'vi'")
             return "vi"
+
+    async def _save_property_to_db(
+        self,
+        entities: Dict,
+        user_id: str,
+        transaction_type: str
+    ) -> Optional[Dict]:
+        """
+        Save extracted property to OpenSearch via DB Gateway.
+
+        Args:
+            entities: Extracted property attributes
+            user_id: User identifier
+            transaction_type: "bán" or "cho thuê"
+
+        Returns:
+            Save result dict or None if failed
+        """
+        try:
+            self.logger.info(f"{LogEmoji.INFO} [Save Property] Preparing to save property for user {user_id}")
+
+            # Map Vietnamese transaction type to ListingType enum
+            listing_type = "sale" if transaction_type == "bán" else "rent"
+
+            # Build fallback title and description if not provided
+            fallback_title = f"{entities.get('property_type', 'Property').title()} in {entities.get('district', 'Unknown')}"
+            if entities.get('bedrooms'):
+                fallback_title = f"{entities.get('bedrooms')}BR {fallback_title}"
+
+            # Create detailed fallback description (minimum 50 chars required)
+            fallback_description_parts = [
+                f"{entities.get('property_type', 'Property').title()} for {listing_type}",
+                f"located in {entities.get('district', 'Unknown')}, {entities.get('city', 'Ho Chi Minh City')}."
+            ]
+            if entities.get('area'):
+                fallback_description_parts.append(f"Area: {entities.get('area')} m².")
+            if entities.get('bedrooms'):
+                fallback_description_parts.append(f"Bedrooms: {entities.get('bedrooms')}.")
+            if entities.get('price'):
+                fallback_description_parts.append(f"Price: {entities.get('price'):,.0f} VND.")
+
+            fallback_description = " ".join(fallback_description_parts)
+
+            # Build property data from entities (map to PropertyCreate format)
+            property_data = {
+                "title": entities.get("title", fallback_title),
+                "description": entities.get("description", fallback_description),
+                "property_type": entities.get("property_type", "apartment"),
+                "listing_type": listing_type,
+
+                # Location
+                "district": entities.get("district", "Unknown"),
+                "ward": entities.get("ward"),
+                "street": entities.get("street"),
+                "city": entities.get("city", "Ho Chi Minh City"),
+
+                # Price
+                "price": float(entities.get("price", 0)),
+
+                # Attributes
+                "bedrooms": entities.get("bedrooms"),
+                "bathrooms": entities.get("bathrooms"),
+                "area": float(entities.get("area")) if entities.get("area") else None,
+                "floor": entities.get("floor"),
+
+                # Contact (use dummy for now)
+                "contact_phone": entities.get("contact_phone", "0901234567"),
+                "contact_email": entities.get("contact_email"),
+                "show_contact_info": True,
+
+                # Save as draft initially
+                "publish_immediately": False,
+
+                # Flexible attributes (store all other extracted data)
+                "attributes": {k: v for k, v in entities.items() if k not in [
+                    "title", "description", "property_type", "district", "ward",
+                    "street", "city", "price", "bedrooms", "bathrooms", "area", "floor"
+                ]}
+            }
+
+            # Create JWT auth token for DB Gateway
+            from jose import jwt
+            from datetime import datetime, timedelta
+
+            jwt_payload = {
+                "sub": user_id,  # user_id as subject
+                "iat": datetime.utcnow(),
+                "exp": datetime.utcnow() + timedelta(hours=1)
+            }
+            jwt_token = jwt.encode(jwt_payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+            auth_token = f"Bearer {jwt_token}"
+
+            # Call DB Gateway to save property
+            save_response = await self.http_client.post(
+                f"{self.db_gateway_url}/properties",
+                json=property_data,
+                headers={"Authorization": auth_token},
+                timeout=30.0
+            )
+
+            if save_response.status_code in [200, 201]:
+                result = save_response.json()
+                self.logger.info(f"{LogEmoji.SUCCESS} [Save Property] ✅ Property saved: {result.get('property_id')}")
+                return result
+            else:
+                self.logger.warning(f"{LogEmoji.WARNING} [Save Property] Failed: {save_response.status_code} - {save_response.text}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"{LogEmoji.ERROR} [Save Property] Exception: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
     async def _generate_completion_message(
         self,

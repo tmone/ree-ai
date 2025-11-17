@@ -47,7 +47,8 @@ project_root = Path(__file__).parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from services.orchestrator.knowledge_base import KnowledgeBase
+# REMOVED: knowledge_base.py - switched to master data approach (shared/data/multilingual_keywords.json)
+# from services.orchestrator.knowledge_base import KnowledgeBase
 from services.orchestrator.ambiguity_detector import AmbiguityDetector
 from services.orchestrator.reasoning_engine import ReasoningEngine
 from shared.utils.multilingual_keywords import get_confirmation_keywords, get_frustration_keywords
@@ -104,7 +105,8 @@ class Orchestrator(BaseService):
         self.uuid_namespace = uuid.UUID('6ba7b810-9dad-11d1-80b4-00c04fd430c8')  # DNS namespace
 
         # NEW: Phase 1-3 components (Codex-inspired reasoning)
-        self.knowledge_base = KnowledgeBase(knowledge_dir="knowledge")
+        # REMOVED: knowledge_base - switched to master data approach
+        # self.knowledge_base = KnowledgeBase(knowledge_dir="knowledge")
         self.ambiguity_detector = AmbiguityDetector()
         self.reasoning_engine = ReasoningEngine(
             core_gateway_url=self.core_gateway_url,
@@ -353,14 +355,16 @@ class Orchestrator(BaseService):
                 intent = "chat" if request.has_files() else self._detect_intent_simple(request.query)
                 self.logger.info(f"{LogEmoji.AI} [ReAct-v2] Intent: {intent}")
 
-                # Step 2: Knowledge Expansion (Phase 2)
-                knowledge_expansion = await self.knowledge_base.expand_query(request.query)
-                if knowledge_expansion.expanded_terms:
-                    self.logger.info(
-                        f"{LogEmoji.INFO} [ReAct-v2] Expanded with domain knowledge: "
-                        f"{len(knowledge_expansion.expanded_terms)} terms, "
-                        f"{len(knowledge_expansion.filters)} filters"
-                    )
+                # Step 2: Knowledge Expansion (Phase 2) - REMOVED
+                # REMOVED: Switched to master data approach in multilingual_keywords.json
+                # knowledge_expansion = await self.knowledge_base.expand_query(request.query)
+                # if knowledge_expansion.expanded_terms:
+                #     self.logger.info(
+                #         f"{LogEmoji.INFO} [ReAct-v2] Expanded with domain knowledge: "
+                #         f"{len(knowledge_expansion.expanded_terms)} terms, "
+                #         f"{len(knowledge_expansion.filters)} filters"
+                #     )
+                knowledge_expansion = None  # Placeholder for compatibility
 
                 # Step 3: Ambiguity Detection (Phase 1)
                 ambiguity_result = await self.ambiguity_detector.detect_ambiguities(request.query)
@@ -460,12 +464,13 @@ class Orchestrator(BaseService):
                     intent = "chat" if request.has_files() else self._detect_intent_simple(request.query)
                     yield f"data: {json.dumps({'type': 'intent', 'intent': intent})}\n\n"
 
-                    # Knowledge expansion
-                    yield f"data: {json.dumps({'type': 'thinking', 'stage': 'knowledge_expansion', 'message': 'Expanding query with domain knowledge...'})}\n\n"
-                    knowledge_expansion = await self.knowledge_base.expand_query(request.query)
-
-                    if knowledge_expansion.expanded_terms:
-                        yield f"data: {json.dumps({'type': 'knowledge', 'expanded_terms': knowledge_expansion.expanded_terms, 'filters': knowledge_expansion.filters})}\n\n"
+                    # Knowledge expansion - REMOVED
+                    # REMOVED: Switched to master data approach
+                    # yield f"data: {json.dumps({'type': 'thinking', 'stage': 'knowledge_expansion', 'message': 'Expanding query with domain knowledge...'})}\n\n"
+                    # knowledge_expansion = await self.knowledge_base.expand_query(request.query)
+                    # if knowledge_expansion.expanded_terms:
+                    #     yield f"data: {json.dumps({'type': 'knowledge', 'expanded_terms': knowledge_expansion.expanded_terms, 'filters': knowledge_expansion.filters})}\n\n"
+                    knowledge_expansion = None  # Placeholder for compatibility
 
                     # Ambiguity detection
                     yield f"data: {json.dumps({'type': 'thinking', 'stage': 'ambiguity_check', 'message': 'Checking for ambiguities...'})}\n\n"

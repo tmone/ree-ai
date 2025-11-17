@@ -50,7 +50,8 @@ if str(project_root) not in sys.path:
 from services.orchestrator.knowledge_base import KnowledgeBase
 from services.orchestrator.ambiguity_detector import AmbiguityDetector
 from services.orchestrator.reasoning_engine import ReasoningEngine
-from shared.utils.multilingual_keywords import get_confirmation_keywords
+from shared.utils.multilingual_keywords import get_confirmation_keywords, get_frustration_keywords
+from shared.utils.i18n import t
 
 
 class Orchestrator(BaseService):
@@ -79,10 +80,10 @@ class Orchestrator(BaseService):
 
         # Service URLs
         self.core_gateway_url = settings.get_core_gateway_url()
-        self.classification_url = "http://classification:8080"
-        self.extraction_url = "http://attribute-extraction:8080"
-        self.completeness_url = "http://completeness:8080"
-        self.db_gateway_url = "http://db-gateway:8080"
+        self.classification_url = "http://ree-ai-classification:8080"
+        self.extraction_url = "http://ree-ai-attribute-extraction:8080"
+        self.completeness_url = "http://ree-ai-completeness:8080"
+        self.db_gateway_url = "http://ree-ai-db-gateway:8080"
 
         # HIGH PRIORITY FIX: Circuit breakers for external services
         self.core_gateway_breaker = CircuitBreaker(
@@ -289,30 +290,34 @@ class Orchestrator(BaseService):
             except (httpx.HTTPError, httpx.TimeoutException) as e:
                 # CRITICAL FIX: Handle expected network errors
                 self.logger.error(f"{LogEmoji.ERROR} Network error during orchestration: {e}", exc_info=True)
+                # Detect language from request history
+                lang = self._detect_language(history) if history else 'vi'
                 return OrchestrationResponse(
                     intent=IntentType.UNKNOWN,
                     confidence=0.0,
-                    response="Xin lỗi, hệ thống đang gặp sự cố kết nối. Vui lòng thử lại sau.",
+                    response=t('errors.connection_error', language=lang),
                     service_used="none",
                     execution_time_ms=0.0
                 )
             except (ValueError, KeyError, json.JSONDecodeError) as e:
                 # CRITICAL FIX: Handle data validation errors
                 self.logger.error(f"{LogEmoji.ERROR} Data validation error: {e}", exc_info=True)
+                lang = self._detect_language(history) if history else 'vi'
                 return OrchestrationResponse(
                     intent=IntentType.UNKNOWN,
                     confidence=0.0,
-                    response="Xin lỗi, đã xảy ra lỗi xử lý dữ liệu. Vui lòng thử lại.",
+                    response=t('errors.data_error', language=lang),
                     service_used="none",
                     execution_time_ms=0.0
                 )
             except Exception as e:
                 # CRITICAL FIX: Log unexpected errors but don't expose details to users
                 self.logger.critical(f"{LogEmoji.ERROR} Unexpected orchestration error: {e}", exc_info=True)
+                lang = self._detect_language(history) if history else 'vi'
                 return OrchestrationResponse(
                     intent=IntentType.UNKNOWN,
                     confidence=0.0,
-                    response="Xin lỗi, đã xảy ra lỗi không xác định. Vui lòng liên hệ hỗ trợ.",
+                    response=t('errors.unknown_error', language=lang),
                     service_used="none",
                     execution_time_ms=0.0
                 )
@@ -422,10 +427,11 @@ class Orchestrator(BaseService):
 
             except Exception as e:
                 self.logger.critical(f"{LogEmoji.ERROR} [ReAct-v2] Error: {e}", exc_info=True)
+                lang = self._detect_language(history) if history else 'vi'
                 return OrchestrationResponse(
                     intent=IntentType.UNKNOWN,
                     confidence=0.0,
-                    response="Xin lỗi, đã xảy ra lỗi. Vui lòng thử lại.",
+                    response=t('errors.retry_error', language=lang),
                     service_used="react_v2_error",
                     execution_time_ms=0.0
                 )
@@ -660,6 +666,9 @@ class Orchestrator(BaseService):
             except Exception as e:
                 # CRITICAL FIX: Don't expose internal error details to API consumers
                 self.logger.error(f"{LogEmoji.ERROR} OpenAI chat failed: {e}", exc_info=True)
+                # Detect language from messages
+                history = [{"role": msg.get("role"), "content": str(msg.get("content", ""))} for msg in messages]
+                lang = self._detect_language(history) if history else 'vi'
                 return {
                     "id": f"chatcmpl-{int(time.time())}",
                     "object": "chat.completion",
@@ -669,7 +678,7 @@ class Orchestrator(BaseService):
                         "index": 0,
                         "message": {
                             "role": "assistant",
-                            "content": "Xin lỗi, hệ thống đang gặp sự cố. Vui lòng thử lại sau."
+                            "content": t('errors.system_error', language=lang)
                         },
                         "finish_reason": "stop"
                     }],
@@ -885,7 +894,8 @@ Standalone query:"""
 
                         # Strategy 3: Give up gracefully
                         self.logger.warning(f"{LogEmoji.WARNING} [ReAct Agent] All strategies failed")
-                        return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn. Bạn có thể cung cấp thêm thông tin hoặc mở rộng tiêu chí tìm kiếm không?"
+                        lang = self._detect_language(history) if history else 'vi'
+                        return t('search.no_results', language=lang)
                 else:
                     consecutive_no_results = 0  # Reset counter when results found
 
@@ -916,11 +926,13 @@ Standalone query:"""
                         return await self._ask_clarification(requirements, best_evaluation or evaluation, best_results)
 
             # Fallback (should not reach here)
-            return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp. Bạn có thể cung cấp thêm thông tin không?"
+            lang = self._detect_language(history) if history else 'vi'
+            return t('search.no_results_expand', language=lang)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [ReAct Agent] Search failed: {e}")
-            return f"Xin lỗi, đã xảy ra lỗi khi tìm kiếm: {str(e)}"
+            lang = self._detect_language(history) if history else 'vi'
+            return t('errors.retry_error', language=lang)
 
     async def _execute_search_internal(self, query: str) -> List[Dict]:
         """
@@ -1027,12 +1039,46 @@ Standalone query:"""
             return []
 
     async def _execute_semantic_search(self, query: str) -> List[Dict]:
-        """Execute semantic search (Vector search)"""
+        """Execute semantic search (Vector search)
+
+        NOW WITH ATTRIBUTE EXTRACTION: Extract property_type, listing_type, etc. to improve results
+        """
         try:
+            # FIX: Extract attributes to pass as filters for better semantic search
+            extraction_response = await self.http_client.post(
+                f"{self.extraction_url}/extract-query",
+                json={"query": query, "intent": "SEARCH"},
+                timeout=settings.EXTRACTION_TIMEOUT
+            )
+
+            filters = {}
+            if extraction_response.status_code == 200:
+                extraction = extraction_response.json()
+                entities = extraction.get("entities", {})
+
+                # Pass extracted attributes as filters
+                if "property_type" in entities and entities["property_type"]:
+                    filters["property_type"] = entities["property_type"]
+                if "listing_type" in entities and entities["listing_type"]:
+                    filters["listing_type"] = entities["listing_type"]
+                if "district" in entities and entities["district"]:
+                    filters["district"] = entities["district"]
+                if "city" in entities and entities["city"]:
+                    filters["city"] = entities["city"]
+                if "bedrooms" in entities and entities["bedrooms"]:
+                    filters["bedrooms"] = entities["bedrooms"]
+                if "min_price" in entities:
+                    filters["min_price"] = entities["min_price"]
+                if "max_price" in entities:
+                    filters["max_price"] = entities["max_price"]
+
+                self.logger.info(f"{LogEmoji.INFO} [Semantic Search] Extracted filters: {filters}")
+
             search_response = await self.http_client.post(
                 f"{self.db_gateway_url}/vector-search",
                 json={
                     "query": query,
+                    "filters": filters if filters else {},
                     "limit": 5
                 },
                 timeout=30.0
@@ -1140,7 +1186,7 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate suggestions response: {e}")
-            return "Tôi tìm thấy một số bất động sản phù hợp. Bạn có thể cung cấp thêm thông tin để tôi tìm chính xác hơn?"
+            return t('search.found_some_provide_more_info', language='vi')
 
     async def _handle_filter_search(self, query: str) -> str:
         """Filter mode: Extraction → Document search"""
@@ -1188,7 +1234,7 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Filter search failed: {e}")
-            return f"Xin lỗi, không tìm thấy bất động sản phù hợp. Chi tiết lỗi: {str(e)}"
+            return t('errors.retry_error', language='vi')
 
     async def _handle_semantic_search(self, query: str) -> str:
         """Semantic mode: Use vector search with embeddings"""
@@ -1215,20 +1261,20 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Vector search failed: {e}")
-            return f"Xin lỗi, tìm kiếm ngữ nghĩa gặp lỗi: {str(e)}"
+            return t('errors.retry_error', language='vi')
 
     async def _handle_hybrid_search(self, query: str) -> str:
         """Both mode: Hybrid search (simplified - use filter for now)"""
         self.logger.info(f"{LogEmoji.AI} Hybrid search → using filter path")
         return await self._handle_filter_search(query)
 
-    async def _generate_search_response(self, query: str, results: List[Dict], mode: str) -> str:
+    async def _generate_search_response(self, query: str, results: List[Dict], mode: str, language: str = 'vi') -> str:
         """Generate natural language response from search results"""
         if not results or len(results) == 0:
-            return f"Tôi không tìm thấy bất động sản nào phù hợp với yêu cầu '{query}'. Bạn có thể mô tả cụ thể hơn về giá, số phòng ngủ, hoặc khu vực không?"
+            return t('search.no_results_expand', language=language)
 
         # Build response with property details
-        response_parts = [f"Tôi đã tìm thấy {len(results)} bất động sản phù hợp:\n"]
+        response_parts = [t('search.found_properties', language=language, count=len(results)) + ":\n"]
 
         for i, prop in enumerate(results[:3], 1):  # Top 3
             title = prop.get("title", "Không có tiêu đề")
@@ -1348,7 +1394,8 @@ Respond like a real person, not a mechanical chatbot!"""
 
                     if response.status_code == 200:
                         data = response.json()
-                        return data.get("content", "Xin lỗi, tôi không hiểu câu hỏi.")
+                        lang = self._detect_language(history) if history else 'vi'
+                        return data.get("content", t('errors.no_request', language=lang))
                     else:
                         # Log detailed error response
                         error_body = response.text
@@ -1365,20 +1412,23 @@ Respond like a real person, not a mechanical chatbot!"""
                             continue
 
                         # Give up after retries
-                        return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu."
+                        lang = self._detect_language(history) if history else 'vi'
+                        return t('errors.retry_error', language=lang)
 
                 except httpx.TimeoutException:
                     self.logger.error(f"{LogEmoji.ERROR} Core Gateway timeout (attempt {attempt+1}/{max_retries})")
                     if attempt < max_retries - 1:
                         await asyncio.sleep(1)
                         continue
-                    return "Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu (timeout)."
+                    lang = self._detect_language(history) if history else 'vi'
+                    return t('errors.retry_error', language=lang)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Chat failed: {e}")
             import traceback
             traceback.print_exc()
-            return f"Xin lỗi, đã xảy ra lỗi: {str(e)}"
+            lang = self._detect_language(history) if history else 'vi'
+            return t('errors.retry_error', language=lang)
 
     # ========================================
     # Classification & Property Posting Methods
@@ -1720,7 +1770,8 @@ Re-extract property info with improved understanding. Be more specific about loc
                 if extraction_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
                     if iteration == 1:
-                        return "Xin lỗi, tôi gặp sự cố khi phân tích yêu cầu của bạn. Bạn có thể mô tả cụ thể hơn về bất động sản cần tư vấn giá không?"
+                        lang = self._detect_language(history) if history else 'vi'
+                        return t('property_posting.extraction_error_detail', language=lang)
                     else:
                         break
 
@@ -1792,7 +1843,8 @@ Re-extract property info with improved understanding. Be more specific about loc
             self.logger.error(f"{LogEmoji.ERROR} [Price Consultation] Failed: {e}")
             import traceback
             traceback.print_exc()
-            return "Xin lỗi, đã xảy ra lỗi khi tư vấn giá. Vui lòng thử lại hoặc cung cấp thêm chi tiết về bất động sản."
+            lang = self._detect_language(history) if history else 'vi'
+            return t('errors.retry_error', language=lang)
 
     # ========================================
     # ReAct Agent Pattern Methods
@@ -2219,7 +2271,7 @@ City name:"""
                 }
 
             # Build validation prompt with top 3 results
-            validation_prompt = f"""Bạn là trợ lý đánh giá chất lượng kết quả tìm kiếm bất động sản.
+            validation_prompt = f"""{t('chat.system_prompt_quality_evaluator', language='vi')}
 
 **YÊU CẦU CỦA NGƯỜI DÙNG:**
 {json.dumps(requirements, ensure_ascii=False, indent=2)}
@@ -2423,7 +2475,7 @@ Query mới:"""
 
                 if district and stats.get("total_in_district", 0) == 0:
                     clarification_parts.append(
-                        f", nhưng **không có căn nào ở {district}**."
+                        t('search.no_units_in_district', language='vi', district=district)
                     )
                 elif district:
                     clarification_parts.append(
@@ -2433,39 +2485,40 @@ Query mới:"""
                     clarification_parts.append(".")
             else:
                 clarification_parts.append(
-                    f"Hiện tại không có {property_type} nào phù hợp với yêu cầu của bạn trong hệ thống."
+                    t('search.no_property_type', language='vi', property_type=property_type)
                 )
 
             # Part 2: Proactive Options
-            clarification_parts.append("\n\n**Bạn muốn tôi:**\n")
+            clarification_parts.append("\n\n**" + t('search.clarification_header', language='vi') + "**\n")
 
             if district:
                 # Suggest expanding to nearby districts
                 nearby_districts = await self._get_nearby_districts(district, requirements.get("city"))
                 if nearby_districts:
                     clarification_parts.append(
-                        f"- 🔍 Tìm thêm ở **các quận lân cận** ({', '.join(nearby_districts[:3])})\n"
+                        f"- 🔍 {t('search.search_nearby_districts', language='vi', districts=', '.join(nearby_districts[:3]))}\n"
                     )
 
                 clarification_parts.append(
-                    f"- 🌍 Mở rộng tìm kiếm **toàn {city}**\n"
+                    f"- 🌍 {t('search.expand_search_city', language='vi', city=city)}\n"
                 )
 
             if requirements.get("special_requirements"):
                 spec_req = requirements["special_requirements"][0]
                 clarification_parts.append(
-                    f"- 📍 Cung cấp thông tin cụ thể hơn về \"{spec_req}\"\n"
+                    f"- 📍 {t('search.provide_details', language='vi', requirement=spec_req)}\n"
                 )
 
             if bedrooms:
                 clarification_parts.append(
-                    f"- 🛏️ Điều chỉnh số phòng ngủ ({bedrooms} ± 1 phòng)\n"
+                    f"- 🛏️ {t('search.adjust_bedrooms', language='vi', bedrooms=bedrooms)}\n"
                 )
 
             # Part 3: Show Top 5 Alternatives
             if scored_results and len(scored_results) > 0:
+                count = min(5, len(scored_results))
                 clarification_parts.append(
-                    f"\n**Dưới đây là {min(5, len(scored_results))} BĐS gần nhất có thể phù hợp:**\n"
+                    f"\n**{t('search.nearby_alternatives', language='vi', count=count)}**\n"
                 )
 
                 for i, item in enumerate(scored_results[:5]):
@@ -2488,13 +2541,13 @@ Query mới:"""
                     )
 
             # Part 4: Call to Action
-            clarification_parts.append("\n💬 Bạn muốn tôi hỗ trợ như thế nào?")
+            clarification_parts.append(f"\n💬 {t('search.how_can_help', language='vi')}")
 
             return "".join(clarification_parts)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Clarification generation failed: {e}")
-            return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp chính xác. Bạn có thể cung cấp thêm thông tin để tôi tìm kiếm tốt hơn không?"
+            return t('search.no_results_expand', language='vi')
 
     def _format_area(self, area) -> str:
         """
@@ -2593,11 +2646,54 @@ Query mới:"""
         - total_in_district: Total properties in the district (if specified)
         """
         try:
-            # TODO: Call DB Gateway to get real statistics
-            # MEDIUM FIX Bug#17: Use configurable mock statistics
+            # FIX: Get REAL statistics from DB Gateway instead of mock data
+            property_type = requirements.get("property_type")
+            city = requirements.get("city")
+            district = requirements.get("district")
+
+            # Query 1: Total in city (if city is specified)
+            total_in_city = 0
+            if city:
+                city_response = await self.http_client.post(
+                    f"{self.db_gateway_url}/search",
+                    json={
+                        "query": "",
+                        "filters": {
+                            "city": city,
+                            "property_type": property_type if property_type else None
+                        },
+                        "limit": 1  # We only need the total count
+                    },
+                    timeout=10.0
+                )
+                if city_response.status_code == 200:
+                    city_results = city_response.json()
+                    total_in_city = city_results.get("total", 0)
+
+            # Query 2: Total in district (if district is specified)
+            total_in_district = 0
+            if district:
+                district_response = await self.http_client.post(
+                    f"{self.db_gateway_url}/search",
+                    json={
+                        "query": "",
+                        "filters": {
+                            "district": district,
+                            "property_type": property_type if property_type else None
+                        },
+                        "limit": 1  # We only need the total count
+                    },
+                    timeout=10.0
+                )
+                if district_response.status_code == 200:
+                    district_results = district_response.json()
+                    total_in_district = district_results.get("total", 0)
+
+            self.logger.info(f"{LogEmoji.INFO} [Statistics] City: {total_in_city}, District: {total_in_district}")
+
             return {
-                "total_in_city": settings.MOCK_PROPERTIES_IN_CITY,
-                "total_in_district": 0 if requirements.get("district") == "quận 2" else settings.MOCK_PROPERTIES_IN_DISTRICT
+                "total_in_city": total_in_city,
+                "total_in_district": total_in_district
             }
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to get statistics: {e}")
@@ -2714,22 +2810,8 @@ Nearby districts:"""
         try:
             query_lower = query.lower()
 
-            # Frustration signals (multilingual)
-            frustration_signals = [
-                # Vietnamese
-                "ủa", "ơi", "sao", "không đúng", "sai rồi", "không phải",
-                "kiểm tra lại", "xem lại", "vẫn", "vẫn còn", "vẫn sai",
-                "hệ thống bị lỗi", "không hoạt động", "không work", "lỗi",
-                "sao lại", "tại sao", "không hiểu", "không đúng rồi",
-                # English
-                "what", "wrong", "incorrect", "error", "bug", "not working",
-                "doesn't work", "still wrong", "check again", "not right",
-                "system error", "broken", "why", "again",
-                # Thai
-                "ผิด", "ไม่ถูก", "ทำไม", "อีกแล้ว", "ไม่ทำงาน",
-                # Japanese
-                "違う", "間違い", "なぜ", "エラー", "おかしい"
-            ]
+            # Load frustration signals from master data (supports all languages)
+            frustration_signals = get_frustration_keywords()
 
             # Check for frustration signals
             if any(signal in query_lower for signal in frustration_signals):
@@ -3089,7 +3171,17 @@ Generate a warm, congratulatory closing message in **{language} language** that:
 
             entities_text = "\n".join(entities_summary) if entities_summary else "No specific details yet"
 
-            # Build LLM prompt for multilingual response generation
+            # Determine assistant mode based on score
+            if overall_score < 30:
+                mode = "INITIAL_ASSISTANT"  # Conversational, no formal evaluation
+            elif overall_score < 60:
+                mode = "GUIDING_ASSISTANT"  # Light guidance, minimal scoring
+            else:
+                mode = "DETAILED_REVIEW"  # Full evaluation with scoring
+
+            self.logger.info(f"{LogEmoji.INFO} [Posting Feedback] Mode: {mode} (score: {overall_score}/100)")
+
+            # Build LLM prompt based on assistant mode
             frustration_note = ""
             if is_frustrated:
                 frustration_note = f"""
@@ -3101,15 +3193,77 @@ The user appears frustrated or confused. Adjust your response to:
 - Be extra patient and helpful
 - Use reassuring tone"""
 
-            prompt = f"""You are a helpful real estate assistant providing feedback on a property posting.
+            # MODE 1: INITIAL ASSISTANT (score < 30) - Conversational, no formal evaluation
+            if mode == "INITIAL_ASSISTANT":
+                prompt = f"""You are a friendly real estate assistant helping a user post their property.
 
 **USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
 
-**LANGUAGE CODES**:
-- vi: Vietnamese (Tiếng Việt)
-- en: English
-- th: Thai (ภาษาไทย)
-- ja: Japanese (日本語)
+**TRANSACTION TYPE**: {transaction_type}
+
+**CURRENT INFORMATION**:
+{entities_text}
+{frustration_note}
+
+**YOUR TASK**:
+Act as a helpful secretary (NOT as an evaluator). Generate a warm, conversational response in **{language} language**:
+
+1. **Greeting**: Welcome them warmly (e.g., "Chào bạn! 👋" for Vietnamese)
+2. **Acknowledgment**: Thank them for wanting to post their property
+3. **Current Info**: If they provided any details, acknowledge them briefly (e.g., "Tuyệt vời, bạn muốn đăng tin {transaction_type}!")
+4. **Helpful Questions**: Ask for 2-3 basic information in a friendly way:
+   - What type of property? (Apartment/House/Land/Villa)
+   - Where is it located? (District/Area)
+   - What's the price range?
+5. **Closing**: Encourage them to share information comfortably (e.g., "Bạn cứ cung cấp thông tin thoải mái, mình sẽ hỗ trợ từng bước! 😊")
+
+**CRITICAL RULES**:
+- DO NOT mention scores, completeness, or evaluation
+- DO NOT show ❌ missing fields or formal assessment
+- BE conversational like a friendly helper, NOT like a form validator
+- Use emojis sparingly: 👋 🏠 😊 💬
+- Keep it SHORT and friendly (max 5-6 lines)
+
+**OUTPUT** (in {language} language):"""
+
+            # MODE 2: GUIDING ASSISTANT (score 30-60) - Light guidance, minimal scoring
+            elif mode == "GUIDING_ASSISTANT":
+                prompt = f"""You are a helpful real estate assistant guiding a user to complete their property posting.
+
+**USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
+
+**TRANSACTION TYPE**: {transaction_type}
+
+**INFORMATION PROVIDED**:
+{entities_text}
+
+**MISSING INFO**: {', '.join(missing_fields[:5]) if missing_fields else 'None'}
+{frustration_note}
+
+**YOUR TASK**:
+Generate a supportive response in **{language} language**:
+
+1. **Thanks**: Thank them for providing information
+2. **Summary**: Show what you've recorded in 1 line (e.g., "Mình đã ghi nhận: căn hộ 2PN ở Quận 7, giá 3 tỷ")
+3. **Gentle Guidance**: Suggest 2-3 important missing details with 💡 emoji:
+   - Focus on high-impact fields (location, price, area, property type)
+   - Be encouraging, not demanding
+4. **Closing**: Ask if they can provide more details (e.g., "Bạn có thể cung cấp thêm các thông tin này không? 😊")
+
+**CRITICAL RULES**:
+- DO NOT show formal score/interpretation
+- Use ✅ for provided info, 💡 for suggestions (NOT ❌ for missing)
+- Keep tone supportive and encouraging
+- Keep it SHORT (max 6-8 lines)
+- ONLY ask for information NOT already in "INFORMATION PROVIDED" section
+
+**OUTPUT** (in {language} language):"""
+
+            # MODE 3: DETAILED REVIEW (score >= 60) - Full evaluation with scoring
+            else:  # DETAILED_REVIEW
+                prompt = f"""You are a professional real estate assistant providing detailed feedback on a property posting.
+
+**USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
 
 **TRANSACTION TYPE**: {transaction_type}
 
@@ -3123,38 +3277,24 @@ The user appears frustrated or confused. Adjust your response to:
 - Strengths ({len(strengths)}): {', '.join(strengths) if strengths else 'None'}
 - Suggestions ({len(suggestions)}): {', '.join(suggestions) if suggestions else 'None'}
 - Priority Actions ({len(priority_actions)}): {', '.join(priority_actions) if priority_actions else 'None'}
-
-**PROCESSING INFO**:
-- Analysis Iterations: {iterations}
 {frustration_note}
 
 **YOUR TASK**:
-Generate a friendly, structured response in **{language} language** that includes:
+Generate a detailed review response in **{language} language**:
 
-1. **Greeting & Acknowledgment**: Thank the user for wanting to post a property{' (with apology if frustrated)' if is_frustrated else ''}
-2. **Brief Summary**: ONLY show a SHORT 1-line summary of the property (e.g., "căn hộ 80m² ở Quận 7, giá 3 tỷ"). DO NOT list all fields as bullet points.
-3. **Completeness Score**: Display the score (X/100) and interpretation
-4. **Strengths**: List 2-3 strong points (if score >= 60)
-5. **Missing Information**: List missing required fields with ❌ emoji - ONLY include fields that are ACTUALLY missing, NOT fields already provided
-6. **Suggestions**: Provide 2-3 improvement suggestions with 💡 emoji
-7. **Priority Actions**: If score < 70, list urgent items with 🔥 emoji
-8. **Call to Action**:
-   - If score >= 80: Encourage to add final touches
-   - If score 60-79: Ask to add important details
-   - If score < 60: Request essential information
-9. **Closing Question**: Ask if user can provide missing information{' or corrections' if is_frustrated else ''}
+1. **Acknowledgment**: Congratulate them on providing good information (e.g., "Tuyệt vời! Thông tin của bạn đã khá đầy đủ 🎉")
+2. **Score**: Display the score (X/100) and interpretation
+3. **Strengths**: List 2-3 strong points with ✅ emoji
+4. **Missing Info**: List missing fields with ❌ emoji (ONLY fields NOT in "EXTRACTED INFORMATION")
+5. **Suggestions**: Provide 2-3 improvement tips with 💡 emoji
+6. **Closing**:
+   - If score >= 80: Encourage final touches before publishing
+   - If score 60-79: Ask for important missing details
 
 **CRITICAL RULES**:
-- In "Missing Information" section, ONLY list fields that are NOT in the "Extracted Information" list above
-- DO NOT ask for property_type, district, area, price, etc. if they are already in "Extracted Information"
-- Be concise in summary - don't repeat all extracted fields as bullet points
-
-**FORMAT REQUIREMENTS**:
-- Use markdown formatting (**, -, emojis)
-- Be warm and encouraging{', extra patient if user is frustrated' if is_frustrated else ''}
-- Keep it concise but informative
-- Use appropriate emojis: 🏠 ✅ ❌ 💡 🔥 📝 ⚠️ 💬
-- CRITICAL: Write EVERYTHING in {language} language!
+- In "Missing Info" section, ONLY list fields NOT in "EXTRACTED INFORMATION" above
+- Be professional but warm and encouraging
+- Use emojis: 🎉 ✅ ❌ 💡 🏠
 
 **OUTPUT** (in {language} language):"""
 
@@ -3208,19 +3348,16 @@ Generate a friendly, structured response in **{language} language** that include
             Simple feedback message
         """
         try:
-            # Simple templates by language
-            templates = {
-                "vi": f"Cảm ơn bạn đã cung cấp thông tin! Độ hoàn thiện: {score:.0f}/100. "
-                      f"{'Vui lòng bổ sung: ' + ', '.join(missing_fields[:3]) if missing_fields else 'Thông tin đã đầy đủ!'}",
-                "en": f"Thank you for providing information! Completeness: {score:.0f}/100. "
-                      f"{'Please add: ' + ', '.join(missing_fields[:3]) if missing_fields else 'Information is complete!'}",
-                "th": f"ขอบคุณที่ให้ข้อมูล! ความสมบูรณ์: {score:.0f}/100. "
-                      f"{'กรุณาเพิ่ม: ' + ', '.join(missing_fields[:3]) if missing_fields else 'ข้อมูลครบถ้วน!'}",
-                "ja": f"情報をありがとうございます！完全度: {score:.0f}/100. "
-                      f"{'追加してください: ' + ', '.join(missing_fields[:3]) if missing_fields else '情報は完全です！'}"
-            }
+            # Build message using i18n
+            message = t('property_posting.fallback_completeness', language=language, score=int(score))
 
-            return templates.get(language, templates["en"])
+            if missing_fields:
+                missing_str = ', '.join(missing_fields[:3])
+                message += " " + t('property_posting.fallback_please_add', language=language, missing_fields=missing_str)
+            else:
+                message += " " + t('property_posting.fallback_complete', language=language)
+
+            return message
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Fallback feedback generation failed: {e}")
@@ -3483,7 +3620,7 @@ Generate a friendly, structured response in **{language} language** that include
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate price consultation response: {e}")
-            return "Xin lỗi, tôi gặp sự cố khi tạo báo cáo giá. Vui lòng thử lại."
+            return t('errors.retry_error', language='vi')
 
     # ========================================
     # Search Quality & Response Generation
@@ -3496,13 +3633,17 @@ Generate a friendly, structured response in **{language} language** that include
         try:
             if evaluation["quality_score"] >= 0.8:
                 # Excellent match
-                intro = f"Tôi đã tìm thấy {evaluation['match_count']} bất động sản **rất phù hợp** với yêu cầu của bạn:\n"
+                intro = t('search.found_exact', language='vi', count=evaluation['match_count']) + "\n"
             elif evaluation["quality_score"] >= 0.6:
                 # Good match
-                intro = f"Tôi tìm thấy {evaluation['match_count']}/{evaluation['total_count']} bất động sản phù hợp với yêu cầu của bạn:\n"
+                intro = t('search.found_good', language='vi',
+                         match_count=evaluation['match_count'],
+                         total_count=evaluation['total_count']) + "\n"
             else:
                 # Poor match - should have asked clarification instead
-                intro = f"Tìm thấy {evaluation['total_count']} BDS, nhưng chỉ {evaluation['match_count']} BDS phù hợp một phần:\n"
+                intro = t('search.found_partial', language='vi',
+                         match_count=evaluation['match_count'],
+                         total_count=evaluation['total_count']) + "\n"
 
             response_parts = [intro]
 

@@ -7,8 +7,10 @@ from pydantic import BaseModel, Field
 class SearchFilters(BaseModel):
     """Filters for property search."""
     property_type: Optional[str] = None
+    listing_type: Optional[str] = None  # "sale" or "rent"
     min_price: Optional[float] = None
     max_price: Optional[float] = None
+    bedrooms: Optional[int] = None  # Exact bedrooms count
     min_bedrooms: Optional[int] = None
     max_bedrooms: Optional[int] = None
     min_bathrooms: Optional[int] = None

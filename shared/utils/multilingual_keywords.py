@@ -165,6 +165,35 @@ class MultilingualKeywords:
         lang_prompts = prompts.get(language, {})
         return lang_prompts.get(field, f"Please provide {field}")
 
+    def get_frustration_keywords(self, languages: Optional[List[str]] = None) -> List[str]:
+        """
+        Get frustration keywords for specified languages.
+
+        Args:
+            languages: List of language codes (e.g., ['vi', 'en']). If None, returns all.
+
+        Returns:
+            List of frustration keywords
+        """
+        if not self._keywords_data:
+            return []
+
+        frustration = self._keywords_data.get('frustration_keywords', {})
+
+        if languages is None:
+            # Return all languages
+            all_keywords = []
+            for lang, keywords in frustration.items():
+                if lang != 'description' and isinstance(keywords, list):
+                    all_keywords.extend(keywords)
+            return all_keywords
+        else:
+            # Return specific languages
+            keywords = []
+            for lang in languages:
+                keywords.extend(frustration.get(lang, []))
+            return keywords
+
     def get_all_data(self) -> Dict:
         """Get all keywords data"""
         return self._keywords_data or {}
@@ -198,3 +227,8 @@ def get_property_type_keywords(property_type: str, languages: Optional[List[str]
 def get_missing_info_prompt(field: str, language: str = 'vi') -> str:
     """Get missing info prompt"""
     return keywords_manager.get_missing_info_prompt(field, language)
+
+
+def get_frustration_keywords(languages: Optional[List[str]] = None) -> List[str]:
+    """Get frustration keywords"""
+    return keywords_manager.get_frustration_keywords(languages)

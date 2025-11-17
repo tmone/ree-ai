@@ -76,9 +76,10 @@ class ClassificationService(BaseService):
         self.core_gateway_url = settings.get_core_gateway_url()
 
         # NEW: Redis cache for classification results
-        # Cache TTL: 24h (classification mode rarely changes for same query)
+        # Cache TTL: Reduced to 1h during debugging (was 24h)
+        # TODO: Restore to 86400 after classification bug is confirmed fixed
         self.cache = get_cache(namespace="classification")
-        self.cache_ttl = 86400  # 24 hours
+        self.cache_ttl = 3600  # 1 hour (TEMPORARY - was 24 hours)
 
         self.logger.info(f"{LogEmoji.INFO} Core Gateway: {self.core_gateway_url}")
         self.logger.info(f"{LogEmoji.SUCCESS} Redis cache enabled (TTL: {self.cache_ttl}s)")
@@ -321,6 +322,10 @@ Respond with JSON only."""
         """
         query_lower = query.lower()
 
+        # Log fallback trigger for debugging
+        self.logger.warning(f"{LogEmoji.WARNING} FALLBACK HEURISTIC TRIGGERED for query: '{query}'")
+        self.logger.warning(f"{LogEmoji.INFO} This means LLM classification failed - investigate why!")
+
         # PRIORITY 1: Check for CHAT intent first (greetings, general questions)
         chat_keywords = [
             "xin chào", "hi", "hello", "chào bạn", "cảm ơn", "tạm biệt", "bye",
@@ -341,8 +346,26 @@ Respond with JSON only."""
                 }
 
         # PRIORITY 2: Detect intent (POST vs SEARCH, SALE vs RENT)
-        posting_keywords = ["đăng tin", "tôi có", "nhà của tôi", "cần bán", "cần cho thuê", "muốn đăng"]
-        search_keywords = ["tìm", "cần mua", "cần thuê", "muốn mua", "muốn thuê", "tìm kiếm"]
+        # FIX Bug#24: Add missing posting keywords for "muốn bán", "muốn cho thuê"
+        posting_keywords = [
+            # Original keywords
+            "đăng tin", "tôi có", "nhà của tôi", "cần bán", "cần cho thuê", "muốn đăng",
+            # ADDED: Common variations for "want to sell/rent"
+            "muốn bán",         # "want to sell" - FIX for "Tôi muốn bán nhà"
+            "muốn cho thuê",    # "want to rent out"
+            "có nhà bán",       # "have house to sell"
+            "có nhà cho thuê",  # "have house for rent"
+            "định bán",         # "planning to sell"
+            "sắp bán",          # "about to sell"
+        ]
+
+        search_keywords = [
+            # Original keywords
+            "tìm", "cần mua", "cần thuê", "muốn mua", "muốn thuê", "tìm kiếm",
+            # ADDED: Common variations
+            "đang tìm",         # "currently looking for"
+            "muốn tìm",         # "want to find"
+        ]
 
         sale_keywords = ["bán", "mua"]
         rent_keywords = ["cho thuê", "thuê"]
@@ -391,6 +414,14 @@ Respond with JSON only."""
             mode = "filter"
         else:
             mode = "semantic"
+
+        # Log matching keywords for debugging
+        matched_posting = [kw for kw in posting_keywords if kw in query_lower]
+        matched_search = [kw for kw in search_keywords if kw in query_lower]
+        self.logger.info(f"{LogEmoji.INFO} Fallback result: {primary_intent}")
+        self.logger.info(f"{LogEmoji.INFO} Matched posting keywords: {matched_posting}")
+        self.logger.info(f"{LogEmoji.INFO} Matched search keywords: {matched_search}")
+        self.logger.info(f"{LogEmoji.INFO} is_posting={is_posting}, is_sale={is_sale}, is_rent={is_rent}")
 
         return {
             "mode": mode,

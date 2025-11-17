@@ -84,6 +84,7 @@ class Orchestrator(BaseService):
         self.classification_url = "http://ree-ai-classification:8080"
         self.extraction_url = "http://ree-ai-attribute-extraction:8080"
         self.completeness_url = "http://ree-ai-completeness:8080"
+        self.validation_url = "http://ree-ai-validation:8080"
         self.db_gateway_url = "http://ree-ai-db-gateway:8080"
 
         # HIGH PRIORITY FIX: Circuit breakers for external services
@@ -1664,6 +1665,55 @@ Re-extract property attributes with improved understanding. Focus on filling mis
             # Ending Condition: High completeness + User confirmation
             if overall_score >= 75 and is_user_confirming:
                 self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Conversation ending: Score {overall_score}/100 + User confirmed")
+
+                # VALIDATE PROPERTY ATTRIBUTES (CTO Priority 2)
+                self.logger.info(f"{LogEmoji.AI} [Property Posting] Running validation checks...")
+
+                validation_request = {
+                    "intent": primary_intent,
+                    "entities": entities,
+                    "user_id": user_id or "anonymous",
+                    "confidence_threshold": 0.8
+                }
+
+                try:
+                    validation_response = await self.http_client.post(
+                        f"{self.validation_url}/validate",
+                        json=validation_request,
+                        timeout=10.0
+                    )
+
+                    if validation_response.status_code == 200:
+                        validation_data = validation_response.json()
+                        can_save = validation_data.get("can_save", False)
+                        total_errors = validation_data.get("total_errors", 0)
+                        total_warnings = validation_data.get("total_warnings", 0)
+
+                        self.logger.info(f"{LogEmoji.INFO} [Validation] Can save: {can_save}, Errors: {total_errors}, Warnings: {total_warnings}")
+
+                        # If validation fails, return error message
+                        if not can_save:
+                            summary = validation_data.get("summary", "Validation failed")
+                            next_steps = validation_data.get("next_steps", [])
+
+                            error_message = f"{summary}\n\n"
+                            if next_steps:
+                                error_message += "Vui lòng:\n" + "\n".join(f"• {step}" for step in next_steps)
+
+                            self.logger.warning(f"{LogEmoji.WARNING} [Validation] Property validation failed: {summary}")
+                            return error_message
+
+                        # Log warnings but continue
+                        if total_warnings > 0:
+                            self.logger.info(f"{LogEmoji.INFO} [Validation] Property has {total_warnings} warnings but can proceed")
+                    else:
+                        # Validation service unavailable - log warning but continue
+                        self.logger.warning(f"{LogEmoji.WARNING} [Validation] Service unavailable, skipping validation")
+
+                except Exception as e:
+                    # Validation error - log but don't block save
+                    self.logger.error(f"{LogEmoji.ERROR} [Validation] Error: {e}")
+                    self.logger.info(f"{LogEmoji.INFO} [Validation] Continuing without validation due to error")
 
                 # SAVE PROPERTY TO DATABASE
                 save_result = await self._save_property_to_db(

@@ -250,6 +250,7 @@ services:
       - classification
       - completeness
       - attribute-extraction
+      - validation
     networks:
       - ree-ai-network
     profiles:
@@ -427,6 +428,31 @@ services:
     depends_on:
       - postgres
       - core-gateway
+    networks:
+      - ree-ai-network
+    profiles:
+      - real
+      - all
+
+  # Validation Service (Layer 3) - CTO Priority 2
+  validation:
+    build:
+      context: .
+      dockerfile: services/validation/Dockerfile
+    container_name: ree-ai-validation
+    environment:
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-ree_ai}
+      - POSTGRES_USER=${POSTGRES_USER:-ree_ai_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - DEBUG=${DEBUG:-true}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    ports:
+      - "8086:8080"
+    depends_on:
+      - postgres
     networks:
       - ree-ai-network
     profiles:

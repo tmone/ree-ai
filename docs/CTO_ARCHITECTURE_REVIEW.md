@@ -482,26 +482,20 @@ Other services:
 
 ---
 
-## 🚨 Critical Issues (Must Fix)
+## ✅ Architecture Decision - RESOLVED
 
-### **Issue 1: Data Storage Architecture Mismatch**
-**CTO Spec:** Postgres primary, OpenSearch secondary
-**Current:** OpenSearch primary, Postgres secondary
+### **Data Storage Strategy**
+**DECISION:** Keep current architecture (APPROVED)
 
-**Decision needed:**
-- **Option A:** Continue with current (get CTO approval)
-- **Option B:** Migrate to Postgres primary (2-4 weeks effort)
+**Clarification from stakeholders:**
+- **Postgres:** Master data storage (locations, amenities, translations)
+- **OpenSearch:** Property storage (flexible JSON, vector + BM25 search)
 
-**Trade-offs:**
-| Aspect | Current (OpenSearch) | CTO Spec (Postgres) |
-|--------|---------------------|---------------------|
-| Flexibility | ✅ Flexible JSON | ❌ Fixed schema |
-| Performance | ✅ Fast for search | ✅ Fast for filtering |
-| Consistency | ⚠️ No constraints | ✅ Relational integrity |
-| Vector search | ✅ Native | ❌ Need separate system |
-| Scalability | ✅ Horizontal | ⚠️ Vertical preferred |
+**This is correct per original design intent.**
+- CTO spec mentions "Postgres stores structured property metadata" → Interpreted as master data
+- OpenSearch as "document store and vector search backend" → Primary for properties
 
-**Recommendation:** **Present to CTO with trade-off analysis**, get approval to continue or plan migration.
+**No migration needed. Current implementation aligns with requirements.**
 
 ---
 
@@ -520,30 +514,47 @@ Other services:
 
 ---
 
-## 📝 Action Items
+## 📝 Action Items - UPDATED
 
-### **Immediate (This Sprint)**
-1. [ ] Schedule meeting with CTO re: data storage strategy
-2. [ ] Get approval for NFT implementation timeline
-3. [ ] Document current architecture decisions
+### **APPROVED PRIORITIES (2025-11-17)**
 
-### **Short-term (Next 2 Sprints)**
-4. [ ] Implement NFT minting flow
-5. [ ] Activate semantic chunking service
-6. [ ] Add hybrid ranking formula
-7. [ ] Enhance attribute extraction with confidence scores
+**Priority 1 (Week 1):**
+1. [x] Clarify data storage architecture → RESOLVED (keep current)
+2. [ ] **Activate Semantic Chunking service**
+   - Integrate into orchestrator
+   - Test chunking quality
+   - See: `docs/IMPLEMENTATION_PLAN.md`
 
-### **Medium-term (Next Quarter)**
-8. [ ] Refactor price suggestion to microservice
-9. [ ] Implement re-ranking service
-10. [ ] Add comprehensive caching
-11. [ ] Build evaluation framework
-12. [ ] Enhance security (rate limits, roles)
+**Priority 2 (Week 2-3):**
+3. [ ] **Enhance Attribute Extraction**
+   - Add confidence scoring
+   - Add source_span tracking
+   - Add normalized_value + unit fields
+   - Add validation layer
+   - See: `docs/IMPLEMENTATION_PLAN.md`
 
-### **Long-term (Ongoing)**
-13. [ ] Consider Postgres migration if CTO requires
-14. [ ] Continuous A/B testing of ranking weights
-15. [ ] Monitor model drift and retrain
+**Priority 3 (Week 4-5):**
+4. [ ] **Implement Hybrid Ranking**
+   - Formula: α×semantic + β×attribute + γ×recency + δ×boost
+   - Default weights: 0.4, 0.3, 0.2, 0.1
+   - Make configurable
+   - See: `docs/IMPLEMENTATION_PLAN.md`
+
+**Priority 4 (Week 6-7):**
+5. [ ] **Implement Re-ranking Service**
+   - Top-50 → Top-5
+   - Threshold-based activation
+   - < 500ms latency
+   - See: `docs/IMPLEMENTATION_PLAN.md`
+
+### **Future Backlog (Lower Priority)**
+6. [ ] NFT minting flow (if required)
+7. [ ] Refactor price suggestion to microservice
+8. [ ] Add comprehensive caching
+9. [ ] Build evaluation framework (recall@k, NDCG)
+10. [ ] Enhance security (rate limits, roles)
+11. [ ] Continuous A/B testing
+12. [ ] Monitor model drift
 
 ---
 

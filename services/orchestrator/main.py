@@ -2939,7 +2939,7 @@ Nearby districts:"""
             self.logger.info(f"{LogEmoji.AI} [Semantic Chunking] Chunking description ({len(text)} chars)...")
 
             response = await self.http_client.post(
-                "http://semantic-chunking:8082/chunk",
+                "http://semantic-chunking:8080/chunk",  # Internal port, not external 8082
                 json={
                     "text": text,
                     "threshold": 0.75,  # CTO spec: cosine similarity >= 0.75

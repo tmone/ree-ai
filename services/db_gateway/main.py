@@ -2,7 +2,7 @@
 DB Gateway Service - OpenSearch Integration
 Central gateway for all database operations using OpenSearch for flexible property data
 """
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
@@ -27,6 +27,7 @@ from services.db_gateway import property_management
 from services.db_gateway import favorites_module
 from services.db_gateway import saved_searches_module
 from services.db_gateway import inquiries_module
+from services.db_gateway import hybrid_search
 
 logger = setup_logger(__name__)
 
@@ -633,6 +634,119 @@ async def vector_search_properties(request: SearchRequest):
             exc_info=True
         )
         raise HTTPException(status_code=500, detail="Search operation failed. Please try again later.")
+
+
+@app.post("/hybrid-search", response_model=SearchResponse)
+async def hybrid_search_properties(
+    request: SearchRequest,
+    alpha: float = Query(0.3, ge=0.0, le=1.0, description="BM25 weight (0.0-1.0, default: 0.3)")
+):
+    """
+    Hybrid search combining BM25 (keyword) + Vector (semantic) with weighted ranking.
+
+    Formula: final_score = alpha * bm25_score + (1-alpha) * vector_score
+
+    Args:
+        request: Search request with query and filters
+        alpha: Weight for BM25 score (default: 0.3)
+               - alpha=1.0: Pure BM25 (keyword matching)
+               - alpha=0.0: Pure vector (semantic)
+               - alpha=0.3: Balanced (recommended for real estate)
+
+    Returns:
+        Merged and re-ranked search results
+
+    CTO Architecture Priority 3: Hybrid Ranking
+    """
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    try:
+        start_time = time.time()
+
+        logger.info(
+            f"🔍 Hybrid Search Request: query='{request.query}', alpha={alpha}, "
+            f"filters={request.filters}"
+        )
+
+        # Execute hybrid search with graceful fallbacks
+        merged_results, metadata = await hybrid_search.execute_hybrid_search(
+            opensearch_client=opensearch_client,
+            embedding_model=embedding_model,
+            query=request.query,
+            filters=request.filters,
+            alpha=alpha,
+            limit=request.limit
+        )
+
+        # Convert to PropertyResult models
+        results = []
+        for hit in merged_results:
+            source = hit
+
+            # Extract numeric fields with defaults
+            bedrooms = source.get('bedrooms')
+            bathrooms = source.get('bathrooms')
+
+            # Convert to int if possible, otherwise keep as None
+            if bedrooms is not None:
+                try:
+                    bedrooms = int(bedrooms)
+                except (ValueError, TypeError):
+                    bedrooms = None
+
+            if bathrooms is not None:
+                try:
+                    bathrooms = int(bathrooms)
+                except (ValueError, TypeError):
+                    bathrooms = None
+
+            results.append(PropertyResult(
+                property_id=source.get('property_id', hit.get('_id', '')),
+                title=source.get('title', ''),
+                price=source.get('price', 0),
+                description=source.get('description', ''),
+                property_type=source.get('property_type', ''),
+                bedrooms=bedrooms,
+                bathrooms=bathrooms,
+                area=source.get('area', 0),
+                district=source.get('district', ''),
+                city=source.get('city', ''),
+                score=float(hit.get('hybrid_score', hit.get('score', 0)))
+            ))
+
+        execution_time = (time.time() - start_time) * 1000
+
+        logger.info(
+            f"✅ Hybrid search completed: {len(results)} results in {execution_time:.2f}ms "
+            f"(alpha={alpha}, BM25: {metadata.get('bm25_count', 0)}, "
+            f"Vector: {metadata.get('vector_count', 0)})"
+        )
+
+        return SearchResponse(
+            results=results[:request.limit],
+            total=len(results),
+            execution_time_ms=execution_time,
+            metadata={
+                **metadata,
+                "search_type": "hybrid",
+                "alpha": alpha,
+                "bm25_weight": alpha,
+                "vector_weight": 1 - alpha
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"❌ Hybrid search failed: query='{request.query}', alpha={alpha}, error={e}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Hybrid search operation failed. Please try again later."
+        )
 
 
 @app.get("/properties/{property_id}")

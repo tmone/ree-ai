@@ -5,38 +5,60 @@ Measures seller's track record and trustworthiness
 CTO Priority 4: Re-ranking Service
 Feature Category: Seller Reputation (20% of total)
 
-NOTE: Phase 1 uses placeholder/mock data
-Phase 2 will integrate with seller analytics database
+Phase 2: Queries real seller analytics from database
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 
 
-def calculate_seller_performance(owner_id: str) -> float:
+async def calculate_seller_performance(
+    owner_id: str,
+    db = None
+) -> float:
     """
-    Calculate seller's historical performance score
-
-    NOTE: Phase 1 placeholder - returns default score
-    Phase 2 will query seller_stats database
+    Calculate seller's historical performance score based on database statistics
 
     Args:
         owner_id: Seller's user ID
+        db: Database connection (RerankingDB instance)
 
     Returns:
         float: Performance score [0.0, 1.0]
     """
-    # TODO Phase 2: Query actual seller statistics
-    # seller_stats = db.get_seller_stats(owner_id)
-    # response_rate = seller_stats['responses'] / seller_stats['inquiries']
-    # avg_response_time = seller_stats['avg_response_time_hours']
-    # closure_rate = seller_stats['closed_deals'] / seller_stats['total_listings']
+    if not db:
+        # Fallback to Phase 1 default score if no DB
+        return 0.7
 
-    # Phase 1: Return moderate default score
-    # This assumes average seller performance until we have data
-    default_score = 0.7
+    try:
+        seller_stats = await db.get_seller_stats(owner_id)
 
-    return default_score
+        if not seller_stats:
+            # New seller or no stats: return moderate score
+            return 0.5
+
+        # Extract metrics
+        response_rate = seller_stats.get('response_rate', 0.0)
+        closure_rate = seller_stats.get('closure_rate', 0.0)
+        avg_response_time = seller_stats.get('avg_response_time_hours', 24.0)
+
+        # Calculate response time score (1.0 / (1 + hours/24))
+        # Fast response = high score
+        response_time_score = 1.0 / (1.0 + avg_response_time / 24.0)
+
+        # Weighted combination:
+        # 40% response rate + 30% response time + 30% closure rate
+        performance_score = (
+            0.4 * response_rate +
+            0.3 * response_time_score +
+            0.3 * closure_rate
+        )
+
+        return min(max(performance_score, 0.0), 1.0)
+
+    except Exception as e:
+        # On error, return moderate default score
+        return 0.7
 
 
 def calculate_account_age_score(property_data: Dict[str, Any]) -> float:
@@ -78,12 +100,16 @@ def calculate_account_age_score(property_data: Dict[str, Any]) -> float:
         return 0.5
 
 
-def calculate_seller_reputation_score(property_data: Dict[str, Any]) -> Dict[str, float]:
+async def calculate_seller_reputation_score(
+    property_data: Dict[str, Any],
+    db = None
+) -> Dict[str, float]:
     """
     Calculate overall seller reputation score (20% of total)
 
     Args:
         property_data: Property dictionary
+        db: Database connection (RerankingDB instance)
 
     Returns:
         dict: Individual scores and total seller reputation score
@@ -91,7 +117,7 @@ def calculate_seller_reputation_score(property_data: Dict[str, Any]) -> Dict[str
     owner_id = property_data.get('owner_id', 'unknown')
 
     # Historical performance (15% of total -> 75% of this category)
-    performance = calculate_seller_performance(owner_id)
+    performance = await calculate_seller_performance(owner_id, db)
 
     # Account age (5% of total -> 25% of this category)
     account_age = calculate_account_age_score(property_data)

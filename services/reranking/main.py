@@ -3,8 +3,8 @@ Re-ranking Service
 CTO Architecture Priority 4: ML-Based Re-ranking Layer
 
 Phase 1: Rule-based reranking with business logic and quality signals
-Phase 2: ML-based ranking with LightGBM/LambdaMART (future)
-Phase 3: Online learning + A/B testing (future)
+Phase 2: Real database integration for seller stats, property analytics, user preferences
+Phase 3: ML-based ranking with LightGBM/LambdaMART (future)
 """
 
 import os
@@ -13,6 +13,7 @@ import logging
 from typing import List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
 from models.rerank import (
     RerankRequest,
@@ -26,6 +27,7 @@ from features.seller_reputation import calculate_seller_reputation_score
 from features.freshness import calculate_freshness_score
 from features.engagement import calculate_engagement_score
 from features.personalization import calculate_personalization_score
+from database.db import db
 
 
 # Configure logging
@@ -35,11 +37,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
+
+# Lifespan context manager for startup/shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Connect to database
+    logger.info("Starting reranking service...")
+    await db.connect()
+    logger.info("Database connection established")
+    yield
+    # Shutdown: Close database
+    logger.info("Shutting down reranking service...")
+    await db.close()
+    logger.info("Database connection closed")
+
+
+# Initialize FastAPI app with lifespan
 app = FastAPI(
     title="Re-ranking Service",
     description="ML-Based Re-ranking Layer for Search Results (CTO Priority 4)",
-    version="1.0.0-phase1"
+    version="1.0.0-phase2",
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -67,11 +85,13 @@ BLEND_ALPHA = 0.5  # 50% original hybrid score, 50% rerank score
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    db_connected = db.pool is not None
     return {
-        "status": "healthy",
+        "status": "healthy" if db_connected else "degraded",
         "service": "reranking",
-        "version": "1.0.0-phase1",
-        "phase": "Phase 1: Rule-based",
+        "version": "1.0.0-phase2",
+        "phase": "Phase 2: Real Data Integration",
+        "database_connected": db_connected,
         "feature_weights": FEATURE_WEIGHTS
     }
 
@@ -80,6 +100,12 @@ async def health_check():
 async def rerank_search_results(request: RerankRequest):
     """
     Re-rank search results using business logic and quality signals
+
+    Phase 2: Now queries real data from database for:
+    - Seller performance stats
+    - Property engagement metrics
+    - User preferences
+    - Interaction history
 
     Args:
         request: RerankRequest with query, results, user_id, context
@@ -99,14 +125,15 @@ async def rerank_search_results(request: RerankRequest):
             # Convert to dict for feature calculators
             property_data = property_result.model_dump()
 
-            # Calculate all feature scores
+            # Calculate all feature scores (Phase 2: with database queries)
             property_quality = calculate_property_quality_score(property_data)
-            seller_reputation = calculate_seller_reputation_score(property_data)
+            seller_reputation = await calculate_seller_reputation_score(property_data, db)
             freshness = calculate_freshness_score(property_data)
-            engagement = calculate_engagement_score(property_data)
-            personalization = calculate_personalization_score(
+            engagement = await calculate_engagement_score(property_data, db)
+            personalization = await calculate_personalization_score(
                 property_data,
-                user_id=request.user_id
+                user_id=request.user_id,
+                db=db
             )
 
             # Extract total scores from each category
@@ -155,11 +182,25 @@ async def rerank_search_results(request: RerankRequest):
         # Sort by final score (descending)
         ranked_results.sort(key=lambda x: x.final_score, reverse=True)
 
+        # Log search interactions for ML training (Phase 2)
+        if db.pool:
+            for i, result in enumerate(ranked_results, 1):
+                await db.log_search_interaction(
+                    user_id=request.user_id,
+                    query=request.query,
+                    property_id=result.property_id,
+                    rank_position=i,
+                    hybrid_score=result.original_score,
+                    rerank_score=result.rerank_features.weighted_rerank_score,
+                    final_score=result.final_score
+                )
+
         # Calculate processing time
         processing_time_ms = (time.time() - start_time) * 1000
 
         # Create metadata
         metadata = RerankMetadata(
+            model_version="1.0.0-phase2",
             feature_weights=FEATURE_WEIGHTS,
             processing_time_ms=processing_time_ms,
             properties_reranked=len(ranked_results)
@@ -196,6 +237,106 @@ async def get_feature_weights():
             "blend_alpha": "Weight for original hybrid score vs rerank score"
         }
     }
+
+
+# ============================================================================
+# Analytics Tracking Endpoints (Phase 2)
+# ============================================================================
+
+@app.post("/analytics/view/{property_id}")
+async def track_property_view(property_id: str):
+    """Track property view event"""
+    try:
+        await db.increment_property_view(property_id)
+        return {"status": "success", "event": "view", "property_id": property_id}
+    except Exception as e:
+        logger.error(f"Error tracking view for {property_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analytics/inquiry/{property_id}")
+async def track_property_inquiry(property_id: str):
+    """Track property inquiry event"""
+    try:
+        await db.increment_property_inquiry(property_id)
+        return {"status": "success", "event": "inquiry", "property_id": property_id}
+    except Exception as e:
+        logger.error(f"Error tracking inquiry for {property_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analytics/favorite/{property_id}")
+async def track_property_favorite(property_id: str):
+    """Track property favorite event"""
+    try:
+        await db.increment_property_favorite(property_id)
+        return {"status": "success", "event": "favorite", "property_id": property_id}
+    except Exception as e:
+        logger.error(f"Error tracking favorite for {property_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/analytics/click")
+async def track_property_click(
+    user_id: str,
+    property_id: str,
+    property_price: float,
+    property_district: str,
+    property_type: str
+):
+    """
+    Track property click and update user preferences
+
+    This helps build user preference profile for personalization
+    """
+    try:
+        # Update user preferences based on click
+        await db.update_user_preferences_from_click(
+            user_id=user_id,
+            property_price=property_price,
+            property_district=property_district,
+            property_type=property_type
+        )
+
+        return {
+            "status": "success",
+            "event": "click",
+            "user_id": user_id,
+            "property_id": property_id
+        }
+    except Exception as e:
+        logger.error(f"Error tracking click for user {user_id}, property {property_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/analytics/interaction/{interaction_id}")
+async def update_search_interaction(
+    interaction_id: str,
+    clicked: bool = None,
+    inquiry_sent: bool = None,
+    favorited: bool = None
+):
+    """Update search interaction (e.g., mark as clicked after initial log)"""
+    try:
+        await db.update_search_interaction(
+            interaction_id=interaction_id,
+            clicked=clicked,
+            inquiry_sent=inquiry_sent,
+            favorited=favorited
+        )
+
+        return {
+            "status": "success",
+            "interaction_id": interaction_id,
+            "updated": {
+                "clicked": clicked,
+                "inquiry_sent": inquiry_sent,
+                "favorited": favorited
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error updating interaction {interaction_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

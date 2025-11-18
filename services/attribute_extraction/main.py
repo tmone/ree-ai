@@ -21,8 +21,10 @@ from services.attribute_extraction.validator import AttributeValidator
 from services.attribute_extraction.master_data_validator import MasterDataValidator
 from services.attribute_extraction.master_data_extractor import MasterDataExtractor
 from services.attribute_extraction.admin_routes import AdminRoutes
+from services.attribute_extraction.regex_extractor_simple import SimpleRegexExtractor  # ITERATION 4: Regex baseline
 from shared.config import settings
 from shared.utils.logger import LogEmoji
+from shared.utils.query_normalizer import normalize_query  # ITERATION 4: Query normalization
 from shared.i18n import get_multilingual_mapper
 from shared.models.attribute_extraction import ExtractionRequest, ExtractionResponse
 
@@ -92,6 +94,9 @@ class AttributeExtractionService(BaseService):
             llm_extractor=self._call_llm_for_extraction
         )
 
+        # ITERATION 4: Initialize regex extractor (baseline fallback)
+        self.regex_extractor = SimpleRegexExtractor()
+
         # NEW: Initialize admin routes
         self.admin_routes = AdminRoutes()
 
@@ -101,6 +106,7 @@ class AttributeExtractionService(BaseService):
         self.logger.info(f"{LogEmoji.SUCCESS} Multilingual mapper initialized (vi/en/zh → English)")
         self.logger.info(f"{LogEmoji.SUCCESS} Master data validator initialized (PostgreSQL)")
         self.logger.info(f"{LogEmoji.SUCCESS} Master data extractor v2.0 initialized (full pipeline)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Regex extractor initialized (baseline fallback)")
         self.logger.info(f"{LogEmoji.SUCCESS} Admin routes initialized (pending item review)")
 
     def setup_routes(self):
@@ -406,27 +412,73 @@ class AttributeExtractionService(BaseService):
             try:
                 self.logger.info(f"{LogEmoji.TARGET} Extracting entities from query: '{request.query}'")
 
-                # Build specialized prompt for query extraction (not full property description)
-                prompt = self._build_query_extraction_prompt(request.query, request.intent)
+                # ITERATION 4: Normalize query (expand abbreviations: Q1->Quận 1, 2BR->2 phòng ngủ, 5B->5 tỷ)
+                normalized_query = normalize_query(request.query)
+                if normalized_query != request.query:
+                    self.logger.info(f"{LogEmoji.INFO} Normalized query: '{normalized_query}'")
 
-                # Call LLM via Core Gateway
-                entities = await self._call_llm_for_extraction(prompt)
+                # ITERATION 4: LAYER 1 - Regex extraction (guaranteed baseline)
+                self.logger.info(f"{LogEmoji.AI} Layer 1: Regex extraction...")
+                regex_entities = self.regex_extractor.extract(normalized_query)
+                regex_confidence = self.regex_extractor.get_confidence(regex_entities)
+                self.logger.info(f"{LogEmoji.SUCCESS} Regex extracted {len(regex_entities)} entities (confidence: {regex_confidence:.2f}): {regex_entities}")
+
+                # ITERATION 4: LAYER 2 - LLM extraction (comprehensive)
+                self.logger.info(f"{LogEmoji.AI} Layer 2: LLM extraction...")
+                prompt = self._build_query_extraction_prompt(normalized_query, request.intent)
+                llm_entities = await self._call_llm_for_extraction(prompt)
+                self.logger.info(f"{LogEmoji.SUCCESS} LLM extracted {len(llm_entities)} entities: {llm_entities}")
+
+                # ITERATION 4: LAYER 3 - Merge results (LLM priority, regex fills gaps)
+                self.logger.info(f"{LogEmoji.AI} Layer 3: Merging regex + LLM results...")
+                merged_entities = self._merge_entities(regex_entities, llm_entities)
+                self.logger.info(f"{LogEmoji.SUCCESS} Merged: {len(merged_entities)} entities total: {merged_entities}")
 
                 # Normalize to English master data
-                self.logger.info(f"{LogEmoji.AI} Normalizing query entities to English...")
+                self.logger.info(f"{LogEmoji.AI} Normalizing merged entities to English...")
                 normalized_entities = self.multilingual_mapper.normalize_entities(
-                    entities,
+                    merged_entities,
                     source_lang="vi"
                 )
 
+                # ITERATION 4: Field rename - transaction_type -> listing_type (for consistency)
+                if "transaction_type" in normalized_entities:
+                    normalized_entities["listing_type"] = normalized_entities.pop("transaction_type")
+                    self.logger.info(f"{LogEmoji.INFO} Renamed field: transaction_type → listing_type")
+
+                # ITERATION 4: Normalize listing_type value (cho thuê -> rent, bán -> sale)
+                if "listing_type" in normalized_entities:
+                    original_value = normalized_entities["listing_type"]
+                    value_lower = original_value.lower().strip() if original_value else ""
+
+                    # Simple mapping for common Vietnamese keywords
+                    listing_type_map = {
+                        "cho thuê": "rent", "cho thue": "rent", "thuê": "rent", "thue": "rent",
+                        "bán": "sale", "ban": "sale", "cần bán": "sale", "can ban": "sale"
+                    }
+
+                    normalized_value = listing_type_map.get(value_lower, original_value)
+                    if normalized_value != original_value:
+                        normalized_entities["listing_type"] = normalized_value
+                        self.logger.info(f"{LogEmoji.INFO} Normalized listing_type: '{original_value}' → '{normalized_value}'")
+
                 confidence = self._calculate_confidence(normalized_entities)
 
+                # Determine extraction source for response (match Iteration 4 behavior)
+                if regex_entities and llm_entities:
+                    extraction_source = "query_hybrid"  # Both layers contributed
+                elif regex_entities:
+                    extraction_source = "query_regex_fallback"  # LLM failed, regex only
+                else:
+                    extraction_source = "query"  # LLM only (legacy)
+
                 self.logger.info(f"{LogEmoji.SUCCESS} Extracted entities (normalized): {normalized_entities}")
+                self.logger.info(f"{LogEmoji.INFO} Extraction method: {extraction_source}")
 
                 return QueryExtractionResponse(
                     entities=normalized_entities,
                     confidence=confidence,
-                    extracted_from="query"
+                    extracted_from=extraction_source
                 )
 
             except Exception as e:
@@ -714,6 +766,31 @@ Intent: {intent or "SEARCH"}
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} LLM call failed: {e}")
             return {}
+
+    def _merge_entities(self, regex_entities: Dict[str, Any], llm_entities: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merge regex and LLM extraction results (ITERATION 4: Hybrid extraction)
+
+        Priority: LLM > Regex (LLM is more comprehensive)
+        Use regex to fill gaps when LLM misses something
+
+        Args:
+            regex_entities: Baseline entities from regex patterns
+            llm_entities: Comprehensive entities from LLM
+
+        Returns:
+            Merged entity dictionary
+        """
+        # Start with LLM results (more comprehensive)
+        merged = llm_entities.copy()
+
+        # Fill missing fields from regex (guaranteed baseline)
+        for key, value in regex_entities.items():
+            if key not in merged or not merged[key]:
+                merged[key] = value
+                self.logger.info(f"{LogEmoji.INFO} Filled gap from regex: {key} = {value}")
+
+        return merged
 
     def _calculate_confidence(self, entities: Dict[str, Any]) -> float:
         """Calculate confidence score based on extracted entities"""

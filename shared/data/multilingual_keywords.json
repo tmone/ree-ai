@@ -191,10 +191,84 @@
       "city": ["thành phố", "thanh pho", "TP"]
     },
     "en": {
-      "district": ["district"],
+      "district": ["district", "dist"],
       "ward": ["ward"],
-      "street": ["street", "road", "avenue"],
+      "street": ["street", "road", "avenue", "st", "rd", "ave"],
       "city": ["city"]
+    }
+  },
+
+  "district_abbreviations": {
+    "description": "Common district abbreviations and variants",
+    "patterns": {
+      "Q1": "Quận 1", "Q2": "Quận 2", "Q3": "Quận 3", "Q4": "Quận 4", "Q5": "Quận 5",
+      "Q6": "Quận 6", "Q7": "Quận 7", "Q8": "Quận 8", "Q9": "Quận 9", "Q10": "Quận 10",
+      "Q11": "Quận 11", "Q12": "Quận 12",
+      "D1": "District 1", "D2": "District 2", "D3": "District 3", "D4": "District 4",
+      "D5": "District 5", "D6": "District 6", "D7": "District 7", "D8": "District 8",
+      "D9": "District 9", "D10": "District 10", "D11": "District 11", "D12": "District 12",
+      "District 1": "Quận 1", "District 2": "Quận 2", "District 3": "Quận 3",
+      "District 4": "Quận 4", "District 5": "Quận 5", "District 6": "Quận 6",
+      "District 7": "Quận 7", "District 8": "Quận 8", "District 9": "Quận 9",
+      "District 10": "Quận 10", "District 11": "Quận 11", "District 12": "Quận 12"
+    }
+  },
+
+  "property_attributes": {
+    "description": "Property attribute keywords for extraction",
+    "bedrooms": {
+      "vi": ["phòng ngủ", "phong ngu", "PN", "pn"],
+      "en": ["bedroom", "bedrooms", "BR", "br", "bed", "beds"],
+      "patterns": {
+        "1BR": 1, "2BR": 2, "3BR": 3, "4BR": 4, "5BR": 5,
+        "1 BR": 1, "2 BR": 2, "3 BR": 3, "4 BR": 4, "5 BR": 5,
+        "1-BR": 1, "2-BR": 2, "3-BR": 3, "4-BR": 4, "5-BR": 5,
+        "1 bedroom": 1, "2 bedrooms": 2, "3 bedrooms": 3,
+        "1 phòng ngủ": 1, "2 phòng ngủ": 2, "3 phòng ngủ": 3,
+        "1 PN": 1, "2 PN": 2, "3 PN": 3, "4 PN": 4, "5 PN": 5
+      }
+    },
+    "bathrooms": {
+      "vi": ["phòng tắm", "phong tam", "toilet", "WC"],
+      "en": ["bathroom", "bathrooms", "bath", "baths"],
+      "patterns": {
+        "1 bath": 1, "2 baths": 2, "3 baths": 3,
+        "1 phòng tắm": 1, "2 phòng tắm": 2, "3 phòng tắm": 3
+      }
+    },
+    "area": {
+      "vi": ["diện tích", "dien tich", "m2", "m²", "mét vuông", "met vuong"],
+      "en": ["area", "square meters", "sqm", "sq m", "m2", "m²"],
+      "units": ["m2", "m²", "sqm", "sq.m", "square meters"]
+    },
+    "price": {
+      "vi": ["giá", "gia", "tỷ", "ty", "triệu", "trieu", "đồng", "dong", "VND"],
+      "en": ["price", "cost", "billion", "million", "VND", "USD", "$"],
+      "units": {
+        "billion": 1000000000,
+        "tỷ": 1000000000,
+        "ty": 1000000000,
+        "B": 1000000000,
+        "million": 1000000,
+        "triệu": 1000000,
+        "trieu": 1000000,
+        "M": 1000000
+      }
+    },
+    "listing_type": {
+      "description": "Type of listing - rent or sale",
+      "values": {
+        "rent": {
+          "vi": ["cho thuê", "cho thue", "thuê", "thue", "rent"],
+          "en": ["rent", "rental", "for rent", "to rent"],
+          "normalized": "rent"
+        },
+        "sale": {
+          "vi": ["bán", "ban", "cần bán", "can ban", "sale"],
+          "en": ["sale", "sell", "for sale", "to sell"],
+          "normalized": "sale"
+        }
+      }
     }
   },
 

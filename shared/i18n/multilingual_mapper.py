@@ -547,6 +547,41 @@ class MultilingualMapper:
 
         return None
 
+    def _normalize_listing_type(self, value: str, source_lang: str = "vi") -> Optional[str]:
+        """
+        Normalize listing_type values to English standard ("rent" or "sale")
+
+        Args:
+            value: Listing type value in any language
+            source_lang: Source language
+
+        Returns:
+            Normalized English value ("rent" or "sale") or None
+        """
+        if not value:
+            return None
+
+        value_lower = value.lower().strip()
+
+        # Get listing_type config from keywords
+        listing_type_config = self.keywords.get("property_attributes", {}).get("listing_type", {})
+        values_config = listing_type_config.get("values", {})
+
+        # Check each listing type
+        for listing_type, config in values_config.items():
+            # Check Vietnamese keywords
+            vi_keywords = config.get("vi", [])
+            if value_lower in [kw.lower() for kw in vi_keywords]:
+                return config.get("normalized", listing_type)
+
+            # Check English keywords
+            en_keywords = config.get("en", [])
+            if value_lower in [kw.lower() for kw in en_keywords]:
+                return config.get("normalized", listing_type)
+
+        # If no match, return original value
+        return value
+
     def normalize_entities(
         self,
         entities: Dict,
@@ -600,6 +635,9 @@ class MultilingualMapper:
                 english_value = self.to_english("property_type", value, source_lang)
             elif "district" in key or "area" in key:
                 english_value = self.to_english("district", value, source_lang)
+            elif "listing_type" in key or "transaction_type" in key:
+                # ITERATION 4 FIX: Normalize listing_type values
+                english_value = self._normalize_listing_type(value, source_lang)
             elif key in ["swimming_pool", "gym", "parking", "elevator", "security", "balcony"]:
                 # For boolean amenities, check if the Vietnamese text mentions them
                 if isinstance(value, bool):

@@ -54,6 +54,9 @@ from services.orchestrator.reasoning_engine import ReasoningEngine
 from shared.utils.multilingual_keywords import get_confirmation_keywords, get_frustration_keywords
 from shared.utils.i18n import t
 
+# ITERATION 1 IMPROVEMENT: Query normalization for better attribute extraction
+from shared.utils.query_normalizer import QueryNormalizer
+
 
 class Orchestrator(BaseService):
     """
@@ -118,9 +121,13 @@ class Orchestrator(BaseService):
             logger=self.logger
         )
 
+        # ITERATION 1 IMPROVEMENT: Query normalizer for better attribute extraction
+        self.query_normalizer = QueryNormalizer()
+
         self.logger.info(f"{LogEmoji.SUCCESS} ReAct Reasoning Engine Initialized (Codex-style)")
         self.logger.info(f"{LogEmoji.SUCCESS} Knowledge Base Loaded: PROPERTIES.md + LOCATIONS.md")
         self.logger.info(f"{LogEmoji.SUCCESS} Ambiguity Detector Ready")
+        self.logger.info(f"{LogEmoji.SUCCESS} Query Normalizer Ready (handles abbreviations & mixed languages)")
 
     def _string_to_uuid(self, string_id: str) -> str:
         """Convert string ID to deterministic UUID string using UUID v5"""
@@ -989,10 +996,16 @@ Standalone query:"""
     async def _execute_filter_search(self, query: str) -> List[Dict]:
         """Execute filter-based search (Extraction → Document search)"""
         try:
-            # Step 1: Attribute Extraction
+            # ITERATION 1 IMPROVEMENT: Normalize query before extraction
+            # Expands abbreviations (Q1 → Quận 1, 2BR → 2 phòng ngủ)
+            # Handles mixed languages, multiple values
+            normalized_query = self.query_normalizer.normalize(query)
+            self.logger.info(f"{LogEmoji.INFO} [Query Normalization] '{query}' → '{normalized_query}'")
+
+            # Step 1: Attribute Extraction (with normalized query)
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
-                json={"query": query, "intent": "SEARCH"},
+                json={"query": normalized_query, "intent": "SEARCH"},
                 timeout=settings.EXTRACTION_TIMEOUT  # MEDIUM FIX Bug#14
             )
 
@@ -1055,10 +1068,13 @@ Standalone query:"""
         NOW WITH ATTRIBUTE EXTRACTION: Extract property_type, listing_type, etc. to improve results
         """
         try:
+            # ITERATION 1 IMPROVEMENT: Normalize query before extraction
+            normalized_query = self.query_normalizer.normalize(query)
+
             # FIX: Extract attributes to pass as filters for better semantic search
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
-                json={"query": query, "intent": "SEARCH"},
+                json={"query": normalized_query, "intent": "SEARCH"},
                 timeout=settings.EXTRACTION_TIMEOUT
             )
 
@@ -1129,10 +1145,15 @@ Standalone query:"""
         try:
             self.logger.info(f"{LogEmoji.AI} [Hybrid+Rerank] Starting integrated search pipeline")
 
+            # ITERATION 1 IMPROVEMENT: Normalize query before extraction
+            normalized_query = self.query_normalizer.normalize(query)
+            if normalized_query != query:
+                self.logger.info(f"{LogEmoji.INFO} [Hybrid+Rerank] Normalized: '{query}' → '{normalized_query}'")
+
             # Step 1: Extract attributes for filters
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
-                json={"query": query, "intent": "SEARCH"},
+                json={"query": normalized_query, "intent": "SEARCH"},
                 timeout=settings.EXTRACTION_TIMEOUT
             )
 
@@ -1426,12 +1447,15 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
     async def _handle_filter_search(self, query: str) -> str:
         """Filter mode: Extraction → Document search"""
         try:
+            # ITERATION 1 IMPROVEMENT: Normalize query
+            normalized_query = self.query_normalizer.normalize(query)
+
             # Step 2a: Attribute Extraction
             self.logger.info(f"{LogEmoji.AI} Step 2a: Attribute Extraction")
 
             extraction_response = await self.http_client.post(
                 f"{self.extraction_url}/extract-query",
-                json={"query": query, "intent": "SEARCH"},
+                json={"query": normalized_query, "intent": "SEARCH"},
                 timeout=settings.EXTRACTION_TIMEOUT  # MEDIUM FIX Bug#14
             )
 

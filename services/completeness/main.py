@@ -13,12 +13,14 @@ from core.base_service import BaseService
 from shared.models.core_gateway import LLMRequest, Message, ModelType
 from shared.config import settings
 from shared.utils.logger import LogEmoji
+from shared.utils.i18n import t
 from services.completeness.prompts import CompletenessPrompts, CompletenessScore
 
 
 class CompletenessRequest(BaseModel):
     """Request to assess property listing completeness"""
     property_data: Dict
+    language: str = "vi"  # User's preferred language (vi, en, th, ja)
     include_examples: bool = True  # Include few-shot examples in prompt
 
 
@@ -122,7 +124,7 @@ Trả về JSON theo định dạng đã nêu."""
                 if response.status_code != 200:
                     raise HTTPException(
                         status_code=response.status_code,
-                        detail=f"Core Gateway error: {response.text}"
+                        detail=t("completeness.core_gateway_error", language=request.language, detail=response.text)
                     )
 
                 data = response.json()
@@ -148,7 +150,7 @@ Trả về JSON theo định dạng đã nêu."""
                     priority_actions = result.get("priority_actions", [])
 
                     # Generate interpretation
-                    interpretation = self._get_score_interpretation(overall_score)
+                    interpretation = self._get_score_interpretation(overall_score, request.language)
 
                     self.logger.info(f"{LogEmoji.SUCCESS} Assessment complete: {overall_score:.0f}/100 ({interpretation})")
                     self.logger.info(f"{LogEmoji.INFO} Missing fields: {len(missing_fields)}, Suggestions: {len(suggestions)}")
@@ -166,26 +168,26 @@ Trả về JSON theo định dạng đã nêu."""
                 except json.JSONDecodeError as e:
                     self.logger.error(f"{LogEmoji.ERROR} Failed to parse LLM response: {content}")
                     # Fallback: Basic heuristic assessment
-                    return self._fallback_assessment(request.property_data)
+                    return self._fallback_assessment(request.property_data, request.language)
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Completeness assessment failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("completeness.assessment_failed", language=request.language, error=str(e)))
 
-    def _get_score_interpretation(self, score: float) -> str:
+    def _get_score_interpretation(self, score: float, language: str = 'vi') -> str:
         """Get human-readable interpretation of score"""
         if score >= 90:
-            return "XUẤT SẮC - Tin đăng rất đầy đủ thông tin"
+            return t("completeness.score_excellent", language=language)
         elif score >= 80:
-            return "TỐT - Đầy đủ thông tin chính"
+            return t("completeness.score_good", language=language)
         elif score >= 70:
-            return "KHÁ - Còn thiếu một số thông tin"
+            return t("completeness.score_fair", language=language)
         elif score >= 60:
-            return "TRUNG BÌNH - Thiếu nhiều thông tin quan trọng"
+            return t("completeness.score_average", language=language)
         else:
-            return "YẾU - Cần bổ sung gấp nhiều thông tin"
+            return t("completeness.score_poor", language=language)
 
-    def _fallback_assessment(self, property_data: Dict) -> CompletenessResponse:
+    def _fallback_assessment(self, property_data: Dict, language: str = 'vi') -> CompletenessResponse:
         """
         Fallback heuristic assessment if LLM fails
         Simple rule-based scoring
@@ -206,33 +208,33 @@ Trả về JSON theo định dạng đã nêu."""
         if property_data.get("property_type"):
             category_scores["basic_info"] += 7
         else:
-            missing_fields.append("property_type (Loại BĐS)")
+            missing_fields.append(t("completeness.missing_property_type", language=language))
 
         if property_data.get("transaction_type"):
             category_scores["basic_info"] += 8
         else:
-            missing_fields.append("transaction_type (Bán/Thuê)")
+            missing_fields.append(t("completeness.missing_transaction_type", language=language))
 
         if property_data.get("title"):
             category_scores["basic_info"] += 5
         else:
-            missing_fields.append("title (Tiêu đề)")
+            missing_fields.append(t("completeness.missing_title", language=language))
 
         if property_data.get("description") and len(property_data["description"]) > 100:
             category_scores["basic_info"] += 5
-            strengths.append("✅ Có mô tả chi tiết")
+            strengths.append(t("completeness.strength_description", language=language))
 
         # Location (20 points)
         if property_data.get("district"):
             category_scores["location"] += 10
-            strengths.append("✅ Có thông tin khu vực")
+            strengths.append(t("completeness.strength_location", language=language))
         else:
-            missing_fields.append("district (Quận/Huyện)")
+            missing_fields.append(t("completeness.missing_district", language=language))
 
         if property_data.get("address"):
             category_scores["location"] += 5
         else:
-            missing_fields.append("address (Địa chỉ chi tiết)")
+            missing_fields.append(t("completeness.missing_address", language=language))
 
         if property_data.get("ward") or property_data.get("street") or property_data.get("project_name"):
             category_scores["location"] += 5
@@ -240,14 +242,14 @@ Trả về JSON theo định dạng đã nêu."""
         # Physical Attributes (25 points)
         if property_data.get("area"):
             category_scores["physical_attributes"] += 10
-            strengths.append("✅ Có thông tin diện tích")
+            strengths.append(t("completeness.strength_area", language=language))
         else:
-            missing_fields.append("area (Diện tích)")
+            missing_fields.append(t("completeness.missing_area", language=language))
 
         if property_data.get("bedrooms"):
             category_scores["physical_attributes"] += 5
         elif property_data.get("property_type") not in ["land", "đất"]:
-            missing_fields.append("bedrooms (Số phòng ngủ)")
+            missing_fields.append(t("completeness.missing_bedrooms", language=language))
 
         if property_data.get("bathrooms") or property_data.get("floors"):
             category_scores["physical_attributes"] += 5
@@ -258,14 +260,14 @@ Trả về JSON theo định dạng đã nêu."""
         # Price & Legal (20 points)
         if property_data.get("price"):
             category_scores["price_legal"] += 10
-            strengths.append("✅ Có thông tin giá")
+            strengths.append(t("completeness.strength_price", language=language))
         else:
-            missing_fields.append("price (Giá) - BẮT BUỘC")
+            missing_fields.append(t("completeness.missing_price", language=language))
 
         if property_data.get("legal_status"):
             category_scores["price_legal"] += 5
         else:
-            missing_fields.append("legal_status (Pháp lý)")
+            missing_fields.append(t("completeness.missing_legal_status", language=language))
 
         if property_data.get("price_per_m2"):
             category_scores["price_legal"] += 3
@@ -276,9 +278,9 @@ Trả về JSON theo định dạng đã nêu."""
         # Amenities & Contact (10 points)
         if property_data.get("contact_phone"):
             category_scores["amenities_contact"] += 5
-            strengths.append("✅ Có số điện thoại liên hệ")
+            strengths.append(t("completeness.strength_contact", language=language))
         else:
-            missing_fields.append("contact_phone (Số điện thoại) - BẮT BUỘC")
+            missing_fields.append(t("completeness.missing_contact_phone", language=language))
 
         if property_data.get("contact_name") or property_data.get("contact_type"):
             category_scores["amenities_contact"] += 2
@@ -295,26 +297,26 @@ Trả về JSON theo định dạng đã nêu."""
 
         # Generate suggestions based on missing fields
         if not property_data.get("contact_phone"):
-            suggestions.append("📌 BỔ SUNG NGAY số điện thoại liên hệ - bắt buộc!")
+            suggestions.append(t("completeness.suggestion_add_phone", language=language))
         if not property_data.get("price"):
-            suggestions.append("📌 BỔ SUNG NGAY giá - thông tin bắt buộc!")
+            suggestions.append(t("completeness.suggestion_add_price", language=language))
         if not property_data.get("legal_status"):
-            suggestions.append("📌 Thêm thông tin pháp lý (sổ đỏ/hồng) để tăng độ tin cậy")
+            suggestions.append(t("completeness.suggestion_add_legal", language=language))
         if not property_data.get("bedrooms") and property_data.get("property_type") not in ["land", "đất"]:
-            suggestions.append("📌 Bổ sung số phòng ngủ - thông tin quan trọng")
+            suggestions.append(t("completeness.suggestion_add_bedrooms", language=language))
         if not property_data.get("description") or len(property_data.get("description", "")) < 100:
-            suggestions.append("📌 Viết mô tả chi tiết hơn (>100 từ) để thu hút người xem")
+            suggestions.append(t("completeness.suggestion_add_description", language=language))
 
-        interpretation = self._get_score_interpretation(overall_score)
+        interpretation = self._get_score_interpretation(overall_score, language)
 
         # Priority actions
         priority_actions = []
         if not property_data.get("contact_phone"):
-            priority_actions.append("1. BỔ SUNG SỐ ĐIỆN THOẠI - URGENT")
+            priority_actions.append(t("completeness.priority_phone_urgent", language=language))
         if not property_data.get("price"):
-            priority_actions.append("2. BỔ SUNG GIÁ - URGENT")
+            priority_actions.append(t("completeness.priority_price_urgent", language=language))
         if not property_data.get("legal_status"):
-            priority_actions.append("3. Thêm thông tin pháp lý - QUAN TRỌNG")
+            priority_actions.append(t("completeness.priority_legal_important", language=language))
 
         return CompletenessResponse(
             overall_score=overall_score,

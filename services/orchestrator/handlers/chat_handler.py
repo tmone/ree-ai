@@ -29,7 +29,8 @@ class ChatHandler(BaseHandler):
         request_id: str,
         query: str,
         history: Optional[List[Dict[str, Any]]] = None,
-        files: Optional[List] = None
+        files: Optional[List] = None,
+        language: str = "vi"
     ) -> str:
         """
         Execute chat flow
@@ -39,6 +40,7 @@ class ChatHandler(BaseHandler):
             query: User chat message
             history: Conversation history (for context)
             files: Attached files (for vision analysis)
+            language: User's preferred language (vi, en, th, ja)
 
         Returns:
             Natural language conversational response
@@ -47,7 +49,7 @@ class ChatHandler(BaseHandler):
         self.log_handler_start(request_id, "ChatHandler", query)
 
         # STEP 1: Build conversation context
-        messages = self._build_messages(query, history, files)
+        messages = self._build_messages(query, history, files, language)
 
         # STEP 2: Detect if vision model is needed
         has_images = files and any(f.get("mime_type", "").startswith("image/") for f in files)
@@ -90,13 +92,14 @@ class ChatHandler(BaseHandler):
             self.log_handler_complete(request_id, "ChatHandler", duration_ms)
 
             # Fallback response
-            return t('chat.service_unavailable', language='vi')
+            return t('chat.service_unavailable', language=language)
 
     def _build_messages(
         self,
         query: str,
         history: Optional[List[Dict[str, Any]]],
-        files: Optional[List]
+        files: Optional[List],
+        language: str = "vi"
     ) -> List[Dict[str, Any]]:
         """
         Build LLM messages with conversation history and files
@@ -105,6 +108,7 @@ class ChatHandler(BaseHandler):
             query: Current user query
             history: Previous conversation messages
             files: Attached files (for vision)
+            language: User's preferred language
 
         Returns:
             List of messages in OpenAI format
@@ -112,7 +116,7 @@ class ChatHandler(BaseHandler):
         messages = [
             {
                 "role": "system",
-                "content": t('chat.system_prompt', language='vi')
+                "content": t('chat.system_prompt', language=language)
             }
         ]
 

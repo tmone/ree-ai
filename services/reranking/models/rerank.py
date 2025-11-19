@@ -58,6 +58,7 @@ class RerankRequest(BaseModel):
     query: str = Field(..., description="Original search query")
     results: List[PropertyResult] = Field(..., description="Results from hybrid search")
     user_id: Optional[str] = Field(None, description="User ID for personalization")
+    language: str = Field("vi", description="User's preferred language (vi, en, th, ja)")
     context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
 
 

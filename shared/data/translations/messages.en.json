@@ -92,6 +92,130 @@
     "suggest_new_properties": "Based on your search history ({location}, {budget_str}), "
   },
 
+  "validation": {
+    "health_status": "healthy",
+    "health_service": "validation",
+    "validation_failed": "Validation failed: {error}",
+
+    "summary_all_passed": "All validations passed. Property is ready to be saved.",
+    "summary_can_save_with_warnings": "Property can be saved, but there are {count} recommendations to improve listing quality.",
+    "summary_critical_errors": "Cannot save property. {count} critical error(s) must be fixed.",
+    "summary_errors": "Cannot save property. {count} error(s) must be fixed.",
+    "summary_completed": "Validation completed.",
+
+    "next_step_fix_critical": "Fix all critical errors to continue",
+    "next_step_fix_errors": "Fix all errors to continue",
+    "next_step_consider_recommendations": "Consider addressing these recommendations:",
+    "next_step_ready_to_save": "Property is ready to save",
+
+    "field_presence_missing_required": "Missing required field: {field}",
+    "field_presence_please_provide": "Please provide {field} to continue",
+    "field_presence_consider_adding": "Consider adding '{field}' for better visibility and user engagement",
+
+    "data_format_must_be_numeric": "{field} must be numeric, got {type}",
+    "data_format_too_low": "{field} too low: {value} {unit} (minimum: {min} {unit})",
+    "data_format_too_high": "{field} too high: {value} {unit} (maximum: {max} {unit})",
+    "data_format_invalid_phone": "Invalid phone number format: {phone}. Expected format: 0901234567 or +84901234567",
+    "data_format_invalid_email": "Invalid email format: {email}",
+    "data_format_must_provide_contact": "Must provide at least phone number or email for contact",
+    "data_format_both_contact_better": "Providing both phone and email increases response rate",
+
+    "logical_price_low": "Price seems low for {district}: {price_per_sqm} VND/m² (typical: {min_price}-{max_price}). Please verify the price is correct.",
+    "logical_price_high": "Price seems high for {district}: {price_per_sqm} VND/m² (typical: {min_price}-{max_price}). Please verify the price is correct.",
+    "logical_bathroom_unusual": "Unusual bathroom count: {bathrooms} bathrooms for {bedrooms} bedrooms. Please verify this is correct.",
+    "logical_area_small": "Small area for bedroom count: {area}m² for {bedrooms} bedrooms ({area_per_bedroom}m² per bedroom). Please verify.",
+    "logical_area_large": "Large area for bedroom count: {area}m² for {bedrooms} bedrooms ({area_per_bedroom}m² per bedroom). Consider verifying bedroom count.",
+    "logical_floor_exceeds": "Floor number ({floor}) cannot exceed total floors ({total_floors})",
+
+    "spam_excessive_caps": "Excessive uppercase in text",
+    "spam_excessive_punctuation": "Excessive punctuation",
+    "spam_keywords_detected": "Multiple spam keywords detected ({count})",
+    "spam_price_zero": "Price cannot be zero",
+    "spam_flagged": "Listing flagged as potential spam",
+
+    "duplicate_note": "Duplicate detection requires database integration"
+  },
+
+  "classification": {
+    "core_gateway_error": "Core Gateway error: {detail}",
+    "classification_failed": "Classification failed: {error}",
+    "fallback_chat_reasoning": "General conversation or greeting detected",
+    "fallback_heuristic_reasoning": "Fallback heuristic classification"
+  },
+
+  "reranking": {
+    "rerank_failed": "Re-ranking failed: {error}",
+    "analytics_error": "Analytics tracking error: {error}"
+  },
+
+  "attribute_extraction": {
+    "error_generic": "Error: {error}",
+    "clarify_property_type": "What type of property are you looking for? (apartment, house, villa)",
+    "clarify_location": "Which area would you like to search in? (District/Area)",
+    "clarify_budget": "What is your budget?",
+    "clarify_bedrooms": "How many bedrooms do you need?",
+    "clarify_confirm": "I understand you're looking for: {entities}. Is that correct?",
+    "clarify_reason": "Low confidence ({confidence}), need more information",
+
+    "suggestion_property_type": "Property type",
+    "suggestion_district": "Area",
+    "suggestion_budget": "Budget",
+    "suggestion_bedrooms": "Number of bedrooms",
+
+    "label_under": "Under {amount} billion",
+    "label_range": "{min} - {max} billion",
+    "label_above": "Above {amount} billion",
+    "label_count": "{value} ({count} units)",
+    "label_studio": "1 bedroom (Studio)",
+    "label_2br": "2 bedrooms",
+    "label_3br": "3 bedrooms",
+    "label_4br": "4+ bedrooms",
+
+    "display_bedrooms": "{count} bedroom(s)",
+    "display_at": "in {location}",
+    "display_under": "under {amount} billion",
+    "display_around": "around {amount} billion",
+    "display_default": "property"
+  },
+
+  "completeness": {
+    "core_gateway_error": "Core Gateway error: {detail}",
+    "assessment_failed": "Completeness assessment failed: {error}",
+
+    "score_excellent": "EXCELLENT - Listing is very complete",
+    "score_good": "GOOD - Main information provided",
+    "score_fair": "FAIR - Some information missing",
+    "score_average": "AVERAGE - Many important details missing",
+    "score_poor": "POOR - Urgently needs more information",
+
+    "missing_property_type": "property_type (Property Type)",
+    "missing_transaction_type": "transaction_type (Sale/Rent)",
+    "missing_title": "title (Title)",
+    "missing_district": "district (District/Area)",
+    "missing_address": "address (Detailed Address)",
+    "missing_area": "area (Area)",
+    "missing_bedrooms": "bedrooms (Number of Bedrooms)",
+    "missing_price": "price (Price) - REQUIRED",
+    "missing_legal_status": "legal_status (Legal Status)",
+    "missing_contact_phone": "contact_phone (Phone Number) - REQUIRED",
+
+    "strength_description": "✅ Has detailed description",
+    "strength_location": "✅ Has location information",
+    "strength_area": "✅ Has area information",
+    "strength_price": "✅ Has price information",
+    "strength_contact": "✅ Has contact phone number",
+
+    "suggestion_add_phone": "📌 ADD PHONE NUMBER NOW - required!",
+    "suggestion_add_price": "📌 ADD PRICE NOW - required information!",
+    "suggestion_add_legal": "📌 Add legal status (title deed) to increase trust",
+    "suggestion_add_bedrooms": "📌 Add number of bedrooms - important information",
+    "suggestion_add_description": "📌 Write more detailed description (>100 words) to attract viewers",
+
+    "priority_phone_urgent": "1. ADD PHONE NUMBER - URGENT",
+    "priority_price_urgent": "2. ADD PRICE - URGENT",
+    "priority_legal_important": "3. Add legal information - IMPORTANT"
+  },
+
   "common": {
     "yes": "Yes",
     "no": "No",

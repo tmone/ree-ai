@@ -92,6 +92,130 @@
     "suggest_new_properties": "Dựa trên lịch sử tìm kiếm của bạn ({location}, {budget_str}), "
   },
 
+  "validation": {
+    "health_status": "healthy",
+    "health_service": "validation",
+    "validation_failed": "Validation thất bại: {error}",
+
+    "summary_all_passed": "Tất cả kiểm tra đã qua. Bất động sản đã sẵn sàng để lưu.",
+    "summary_can_save_with_warnings": "Bất động sản có thể được lưu, nhưng có {count} khuyến nghị để cải thiện chất lượng tin đăng.",
+    "summary_critical_errors": "Không thể lưu bất động sản. {count} lỗi nghiêm trọng cần được sửa.",
+    "summary_errors": "Không thể lưu bất động sản. {count} lỗi cần được sửa.",
+    "summary_completed": "Kiểm tra hoàn tất.",
+
+    "next_step_fix_critical": "Sửa tất cả lỗi nghiêm trọng để tiếp tục",
+    "next_step_fix_errors": "Sửa tất cả lỗi để tiếp tục",
+    "next_step_consider_recommendations": "Cân nhắc giải quyết các khuyến nghị sau:",
+    "next_step_ready_to_save": "Bất động sản đã sẵn sàng để lưu",
+
+    "field_presence_missing_required": "Thiếu trường bắt buộc: {field}",
+    "field_presence_please_provide": "Vui lòng cung cấp {field} để tiếp tục",
+    "field_presence_consider_adding": "Cân nhắc thêm '{field}' để tăng khả năng hiển thị và tương tác người dùng",
+
+    "data_format_must_be_numeric": "{field} phải là số, nhận được {type}",
+    "data_format_too_low": "{field} quá thấp: {value} {unit} (tối thiểu: {min} {unit})",
+    "data_format_too_high": "{field} quá cao: {value} {unit} (tối đa: {max} {unit})",
+    "data_format_invalid_phone": "Định dạng số điện thoại không hợp lệ: {phone}. Định dạng mong đợi: 0901234567 hoặc +84901234567",
+    "data_format_invalid_email": "Định dạng email không hợp lệ: {email}",
+    "data_format_must_provide_contact": "Phải cung cấp ít nhất số điện thoại hoặc email để liên hệ",
+    "data_format_both_contact_better": "Cung cấp cả số điện thoại và email sẽ tăng tỷ lệ phản hồi",
+
+    "logical_price_low": "Giá có vẻ thấp cho {district}: {price_per_sqm} VND/m² (thông thường: {min_price}-{max_price}). Vui lòng xác minh giá là chính xác.",
+    "logical_price_high": "Giá có vẻ cao cho {district}: {price_per_sqm} VND/m² (thông thường: {min_price}-{max_price}). Vui lòng xác minh giá là chính xác.",
+    "logical_bathroom_unusual": "Số phòng tắm bất thường: {bathrooms} phòng tắm cho {bedrooms} phòng ngủ. Vui lòng xác minh đây là chính xác.",
+    "logical_area_small": "Diện tích nhỏ cho số phòng ngủ: {area}m² cho {bedrooms} phòng ngủ ({area_per_bedroom}m² mỗi phòng ngủ). Vui lòng xác minh.",
+    "logical_area_large": "Diện tích lớn cho số phòng ngủ: {area}m² cho {bedrooms} phòng ngủ ({area_per_bedroom}m² mỗi phòng ngủ). Cân nhắc xác minh số phòng ngủ.",
+    "logical_floor_exceeds": "Số tầng ({floor}) không thể vượt quá tổng số tầng ({total_floors})",
+
+    "spam_excessive_caps": "Quá nhiều chữ hoa trong văn bản",
+    "spam_excessive_punctuation": "Quá nhiều dấu câu",
+    "spam_keywords_detected": "Phát hiện nhiều từ khóa spam ({count})",
+    "spam_price_zero": "Giá không thể bằng 0",
+    "spam_flagged": "Tin đăng bị đánh dấu là spam tiềm năng",
+
+    "duplicate_note": "Phát hiện trùng lặp yêu cầu tích hợp cơ sở dữ liệu"
+  },
+
+  "classification": {
+    "core_gateway_error": "Lỗi Core Gateway: {detail}",
+    "classification_failed": "Phân loại thất bại: {error}",
+    "fallback_chat_reasoning": "Phát hiện cuộc trò chuyện chung hoặc lời chào",
+    "fallback_heuristic_reasoning": "Phân loại dựa trên quy tắc dự phòng"
+  },
+
+  "reranking": {
+    "rerank_failed": "Tái xếp hạng thất bại: {error}",
+    "analytics_error": "Lỗi theo dõi phân tích: {error}"
+  },
+
+  "attribute_extraction": {
+    "error_generic": "Lỗi: {error}",
+    "clarify_property_type": "Bạn muốn tìm loại bất động sản nào? (căn hộ, nhà phố, biệt thự)",
+    "clarify_location": "Bạn muốn tìm ở khu vực nào? (Quận/Huyện)",
+    "clarify_budget": "Ngân sách của bạn là bao nhiêu?",
+    "clarify_bedrooms": "Bạn cần bao nhiêu phòng ngủ?",
+    "clarify_confirm": "Tôi hiểu bạn đang tìm: {entities}. Đúng không?",
+    "clarify_reason": "Confidence thấp ({confidence}), cần làm rõ thêm thông tin",
+
+    "suggestion_property_type": "Loại bất động sản",
+    "suggestion_district": "Khu vực",
+    "suggestion_budget": "Ngân sách",
+    "suggestion_bedrooms": "Số phòng ngủ",
+
+    "label_under": "Dưới {amount} tỷ",
+    "label_range": "{min} - {max} tỷ",
+    "label_above": "Trên {amount} tỷ",
+    "label_count": "{value} ({count} căn)",
+    "label_studio": "1 phòng ngủ (Studio)",
+    "label_2br": "2 phòng ngủ",
+    "label_3br": "3 phòng ngủ",
+    "label_4br": "4+ phòng ngủ",
+
+    "display_bedrooms": "{count} phòng ngủ",
+    "display_at": "tại {location}",
+    "display_under": "dưới {amount} tỷ",
+    "display_around": "khoảng {amount} tỷ",
+    "display_default": "bất động sản"
+  },
+
+  "completeness": {
+    "core_gateway_error": "Lỗi Core Gateway: {detail}",
+    "assessment_failed": "Đánh giá độ đầy đủ thất bại: {error}",
+
+    "score_excellent": "XUẤT SẮC - Tin đăng rất đầy đủ thông tin",
+    "score_good": "TỐT - Đầy đủ thông tin chính",
+    "score_fair": "KHÁ - Còn thiếu một số thông tin",
+    "score_average": "TRUNG BÌNH - Thiếu nhiều thông tin quan trọng",
+    "score_poor": "YẾU - Cần bổ sung gấp nhiều thông tin",
+
+    "missing_property_type": "property_type (Loại BĐS)",
+    "missing_transaction_type": "transaction_type (Bán/Thuê)",
+    "missing_title": "title (Tiêu đề)",
+    "missing_district": "district (Quận/Huyện)",
+    "missing_address": "address (Địa chỉ chi tiết)",
+    "missing_area": "area (Diện tích)",
+    "missing_bedrooms": "bedrooms (Số phòng ngủ)",
+    "missing_price": "price (Giá) - BẮT BUỘC",
+    "missing_legal_status": "legal_status (Pháp lý)",
+    "missing_contact_phone": "contact_phone (Số điện thoại) - BẮT BUỘC",
+
+    "strength_description": "✅ Có mô tả chi tiết",
+    "strength_location": "✅ Có thông tin khu vực",
+    "strength_area": "✅ Có thông tin diện tích",
+    "strength_price": "✅ Có thông tin giá",
+    "strength_contact": "✅ Có số điện thoại liên hệ",
+
+    "suggestion_add_phone": "📌 BỔ SUNG NGAY số điện thoại liên hệ - bắt buộc!",
+    "suggestion_add_price": "📌 BỔ SUNG NGAY giá - thông tin bắt buộc!",
+    "suggestion_add_legal": "📌 Thêm thông tin pháp lý (sổ đỏ/hồng) để tăng độ tin cậy",
+    "suggestion_add_bedrooms": "📌 Bổ sung số phòng ngủ - thông tin quan trọng",
+    "suggestion_add_description": "📌 Viết mô tả chi tiết hơn (>100 từ) để thu hút người xem",
+
+    "priority_phone_urgent": "1. BỔ SUNG SỐ ĐIỆN THOẠI - URGENT",
+    "priority_price_urgent": "2. BỔ SUNG GIÁ - URGENT",
+    "priority_legal_important": "3. Thêm thông tin pháp lý - QUAN TRỌNG"
+  },
+
   "common": {
     "yes": "Có",
     "no": "Không",

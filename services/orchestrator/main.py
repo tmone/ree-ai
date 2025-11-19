@@ -52,7 +52,7 @@ if str(project_root) not in sys.path:
 from services.orchestrator.ambiguity_detector import AmbiguityDetector
 from services.orchestrator.reasoning_engine import ReasoningEngine
 from shared.utils.multilingual_keywords import get_confirmation_keywords, get_frustration_keywords
-from shared.utils.i18n import t
+from shared.utils.i18n import t, auto_detect_language, detect_language_from_header
 
 # ITERATION 1 IMPROVEMENT: Query normalization for better attribute extraction
 from shared.utils.query_normalizer import QueryNormalizer
@@ -204,7 +204,25 @@ class Orchestrator(BaseService):
                         f"{LogEmoji.TARGET} [{request_id}] Query: '{request.query}', user={request.user_id}"
                     )
 
-                # Step 0: Get conversation history (MEMORY CONTEXT)
+                # Step 0: Auto-detect language if not specified
+                if not request.language or request.language == "vi":
+                    # Try to detect language from query or user profile
+                    try:
+                        detected_lang = await auto_detect_language(
+                            user_id=request.user_id,
+                            accept_language=None,  # Not available in this context
+                            default=request.language or "vi"
+                        )
+                        if detected_lang != request.language:
+                            request.language = detected_lang
+                            self.logger.info(f"{LogEmoji.INFO} [{request_id}] Auto-detected language: {request.language}")
+                    except Exception as e:
+                        self.logger.warning(f"{LogEmoji.WARNING} [{request_id}] Language detection failed: {e}")
+                        request.language = request.language or "vi"
+                else:
+                    self.logger.info(f"{LogEmoji.INFO} [{request_id}] Using specified language: {request.language}")
+
+                # Step 1: Get conversation history (MEMORY CONTEXT)
                 # FIX BUG: Define conversation_id before conditional blocks
                 conversation_id = request.conversation_id or request.user_id
 
@@ -251,20 +269,22 @@ class Orchestrator(BaseService):
                         request.query,
                         primary_intent=primary_intent,
                         history=history,
-                        user_id=request.user_id
+                        user_id=request.user_id,
+                        language=request.language
                     )
                 elif intent == "search":
                     # Case 2: Handle search with ReAct agent
-                    response_text = await self._handle_search(request.query, history=history, files=request.files)
+                    response_text = await self._handle_search(request.query, history=history, files=request.files, language=request.language)
                 elif intent == "price_consultation":
                     # Case 3: Handle price consultation with reasoning loop
                     response_text = await self._handle_price_consultation(
                         request.query,
-                        history=history
+                        history=history,
+                        language=request.language
                     )
                 else:
                     # Case 4: General chat (multimodal or text)
-                    response_text = await self._handle_chat(request.query, history=history, files=request.files)
+                    response_text = await self._handle_chat(request.query, history=history, files=request.files, language=request.language)
 
                 # Step 3: Save conversation to memory
                 await self._save_message(request.user_id, conversation_id, "user", request.query)
@@ -844,7 +864,7 @@ Standalone query:"""
             self.logger.warning(f"{LogEmoji.WARNING} Failed to enrich query with context: {e}")
             return query
 
-    async def _handle_search(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None) -> str:
+    async def _handle_search(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None, language: str = "vi") -> str:
         """
         ReAct Agent Pattern for Search:
         1. REASONING: Analyze query requirements
@@ -853,6 +873,12 @@ Standalone query:"""
         4. ITERATE: Refine query or ask clarification if quality is poor
 
         Max 2 iterations to balance quality vs response time
+
+        Args:
+            query: User search query
+            history: Conversation history
+            files: Attached files
+            language: User's preferred language (vi, en, th, ja)
         """
         try:
             self.logger.info(f"{LogEmoji.AI} [ReAct Agent] Starting INTELLIGENT search with query: '{query}'")
@@ -896,7 +922,7 @@ Standalone query:"""
                         if relaxed_results:
                             self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Strategy 1] Found {len(relaxed_results)} properties in requested area")
                             # Return suggestions with disclaimer
-                            return await self._generate_suggestions_response(query, relaxed_results, requirements)
+                            return await self._generate_suggestions_response(query, relaxed_results, requirements, language)
 
                         # Strategy 2: Semantic search fallback
                         self.logger.info(f"{LogEmoji.INFO} [ReAct Strategy 2] Trying semantic search...")
@@ -904,12 +930,11 @@ Standalone query:"""
 
                         if semantic_results:
                             self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Strategy 2] Semantic search found {len(semantic_results)} results")
-                            return await self._generate_suggestions_response(query, semantic_results, requirements)
+                            return await self._generate_suggestions_response(query, semantic_results, requirements, language)
 
                         # Strategy 3: Give up gracefully
                         self.logger.warning(f"{LogEmoji.WARNING} [ReAct Agent] All strategies failed")
-                        lang = self._detect_language(history) if history else 'vi'
-                        return t('search.no_results', language=lang)
+                        return t('search.no_results', language=language)
                 else:
                     consecutive_no_results = 0  # Reset counter when results found
 
@@ -923,7 +948,7 @@ Standalone query:"""
                 if evaluation["satisfied"]:
                     # Quality is good → Return to user
                     self.logger.info(f"{LogEmoji.SUCCESS} [ReAct Agent] Quality satisfied, returning results")
-                    return await self._generate_quality_response(query, results, requirements, evaluation)
+                    return await self._generate_quality_response(query, results, requirements, evaluation, language)
 
                 else:
                     # Quality is poor
@@ -937,16 +962,14 @@ Standalone query:"""
                         # Last iteration and still not satisfied → Ask user for clarification with alternatives
                         self.logger.info(f"{LogEmoji.INFO} [ReAct Agent] Max iterations reached, asking clarification with alternatives")
                         # Use best results from all iterations, not just last one
-                        return await self._ask_clarification(requirements, best_evaluation or evaluation, best_results)
+                        return await self._ask_clarification(requirements, best_evaluation or evaluation, best_results, language)
 
             # Fallback (should not reach here)
-            lang = self._detect_language(history) if history else 'vi'
-            return t('search.no_results_expand', language=lang)
+            return t('search.no_results_expand', language=language)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [ReAct Agent] Search failed: {e}")
-            lang = self._detect_language(history) if history else 'vi'
-            return t('errors.retry_error', language=lang)
+            return t('errors.retry_error', language=language)
 
     async def _execute_search_internal(self, query: str) -> List[Dict]:
         """
@@ -1393,10 +1416,16 @@ Standalone query:"""
             self.logger.error(f"{LogEmoji.ERROR} Location-only search failed: {e}")
             return []
 
-    async def _generate_suggestions_response(self, query: str, results: List[Dict], requirements: Dict) -> str:
+    async def _generate_suggestions_response(self, query: str, results: List[Dict], requirements: Dict, language: str = "vi") -> str:
         """
         Generate response with suggestions and disclaimer
         Used when relaxed search found results but query was incomplete
+
+        Args:
+            query: User query
+            results: Search results
+            requirements: Extracted requirements
+            language: User's preferred language
         """
         try:
             # CTO Priority 4: Track property views for analytics
@@ -1442,7 +1471,7 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate suggestions response: {e}")
-            return t('search.found_some_provide_more_info', language='vi')
+            return t('search.found_some_provide_more_info', language=language)
 
     async def _handle_filter_search(self, query: str) -> str:
         """Filter mode: Extraction → Document search"""
@@ -1553,11 +1582,15 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
 
         return "".join(response_parts)
 
-    async def _handle_chat(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None) -> str:
+    async def _handle_chat(self, query: str, history: List[Dict] = None, files: Optional[List[FileAttachment]] = None, language: str = "vi") -> str:
         """
         Handle general chat (non-search) with conversation context and multimodal support
 
-        HIGH PRIORITY FIX: Added type hints for better IDE support
+        Args:
+            query: User chat message
+            history: Conversation history
+            files: Attached files
+            language: User's preferred language (vi, en, th, ja)
         """
         try:
             # Build messages with history context
@@ -1653,8 +1686,7 @@ Respond like a real person, not a mechanical chatbot!"""
 
                     if response.status_code == 200:
                         data = response.json()
-                        lang = self._detect_language(history) if history else 'vi'
-                        return data.get("content", t('errors.no_request', language=lang))
+                        return data.get("content", t('errors.no_request', language=language))
                     else:
                         # Log detailed error response
                         error_body = response.text
@@ -1671,23 +1703,20 @@ Respond like a real person, not a mechanical chatbot!"""
                             continue
 
                         # Give up after retries
-                        lang = self._detect_language(history) if history else 'vi'
-                        return t('errors.retry_error', language=lang)
+                        return t('errors.retry_error', language=language)
 
                 except httpx.TimeoutException:
                     self.logger.error(f"{LogEmoji.ERROR} Core Gateway timeout (attempt {attempt+1}/{max_retries})")
                     if attempt < max_retries - 1:
                         await asyncio.sleep(1)
                         continue
-                    lang = self._detect_language(history) if history else 'vi'
-                    return t('errors.retry_error', language=lang)
+                    return t('errors.retry_error', language=language)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Chat failed: {e}")
             import traceback
             traceback.print_exc()
-            lang = self._detect_language(history) if history else 'vi'
-            return t('errors.retry_error', language=lang)
+            return t('errors.retry_error', language=language)
 
     # ========================================
     # Classification & Property Posting Methods
@@ -1759,7 +1788,8 @@ Respond like a real person, not a mechanical chatbot!"""
         query: str,
         primary_intent: str,
         history: List[Dict] = None,
-        user_id: str = None
+        user_id: str = None,
+        language: str = "vi"
     ) -> str:
         """
         Handle property posting workflow with INTERNAL REASONING LOOP:
@@ -1778,6 +1808,8 @@ Respond like a real person, not a mechanical chatbot!"""
             query: User query (e.g., "Tôi có nhà cần bán ở Q7, 2PN, 5 tỷ")
             primary_intent: "POST_SALE" or "POST_RENT"
             history: Conversation history
+            user_id: User ID
+            language: User's preferred language (vi, en, th, ja)
 
         Returns:
             Response text with completeness feedback
@@ -1842,7 +1874,6 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if extraction_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
                     if iteration == 1:
-                        language = self._detect_language(history, current_query=query)
                         return self._generate_simple_fallback_feedback({}, 0, ["extraction_error"], language)
                     else:
                         # Use previous iteration's data
@@ -1864,14 +1895,13 @@ Re-extract property attributes with improved understanding. Focus on filling mis
 
                 completeness_response = await self.http_client.post(
                     f"{self.completeness_url}/assess",
-                    json={"property_data": property_data, "include_examples": False},
+                    json={"property_data": property_data, "language": language, "include_examples": False},
                     timeout=30.0
                 )
 
                 if completeness_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Completeness assessment failed")
                     if iteration == 1:
-                        language = self._detect_language(history, current_query=query)
                         return self._generate_simple_fallback_feedback({}, 0, ["completeness_error"], language)
                     else:
                         break
@@ -1985,7 +2015,8 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                     entities=entities,
                     overall_score=overall_score,
                     history=history,
-                    query=query
+                    query=query,
+                    language=language
                 )
 
             # Otherwise: Generate regular feedback with improvement suggestions
@@ -1996,21 +2027,22 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 transaction_type=transaction_type,
                 iterations=iteration,
                 history=history,
-                query=query
+                query=query,
+                language=language
             )
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [Property Posting] Failed: {e}")
             import traceback
             traceback.print_exc()
-            # Use fallback with language detection for error messages
-            language = self._detect_language(history, current_query=query)
+            # Use fallback with user's preferred language
             return self._generate_simple_fallback_feedback({}, 0, [], language)
 
     async def _handle_price_consultation(
         self,
         query: str,
-        history: List[Dict] = None
+        history: List[Dict] = None,
+        language: str = "vi"
     ) -> str:
         """
         Handle price consultation workflow with REASONING LOOP:
@@ -2028,6 +2060,7 @@ Re-extract property attributes with improved understanding. Focus on filling mis
         Args:
             query: User query (e.g., "Căn hộ 2PN Quận 2 giá bao nhiêu?")
             history: Conversation history
+            language: User's preferred language (vi, en, th, ja)
 
         Returns:
             Price consultation response with range and insights
@@ -2090,8 +2123,7 @@ Re-extract property info with improved understanding. Be more specific about loc
                 if extraction_response.status_code != 200:
                     self.logger.warning(f"{LogEmoji.WARNING} [Loop {iteration}] Extraction failed")
                     if iteration == 1:
-                        lang = self._detect_language(history) if history else 'vi'
-                        return t('property_posting.extraction_error_detail', language=lang)
+                        return t('property_posting.extraction_error_detail', language=language)
                     else:
                         break
 
@@ -2152,19 +2184,19 @@ Re-extract property info with improved understanding. Be more specific about loc
             # STEP 4: Generate consultation response
             self.logger.info(f"{LogEmoji.AI} [Price Consultation] Step 4: Generating consultation...")
 
-            return self._generate_price_consultation_response(
+            return await self._generate_price_consultation_response(
                 property_info=property_info,
                 market_data=market_data,
                 confidence=confidence,
-                iterations=iteration
+                iterations=iteration,
+                language=language
             )
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [Price Consultation] Failed: {e}")
             import traceback
             traceback.print_exc()
-            lang = self._detect_language(history) if history else 'vi'
-            return t('errors.retry_error', language=lang)
+            return t('errors.retry_error', language=language)
 
     # ========================================
     # ReAct Agent Pattern Methods
@@ -2736,7 +2768,7 @@ Query mới:"""
             self.logger.error(f"{LogEmoji.ERROR} Query refinement failed: {e}")
             return original_query
 
-    async def _ask_clarification(self, requirements: Dict, evaluation: Dict, results: List[Dict] = None) -> str:
+    async def _ask_clarification(self, requirements: Dict, evaluation: Dict, results: List[Dict] = None, language: str = "vi") -> str:
         """
         ITERATE Alternative: Intelligent clarification with alternatives and statistics
 
@@ -2744,6 +2776,12 @@ Query mới:"""
         - Data-driven insights (statistics)
         - Proactive suggestions
         - Top alternatives with scoring (using OpenSearch semantic scores)
+
+        Args:
+            requirements: Extracted requirements
+            evaluation: Quality evaluation
+            results: Search results
+            language: User's preferred language
         """
         try:
             # Get statistics from DB Gateway
@@ -2795,7 +2833,7 @@ Query mới:"""
 
                 if district and stats.get("total_in_district", 0) == 0:
                     clarification_parts.append(
-                        t('search.no_units_in_district', language='vi', district=district)
+                        t('search.no_units_in_district', language=language, district=district)
                     )
                 elif district:
                     clarification_parts.append(
@@ -2805,40 +2843,40 @@ Query mới:"""
                     clarification_parts.append(".")
             else:
                 clarification_parts.append(
-                    t('search.no_property_type', language='vi', property_type=property_type)
+                    t('search.no_property_type', language=language, property_type=property_type)
                 )
 
             # Part 2: Proactive Options
-            clarification_parts.append("\n\n**" + t('search.clarification_header', language='vi') + "**\n")
+            clarification_parts.append("\n\n**" + t('search.clarification_header', language=language) + "**\n")
 
             if district:
                 # Suggest expanding to nearby districts
                 nearby_districts = await self._get_nearby_districts(district, requirements.get("city"))
                 if nearby_districts:
                     clarification_parts.append(
-                        f"- 🔍 {t('search.search_nearby_districts', language='vi', districts=', '.join(nearby_districts[:3]))}\n"
+                        f"- 🔍 {t('search.search_nearby_districts', language=language, districts=', '.join(nearby_districts[:3]))}\n"
                     )
 
                 clarification_parts.append(
-                    f"- 🌍 {t('search.expand_search_city', language='vi', city=city)}\n"
+                    f"- 🌍 {t('search.expand_search_city', language=language, city=city)}\n"
                 )
 
             if requirements.get("special_requirements"):
                 spec_req = requirements["special_requirements"][0]
                 clarification_parts.append(
-                    f"- 📍 {t('search.provide_details', language='vi', requirement=spec_req)}\n"
+                    f"- 📍 {t('search.provide_details', language=language, requirement=spec_req)}\n"
                 )
 
             if bedrooms:
                 clarification_parts.append(
-                    f"- 🛏️ {t('search.adjust_bedrooms', language='vi', bedrooms=bedrooms)}\n"
+                    f"- 🛏️ {t('search.adjust_bedrooms', language=language, bedrooms=bedrooms)}\n"
                 )
 
             # Part 3: Show Top 5 Alternatives
             if scored_results and len(scored_results) > 0:
                 count = min(5, len(scored_results))
                 clarification_parts.append(
-                    f"\n**{t('search.nearby_alternatives', language='vi', count=count)}**\n"
+                    f"\n**{t('search.nearby_alternatives', language=language, count=count)}**\n"
                 )
 
                 for i, item in enumerate(scored_results[:5]):
@@ -2861,13 +2899,13 @@ Query mới:"""
                     )
 
             # Part 4: Call to Action
-            clarification_parts.append(f"\n💬 {t('search.how_can_help', language='vi')}")
+            clarification_parts.append(f"\n💬 {t('search.how_can_help', language=language)}")
 
             return "".join(clarification_parts)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Clarification generation failed: {e}")
-            return t('search.no_results_expand', language='vi')
+            return t('search.no_results_expand', language=language)
 
     def _format_area(self, area) -> str:
         """
@@ -3407,7 +3445,8 @@ Nearby districts:"""
         entities: Dict,
         overall_score: float,
         history: List[Dict] = None,
-        query: str = ""
+        query: str = "",
+        language: str = "vi"
     ) -> str:
         """
         Generate completion/closing message when posting is ready.
@@ -3415,15 +3454,14 @@ Nearby districts:"""
         Args:
             entities: Final extracted entities
             overall_score: Final completeness score
-            history: Conversation history for language detection
-            query: Current user query for language detection
+            history: Conversation history
+            query: Current user query
+            language: User's preferred language
 
         Returns:
             Completion message in user's language
         """
         try:
-            language = self._detect_language(history, entities, current_query=query)
-
             # Build entity summary
             entity_summary = []
             if entities.get("property_type"):
@@ -3505,7 +3543,8 @@ Generate a warm, congratulatory closing message in **{language} language** that:
         transaction_type: str,
         iterations: int,
         history: List[Dict] = None,
-        query: str = ""
+        query: str = "",
+        language: str = "vi"
     ) -> str:
         """
         Generate multilingual feedback response for property posting using LLM.
@@ -3515,15 +3554,15 @@ Generate a warm, congratulatory closing message in **{language} language** that:
             completeness_data: Completeness assessment data
             transaction_type: "bán"/"sale" or "cho thuê"/"rent"
             iterations: Number of reasoning loop iterations
-            history: Conversation history for language detection
+            history: Conversation history
             query: Current user query for frustration detection
+            language: User's preferred language
 
         Returns:
             Formatted feedback response in user's language
         """
         try:
-            # Detect user's language and frustration
-            language = self._detect_language(history, entities, current_query=query)
+            # Detect user frustration
             is_frustrated = self._detect_user_frustration(query, history) if query else False
 
             if is_frustrated:
@@ -3589,14 +3628,14 @@ The user appears frustrated or confused. Adjust your response to:
 **YOUR TASK**:
 Act as a helpful secretary (NOT as an evaluator). Generate a warm, conversational response in **{language} language**:
 
-1. **Greeting**: Welcome them warmly (e.g., "Chào bạn! 👋" for Vietnamese)
-2. **Acknowledgment**: Thank them for wanting to post their property
-3. **Current Info**: If they provided any details, acknowledge them briefly (e.g., "Tuyệt vời, bạn muốn đăng tin {transaction_type}!")
+1. **Greeting**: Welcome them warmly with a friendly greeting
+2. **Acknowledgment**: Thank them for wanting to post their property for {transaction_type}
+3. **Current Info**: If they provided any details, acknowledge them briefly
 4. **Helpful Questions**: Ask for 2-3 basic information in a friendly way:
    - What type of property? (Apartment/House/Land/Villa)
    - Where is it located? (District/Area)
    - What's the price range?
-5. **Closing**: Encourage them to share information comfortably (e.g., "Bạn cứ cung cấp thông tin thoải mái, mình sẽ hỗ trợ từng bước! 😊")
+5. **Closing**: Encourage them to share information comfortably
 
 **CRITICAL RULES**:
 - DO NOT mention scores, completeness, or evaluation
@@ -3625,11 +3664,11 @@ Act as a helpful secretary (NOT as an evaluator). Generate a warm, conversationa
 Generate a supportive response in **{language} language**:
 
 1. **Thanks**: Thank them for providing information
-2. **Summary**: Show what you've recorded in 1 line (e.g., "Mình đã ghi nhận: căn hộ 2PN ở Quận 7, giá 3 tỷ")
+2. **Summary**: Show what you've recorded in 1 line with all the details they provided
 3. **Gentle Guidance**: Suggest 2-3 important missing details with 💡 emoji:
    - Focus on high-impact fields (location, price, area, property type)
    - Be encouraging, not demanding
-4. **Closing**: Ask if they can provide more details (e.g., "Bạn có thể cung cấp thêm các thông tin này không? 😊")
+4. **Closing**: Ask if they can provide more details
 
 **CRITICAL RULES**:
 - DO NOT show formal score/interpretation
@@ -3663,7 +3702,7 @@ Generate a supportive response in **{language} language**:
 **YOUR TASK**:
 Generate a detailed review response in **{language} language**:
 
-1. **Acknowledgment**: Congratulate them on providing good information (e.g., "Tuyệt vời! Thông tin của bạn đã khá đầy đủ 🎉")
+1. **Acknowledgment**: Congratulate them on providing good information
 2. **Score**: Display the score (X/100) and interpretation
 3. **Strengths**: List 2-3 strong points with ✅ emoji
 4. **Missing Info**: List missing fields with ❌ emoji (ONLY fields NOT in "EXTRACTED INFORMATION")
@@ -3905,12 +3944,13 @@ Generate a detailed review response in **{language} language**:
                 "quality_factors": []
             }
 
-    def _generate_price_consultation_response(
+    async def _generate_price_consultation_response(
         self,
         property_info: Dict,
         market_data: List[Dict],
         confidence: float,
-        iterations: int
+        iterations: int,
+        language: str = "vi"
     ) -> str:
         """
         Generate price consultation response with insights.
@@ -3920,30 +3960,16 @@ Generate a detailed review response in **{language} language**:
             market_data: Similar properties data
             confidence: Confidence score
             iterations: Number of reasoning iterations
+            language: User's preferred language
 
         Returns:
             Formatted consultation response
         """
         try:
-            response_parts = []
+            # Calculate statistics
+            has_data = bool(market_data)
+            stats_summary = ""
 
-            # Greeting
-            response_parts.append("📊 **Tư Vấn Giá Bất Động Sản**\n\n")
-
-            # Show understood property
-            response_parts.append("**Thông tin BDS bạn cần tư vấn:**\n")
-            if property_info.get("property_type"):
-                response_parts.append(f"- Loại: {property_info['property_type']}\n")
-            if property_info.get("district"):
-                response_parts.append(f"- Khu vực: {property_info['district']}\n")
-            if property_info.get("bedrooms"):
-                response_parts.append(f"- Phòng ngủ: {property_info['bedrooms']}PN\n")
-            if property_info.get("area"):
-                response_parts.append(f"- Diện tích: {property_info['area']} m²\n")
-
-            response_parts.append("\n")
-
-            # Calculate price statistics
             if market_data:
                 prices = [p["price"] for p in market_data if p.get("price")]
                 if prices:
@@ -3951,65 +3977,97 @@ Generate a detailed review response in **{language} language**:
                     min_price = min(prices)
                     max_price = max(prices)
                     median_price = sorted(prices)[len(prices) // 2]
+                    price_per_sqm = avg_price / property_info["area"] if property_info.get("area") else None
 
-                    response_parts.append(f"**Phân Tích Thị Trường** _(dựa trên {len(prices)} BDS tương tự)_\n")
-                    response_parts.append(f"- Giá trung bình: **{avg_price:,.0f} VNĐ** ({avg_price/1_000_000_000:.2f} tỷ)\n")
-                    response_parts.append(f"- Khoảng giá: {min_price:,.0f} - {max_price:,.0f} VNĐ\n")
-                    response_parts.append(f"- Giá trung vị: {median_price:,.0f} VNĐ ({median_price/1_000_000_000:.2f} tỷ)\n")
+                    stats_summary = f"""
+Sample Size: {len(prices)} similar properties
+Average Price: {avg_price:,.0f} VND ({avg_price/1_000_000_000:.2f} billion)
+Price Range: {min_price:,.0f} - {max_price:,.0f} VND
+Median Price: {median_price:,.0f} VND ({median_price/1_000_000_000:.2f} billion)
+Price per sqm: {price_per_sqm:,.0f} VND/m² (if area provided)
+Confidence Level: {confidence:.0%}
+"""
 
-                    # Confidence indicator
-                    if confidence >= 0.8:
-                        response_parts.append(f"\n✅ **Độ tin cậy: Cao** ({confidence:.0%})\n")
-                        response_parts.append("Dữ liệu thị trường rất đầy đủ, giá tư vấn chính xác.\n")
-                    elif confidence >= 0.6:
-                        response_parts.append(f"\n📊 **Độ tin cậy: Trung bình** ({confidence:.0%})\n")
-                        response_parts.append("Dữ liệu thị trường khá tốt, giá tư vấn đáng tin cậy.\n")
-                    else:
-                        response_parts.append(f"\n⚠️ **Độ tin cậy: Thấp** ({confidence:.0%})\n")
-                        response_parts.append("Dữ liệu thị trường hạn chế, giá chỉ mang tính tham khảo.\n")
+            # Build LLM prompt
+            property_summary = f"""
+Property Type: {property_info.get('property_type', 'Not specified')}
+Location: {property_info.get('district', 'Not specified')}
+Bedrooms: {property_info.get('bedrooms', 'Not specified')}
+Area: {property_info.get('area', 'Not specified')} m²
+"""
 
-                    # Price per sqm if area is known
-                    if property_info.get("area"):
-                        price_per_sqm = avg_price / property_info["area"]
-                        response_parts.append(f"\n💰 **Giá trên m²:** {price_per_sqm:,.0f} VNĐ/m²\n")
+            prompt = f"""You are a professional real estate price consultant.
 
-                    # Additional insights
-                    response_parts.append("\n**Nhận Xét:**\n")
-                    if avg_price > median_price * 1.2:
-                        response_parts.append("- Thị trường có xu hướng giá cao\n")
-                    elif avg_price < median_price * 0.8:
-                        response_parts.append("- Thị trường có nhiều BDS giá tốt\n")
-                    else:
-                        response_parts.append("- Giá thị trường khá ổn định\n")
+**USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
 
-                    if max_price > avg_price * 2:
-                        response_parts.append("- Có phân khúc cao cấp trong khu vực\n")
+**PROPERTY TO CONSULT:**
+{property_summary}
 
-                else:
-                    response_parts.append("⚠️ Không tìm thấy thông tin giá từ thị trường.\n")
-            else:
-                response_parts.append("⚠️ **Không tìm thấy BDS tương tự trên thị trường.**\n")
-                response_parts.append("Vui lòng cung cấp thêm thông tin hoặc thử khu vực khác.\n")
+**MARKET DATA:**
+{stats_summary if has_data else "No similar properties found in the market."}
 
-            # Show processing transparency
-            if iterations > 1:
-                response_parts.append(f"\n_(Đã phân tích {iterations} lần để đảm bảo độ chính xác)_\n")
+**YOUR TASK:**
+Generate a professional price consultation report in **{language} language** that includes:
 
-            response_parts.append("\n💬 Bạn cần thêm thông tin gì về giá thị trường không?")
+1. **Greeting** (📊 icon)
+2. **Property Summary**: Show what property they're asking about
+3. **Market Analysis**:
+   - If data available: Show price statistics, confidence level, price/m², insights
+   - If no data: Apologize and suggest providing more details
+4. **Recommendations** (if applicable)
+5. **Call to Action**: Ask if they need more information
 
-            return "".join(response_parts)
+**FORMATTING**:
+- Use emojis: 📊 💰 ✅ ⚠️ 📈 💬
+- Use markdown bold (**text**) for headers
+- Keep professional but friendly tone
+- CRITICAL: Write EVERYTHING in {language} language!
+
+**OUTPUT** (in {language} language):"""
+
+            # Call LLM
+            response = await self.http_client.post(
+                f"{self.core_gateway_url}/chat/completions",
+                json={
+                    "model": "gpt-4o-mini",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 800,
+                    "temperature": 0.7
+                },
+                timeout=20.0
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                return data.get("content", "").strip()
+
+            # Fallback if LLM fails
+            fallback = {
+                "vi": f"📊 Tư vấn giá: {'Có dữ liệu thị trường' if has_data else 'Không có dữ liệu'}. Phân tích {iterations} lần.",
+                "en": f"📊 Price consultation: {'Market data available' if has_data else 'No market data'}. Analyzed {iterations} times.",
+                "th": f"📊 การปรึกษาราคา: {'มีข้อมูลตลาด' if has_data else 'ไม่มีข้อมูลตลาด'}",
+                "ja": f"📊 価格相談: {'市場データあり' if has_data else '市場データなし'}"
+            }
+            return fallback.get(language, fallback["en"])
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate price consultation response: {e}")
-            return t('errors.retry_error', language='vi')
+            return t('errors.retry_error', language=language)
 
     # ========================================
     # Search Quality & Response Generation
     # ========================================
 
-    async def _generate_quality_response(self, query: str, results: List[Dict], requirements: Dict, evaluation: Dict) -> str:
+    async def _generate_quality_response(self, query: str, results: List[Dict], requirements: Dict, evaluation: Dict, language: str = "vi") -> str:
         """
         Generate response with quality assessment and honest feedback
+
+        Args:
+            query: User query
+            results: Search results
+            requirements: Extracted requirements
+            evaluation: Quality evaluation
+            language: User's preferred language
         """
         try:
             # CTO Priority 4: Track property views for analytics
@@ -4019,15 +4077,15 @@ Generate a detailed review response in **{language} language**:
 
             if evaluation["quality_score"] >= 0.8:
                 # Excellent match
-                intro = t('search.found_exact', language='vi', count=evaluation['match_count']) + "\n"
+                intro = t('search.found_exact', language=language, count=evaluation['match_count']) + "\n"
             elif evaluation["quality_score"] >= 0.6:
                 # Good match
-                intro = t('search.found_good', language='vi',
+                intro = t('search.found_good', language=language,
                          match_count=evaluation['match_count'],
                          total_count=evaluation['total_count']) + "\n"
             else:
                 # Poor match - should have asked clarification instead
-                intro = t('search.found_partial', language='vi',
+                intro = t('search.found_partial', language=language,
                          match_count=evaluation['match_count'],
                          total_count=evaluation['total_count']) + "\n"
 

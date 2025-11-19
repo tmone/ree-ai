@@ -4,6 +4,7 @@ Check if property listing already exists
 """
 
 from typing import Dict, Any, Optional
+from shared.utils.i18n import t
 from services.validation.models.validation import ValidationResult, ValidationSeverity
 
 
@@ -29,7 +30,8 @@ def create_property_fingerprint(entities: Dict[str, Any]) -> int:
 
 def validate_duplicate_listing(
     entities: Dict[str, Any],
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    language: str = 'vi'
 ) -> ValidationResult:
     """
     Check if this property was already posted recently
@@ -40,6 +42,7 @@ def validate_duplicate_listing(
     Args:
         entities: Extracted property attributes
         user_id: User ID for checking user's recent listings
+        language: User's preferred language
 
     Returns:
         ValidationResult with duplicate detection results
@@ -77,6 +80,6 @@ def validate_duplicate_listing(
         severity=ValidationSeverity.INFO,
         metadata={
             'fingerprint': fingerprint,
-            'note': 'Duplicate detection requires database integration'
+            'note': t("validation.duplicate_note", language=language)
         }
     )

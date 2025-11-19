@@ -4,6 +4,7 @@ Cross-field validation and logical relationship checks
 """
 
 from typing import Dict, Any
+from shared.utils.i18n import t
 from services.validation.models.validation import ValidationResult, ValidationSeverity
 
 
@@ -23,12 +24,16 @@ DISTRICT_PRICE_RANGES = {
 }
 
 
-def validate_price_per_area(entities: Dict[str, Any]) -> ValidationResult:
+def validate_price_per_area(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate price per m² is reasonable for the district
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with warnings for unusual prices
@@ -51,16 +56,22 @@ def validate_price_per_area(entities: Dict[str, Any]) -> ValidationResult:
 
         if price_per_sqm < min_price * 0.5:  # 50% below minimum
             warnings.append(
-                f"Price seems low for {district}: "
-                f"{price_per_sqm:,.0f} VND/m² (typical: {min_price:,.0f}-{max_price:,.0f}). "
-                f"Please verify the price is correct."
+                t("validation.logical_price_low",
+                  language=language,
+                  district=district,
+                  price_per_sqm=f"{price_per_sqm:,.0f}",
+                  min_price=f"{min_price:,.0f}",
+                  max_price=f"{max_price:,.0f}")
             )
 
         if price_per_sqm > max_price * 2:  # 200% above maximum
             warnings.append(
-                f"Price seems high for {district}: "
-                f"{price_per_sqm:,.0f} VND/m² (typical: {min_price:,.0f}-{max_price:,.0f}). "
-                f"Please verify the price is correct."
+                t("validation.logical_price_high",
+                  language=language,
+                  district=district,
+                  price_per_sqm=f"{price_per_sqm:,.0f}",
+                  min_price=f"{min_price:,.0f}",
+                  max_price=f"{max_price:,.0f}")
             )
 
     if warnings:
@@ -78,12 +89,16 @@ def validate_price_per_area(entities: Dict[str, Any]) -> ValidationResult:
     )
 
 
-def validate_bedrooms_bathrooms(entities: Dict[str, Any]) -> ValidationResult:
+def validate_bedrooms_bathrooms(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate bedroom to bathroom ratio is reasonable
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with warnings for unusual ratios
@@ -96,8 +111,10 @@ def validate_bedrooms_bathrooms(entities: Dict[str, Any]) -> ValidationResult:
     if bedrooms and bathrooms:
         if bathrooms > bedrooms + 2:
             warnings.append(
-                f"Unusual bathroom count: {bathrooms} bathrooms for {bedrooms} bedrooms. "
-                f"Please verify this is correct."
+                t("validation.logical_bathroom_unusual",
+                  language=language,
+                  bathrooms=bathrooms,
+                  bedrooms=bedrooms)
             )
 
     if warnings:
@@ -110,12 +127,16 @@ def validate_bedrooms_bathrooms(entities: Dict[str, Any]) -> ValidationResult:
     return ValidationResult(valid=True, severity=ValidationSeverity.INFO)
 
 
-def validate_area_bedrooms(entities: Dict[str, Any]) -> ValidationResult:
+def validate_area_bedrooms(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate area is reasonable for number of bedrooms
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with warnings for unusual area/bedroom ratios
@@ -130,14 +151,20 @@ def validate_area_bedrooms(entities: Dict[str, Any]) -> ValidationResult:
 
         if area_per_bedroom < 8:  # Less than 8m² per bedroom
             warnings.append(
-                f"Small area for bedroom count: {area}m² for {bedrooms} bedrooms "
-                f"({area_per_bedroom:.1f}m² per bedroom). Please verify."
+                t("validation.logical_area_small",
+                  language=language,
+                  area=area,
+                  bedrooms=bedrooms,
+                  area_per_bedroom=f"{area_per_bedroom:.1f}")
             )
 
         if area_per_bedroom > 100:  # More than 100m² per bedroom
             warnings.append(
-                f"Large area for bedroom count: {area}m² for {bedrooms} bedrooms "
-                f"({area_per_bedroom:.1f}m² per bedroom). Consider verifying bedroom count."
+                t("validation.logical_area_large",
+                  language=language,
+                  area=area,
+                  bedrooms=bedrooms,
+                  area_per_bedroom=f"{area_per_bedroom:.1f}")
             )
 
     if warnings:
@@ -150,12 +177,16 @@ def validate_area_bedrooms(entities: Dict[str, Any]) -> ValidationResult:
     return ValidationResult(valid=True, severity=ValidationSeverity.INFO)
 
 
-def validate_floor_vs_total_floors(entities: Dict[str, Any]) -> ValidationResult:
+def validate_floor_vs_total_floors(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate floor number does not exceed total floors
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with errors for impossible floor numbers
@@ -168,7 +199,10 @@ def validate_floor_vs_total_floors(entities: Dict[str, Any]) -> ValidationResult
     if floor is not None and total_floors:
         if floor > total_floors:
             errors.append(
-                f"Floor number ({floor}) cannot exceed total floors ({total_floors})"
+                t("validation.logical_floor_exceeds",
+                  language=language,
+                  floor=floor,
+                  total_floors=total_floors)
             )
 
     if errors:
@@ -181,21 +215,25 @@ def validate_floor_vs_total_floors(entities: Dict[str, Any]) -> ValidationResult
     return ValidationResult(valid=True, severity=ValidationSeverity.INFO)
 
 
-def validate_logical_consistency(entities: Dict[str, Any]) -> ValidationResult:
+def validate_logical_consistency(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Combined logical consistency validation
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         Aggregated ValidationResult
     """
     # Run all consistency checks
-    price_area_result = validate_price_per_area(entities)
-    bedrooms_bathrooms_result = validate_bedrooms_bathrooms(entities)
-    area_bedrooms_result = validate_area_bedrooms(entities)
-    floor_result = validate_floor_vs_total_floors(entities)
+    price_area_result = validate_price_per_area(entities, language)
+    bedrooms_bathrooms_result = validate_bedrooms_bathrooms(entities, language)
+    area_bedrooms_result = validate_area_bedrooms(entities, language)
+    floor_result = validate_floor_vs_total_floors(entities, language)
 
     # Aggregate results
     all_errors = (

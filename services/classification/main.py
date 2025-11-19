@@ -17,6 +17,7 @@ from shared.models.core_gateway import LLMRequest, Message, ModelType
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.utils.redis_cache import get_cache
+from shared.utils.i18n import t
 
 
 def load_prompt(filename: str) -> str:
@@ -34,6 +35,7 @@ class ClassifyRequest(BaseModel):
     """Request to classify query"""
     query: str
     context: Optional[List[Dict]] = None  # Optional conversation history
+    language: str = "vi"  # User's preferred language (vi, en, th, ja)
 
 
 class ClassifyResponse(BaseModel):
@@ -107,6 +109,7 @@ class ClassificationService(BaseService):
                 # NEW: Check cache first (ONLY if no context)
                 # When context is provided, skip cache to ensure context-aware classification
                 cached_result = None
+                cache_key = None  # Initialize cache_key to avoid UnboundLocalError
                 if not request.context:
                     # Normalize query for consistent cache keys
                     normalized_query = request.query.lower().strip()
@@ -257,7 +260,11 @@ Respond with JSON only."""
                 if response.status_code != 200:
                     raise HTTPException(
                         status_code=response.status_code,
-                        detail=f"Core Gateway error: {response.text}"
+                        detail=t(
+                            "classification.core_gateway_error",
+                            language=request.language,
+                            detail=response.text
+                        )
                     )
 
                 data = response.json()
@@ -300,30 +307,40 @@ Respond with JSON only."""
                         primary_intent=primary_intent
                     )
 
-                    # NEW: Cache the result for future requests
-                    await self.cache.set(
-                        cache_key,
-                        response.dict(),
-                        ttl=self.cache_ttl
-                    )
-                    self.logger.info(f"{LogEmoji.SUCCESS} Cached classification result (TTL: 24h)")
+                    # NEW: Cache the result for future requests (only if cache_key was created)
+                    if cache_key:
+                        await self.cache.set(
+                            cache_key,
+                            response.dict(),
+                            ttl=self.cache_ttl
+                        )
+                        self.logger.info(f"{LogEmoji.SUCCESS} Cached classification result (TTL: 24h)")
 
                     return response
 
                 except json.JSONDecodeError as e:
                     self.logger.error(f"{LogEmoji.ERROR} Failed to parse LLM response: {content}")
                     # Fallback: simple heuristic
-                    fallback_result = self._fallback_classification(request.query)
+                    fallback_result = self._fallback_classification(request.query, request.language)
                     return ClassifyResponse(**fallback_result)
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Classification failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                error_msg = t(
+                    "classification.classification_failed",
+                    language=request.language if hasattr(request, 'language') else 'vi',
+                    error=str(e)
+                )
+                raise HTTPException(status_code=500, detail=error_msg)
 
-    def _fallback_classification(self, query: str) -> Dict:
+    def _fallback_classification(self, query: str, language: str = 'vi') -> Dict:
         """
         Simple heuristic fallback if LLM fails
         Returns dict with mode, confidence, reasoning, intents, primary_intent
+
+        Args:
+            query: Query to classify
+            language: User's preferred language
         """
         query_lower = query.lower()
 
@@ -345,7 +362,7 @@ Respond with JSON only."""
                 return {
                     "mode": "semantic",
                     "confidence": 0.8,
-                    "reasoning": "General conversation or greeting detected",
+                    "reasoning": t("classification.fallback_chat_reasoning", language=language),
                     "intents": ["CHAT"],
                     "primary_intent": "CHAT"
                 }
@@ -431,7 +448,7 @@ Respond with JSON only."""
         return {
             "mode": mode,
             "confidence": 0.5,
-            "reasoning": "Fallback heuristic classification",
+            "reasoning": t("classification.fallback_heuristic_reasoning", language=language),
             "intents": [primary_intent],
             "primary_intent": primary_intent
         }

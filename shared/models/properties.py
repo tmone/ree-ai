@@ -72,6 +72,15 @@ class PropertyDocument(BaseModel):
     area: Optional[float] = None
     floor: Optional[int] = None
 
+    # Dimensions (for townhouse, land)
+    width: Optional[float] = None  # Chiều rộng (m)
+    depth: Optional[float] = None  # Chiều dài (m)
+    land_area: Optional[float] = None  # Diện tích đất (m²)
+
+    # Geolocation (for map display)
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
     # Flexible attributes (unlimited additional fields)
     # Examples: swimming_pool, gym, parking, view, direction, furniture, etc.
     attributes: Optional[Dict[str, Any]] = None
@@ -138,6 +147,15 @@ class PropertyCreate(BaseModel):
     area: Optional[float] = Field(None, gt=0, le=10000)
     floor: Optional[int] = Field(None, ge=0, le=100)
 
+    # Dimensions (for townhouse, land)
+    width: Optional[float] = Field(None, gt=0, le=100, description="Width in meters")
+    depth: Optional[float] = Field(None, gt=0, le=500, description="Depth in meters")
+    land_area: Optional[float] = Field(None, gt=0, le=100000, description="Land area in m²")
+
+    # Geolocation (for map display)
+    latitude: Optional[float] = Field(None, ge=-90, le=90, description="Latitude coordinate")
+    longitude: Optional[float] = Field(None, ge=-180, le=180, description="Longitude coordinate")
+
     # Flexible attributes
     attributes: Optional[Dict[str, Any]] = None
 
@@ -163,6 +181,13 @@ class PropertyUpdate(BaseModel):
     bathrooms: Optional[int] = Field(None, ge=0, le=20)
     area: Optional[float] = Field(None, gt=0, le=10000)
     floor: Optional[int] = Field(None, ge=0, le=100)
+    # Dimensions
+    width: Optional[float] = Field(None, gt=0, le=100)
+    depth: Optional[float] = Field(None, gt=0, le=500)
+    land_area: Optional[float] = Field(None, gt=0, le=100000)
+    # Geolocation
+    latitude: Optional[float] = Field(None, ge=-90, le=90)
+    longitude: Optional[float] = Field(None, ge=-180, le=180)
     attributes: Optional[Dict[str, Any]] = None
     contact_phone: Optional[str] = None
     contact_email: Optional[str] = None

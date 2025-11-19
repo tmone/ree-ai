@@ -116,6 +116,33 @@ async def create_properties_index():
                         "doc_values": True
                     },
 
+                    # Dimensions (for townhouse, land)
+                    "width": {
+                        "type": "double",
+                        "doc_values": True
+                    },
+                    "depth": {
+                        "type": "double",
+                        "doc_values": True
+                    },
+                    "land_area": {
+                        "type": "double",
+                        "doc_values": True
+                    },
+
+                    # Geolocation (for map display)
+                    "latitude": {
+                        "type": "double",
+                        "doc_values": True
+                    },
+                    "longitude": {
+                        "type": "double",
+                        "doc_values": True
+                    },
+                    "location_geo": {
+                        "type": "geo_point"  # For geo queries
+                    },
+
                     # Display fields (for UI)
                     "price_display": {"type": "keyword"},
                     "area_display": {"type": "keyword"},
@@ -166,6 +193,11 @@ async def create_properties_index():
         print(f"   - area: double (m²)")
         print(f"   - bedrooms: integer")
         print(f"   - bathrooms: integer")
+        print(f"   - width: double (m)")
+        print(f"   - depth: double (m)")
+        print(f"   - land_area: double (m²)")
+        print(f"   - latitude/longitude: double (coordinates)")
+        print(f"   - location_geo: geo_point (for geo queries)")
 
         # Create index
         response = await client.indices.create(

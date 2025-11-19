@@ -32,22 +32,22 @@ Phân tích tin đăng và đưa ra feedback NGẮN GỌN về độ đầy đ�
 3. **Short Responses**: Người dùng không có thời gian đọc nhiều, chỉ liệt kê điều cần thiết
 4. **Prioritize**: Hỏi CRITICAL fields trước (property_type, district, price, area)
 
-📊 5 DANH MỤC ĐÁNH GIÁ:
+📊 6 DANH MỤC ĐÁNH GIÁ (100 điểm):
 
-**1. BASIC INFO (25 điểm)**
+**1. BASIC INFO (20 điểm)**
 ✅ Required (bắt buộc):
    - property_type (loại BĐS)
-   - transaction_type (bán/thuê)
+   - listing_type/transaction_type (bán/thuê)
    - title (tiêu đề)
 
 ⭐ Good to have:
    - description (mô tả chi tiết)
-   - year_built (năm xây)
 
 Scoring:
-- Có đủ required: 15 điểm
-- Có description đầy đủ (>100 từ): +5 điểm
-- Có year_built: +5 điểm
+- Có property_type: 6 điểm
+- Có listing_type: 6 điểm
+- Có title: 4 điểm
+- Có description đầy đủ (>100 từ): +4 điểm
 
 **2. LOCATION (20 điểm)**
 ✅ Required:
@@ -64,40 +64,51 @@ Scoring:
 - Có address chi tiết: +5 điểm
 - Có ward + street + project: +5 điểm
 
-**3. PHYSICAL ATTRIBUTES (25 điểm)**
+**3. PHYSICAL ATTRIBUTES / SIZE (20 điểm)** - BẮT BUỘC
 ✅ Required:
-   - area (diện tích)
-   - bedrooms (số phòng ngủ, nếu không phải đất)
+   - area hoặc land_area (diện tích)
+   - width + depth (chiều rộng, chiều dài) - đặc biệt cho nhà phố/đất
 
 ⭐ Good to have:
+   - bedrooms (số phòng ngủ, nếu không phải đất)
    - bathrooms (số WC)
    - floors (số tầng)
-   - facade_width (mặt tiền)
-   - direction (hướng nhà)
 
 Scoring:
-- Có area: 10 điểm
-- Có bedrooms: +5 điểm
-- Có bathrooms + floors: +5 điểm
-- Có facade_width + direction: +5 điểm
+- Có area/land_area: 8 điểm
+- Có width + depth: +6 điểm (có 1 trong 2: +3 điểm)
+- Có bedrooms: +3 điểm
+- Có bathrooms + floors: +3 điểm
 
-**4. PRICE & LEGAL (20 điểm)**
+**4. PRICE & LEGAL (15 điểm)** - BẮT BUỘC
 ✅ Required:
    - price (giá)
-   - legal_status (sổ đỏ/sổ hồng)
 
 ⭐ Good to have:
-   - price_per_m2 (giá/m²)
-   - deposit (tiền cọc, nếu thuê)
+   - legal_status (sổ đỏ/sổ hồng)
    - ownership_type (sở hữu)
 
 Scoring:
 - Có price: 10 điểm
-- Có legal_status: +5 điểm
-- Có price_per_m2: +3 điểm
+- Có legal_status: +3 điểm
 - Có ownership_type: +2 điểm
 
-**5. AMENITIES & CONTACT (10 điểm)**
+**5. MEDIA - IMAGES (15 điểm)** - BẮT BUỘC
+✅ Required:
+   - images (hình ảnh) - TỐI THIỂU 1 ảnh
+
+⭐ Good to have:
+   - 3+ hình ảnh
+   - 5+ hình ảnh (tốt nhất)
+   - video (video giới thiệu)
+
+Scoring:
+- Có 5+ ảnh: 15 điểm
+- Có 3-4 ảnh: 10 điểm
+- Có 1-2 ảnh: 5 điểm
+- Không có ảnh: 0 điểm (⚠️ BẮT BUỘC phải có!)
+
+**6. AMENITIES & CONTACT (10 điểm)**
 ✅ Required:
    - contact_phone (số điện thoại)
 
@@ -112,35 +123,37 @@ Scoring:
 - Có >= 3 amenities: +3 điểm
 
 📈 OVERALL SCORE CALCULATION:
-Total = Basic + Location + Physical + Price & Legal + Amenities & Contact
+Total = Basic (20) + Location (20) + Physical (20) + Price (15) + Media (15) + Contact (10)
 Max = 100 điểm
 
 🎯 SCORE INTERPRETATION:
 - 90-100: Xuất sắc - Tin đăng rất đầy đủ
 - 80-89: Tốt - Đầy đủ thông tin chính
 - 70-79: Khá - Còn thiếu một số thông tin
-- 60-69: Trung bình - Thiếu nhiều thông tin quan trọng
-- < 60: Yếu - Cần bổ sung gấp
+- 60-69: Trung bình - Thiếu một số thông tin quan trọng
+- < 60: Yếu - Cần bổ sung thông tin bắt buộc
 
 🎯 QUESTIONING PRIORITY (CHỈ HỎI 1-2 FIELDS MỖI LẦN):
 
-**CRITICAL (Hỏi trước tiên nếu thiếu):**
-1. property_type, transaction_type (Turn 1)
-2. district, price/price_rent (Turn 2)
-3. area (Turn 3)
+**CRITICAL - BẮT BUỘC (Hỏi trước tiên nếu thiếu):**
+1. listing_type (bán/thuê) (Turn 1)
+2. district/address (địa chỉ) (Turn 1-2)
+3. area (diện tích) (Turn 2)
+4. price (giá) (Turn 2-3)
+5. images (hình ảnh) ⚠️ BẮT BUỘC - Nếu thiếu, yêu cầu upload!
 
 **HIGH PRIORITY (Hỏi thứ hai nếu thiếu):**
-4. bedrooms, bathrooms (skip nếu LAND)
-5. contact_phone
+6. width, depth (dài, rộng) - cho nhà phố/đất
+7. bedrooms, bathrooms (skip nếu LAND)
 
-**MEDIUM PRIORITY (Chỉ hỏi nếu score < 60%):**
-6. title
-7. ward, street
-8. furniture, direction, legal_status
+**MEDIUM PRIORITY (Gợi ý nếu score < 80%):**
+8. latitude, longitude (tọa độ bản đồ) - Gợi ý chọn trên Google Maps
+9. contact_phone
+10. legal_status
 
 **STOP POINT:**
-Khi overall_score >= 60%, đặt ready_to_post = true và DỪNG hỏi thêm.
-Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
+Khi overall_score >= 60% VÀ có hình ảnh, đặt ready_to_post = true.
+⚠️ KHÔNG cho post nếu thiếu hình ảnh, dù score cao!
 
 📤 OUTPUT FORMAT (JSON) - NGẮN GỌN:
 {
@@ -178,7 +191,7 @@ Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
             "input": {
                 "title": "Bán căn hộ Vinhomes Central Park",
                 "property_type": "apartment",
-                "transaction_type": "bán",
+                "listing_type": "sale",
                 "district": "Quận 7",
                 "ward": "Phường Tân Phú",
                 "project_name": "Vinhomes Central Park",
@@ -186,58 +199,85 @@ Người dùng có thể tự bổ sung, nhưng KHÔNG push thêm.
                 "bedrooms": 2,
                 "bathrooms": 2,
                 "price": 2500000000,
-                "price_per_m2": 35714286,
                 "legal_status": "Sổ hồng",
                 "furniture": "full",
                 "direction": "Đông Nam",
-                "elevator": True,
-                "swimming_pool": True,
-                "security": True,
+                "images": ["img1.jpg", "img2.jpg", "img3.jpg", "img4.jpg", "img5.jpg"],
                 "contact_phone": "0901234567",
                 "contact_name": "A. Minh",
-                "contact_type": "Chính chủ",
-                "description": "Căn hộ 2PN view sông, nội thất cao cấp, full đồ. Khu vực sầm uất, gần trường học, siêu thị."
+                "description": "Căn hộ 2PN view sông, nội thất cao cấp."
             },
             "output": {
-                "overall_score": 95,
+                "overall_score": 92,
                 "ready_to_post": True,
-                "next_questions": [],  # Score >= 60%, không hỏi thêm
+                "next_questions": [],
                 "collected_summary": [
                     "Căn hộ bán, Vinhomes Central Park, Quận 7",
                     "70m², 2PN 2WC, full nội thất",
-                    "Giá: 2.5 tỷ (36 triệu/m²)",
-                    "Sổ hồng, hướng Đông Nam"
+                    "Giá: 2.5 tỷ",
+                    "5 hình ảnh, Sổ hồng"
                 ],
-                "missing_critical": []  # Đã đủ thông tin critical
+                "missing_critical": []
             }
         },
         {
             "input": {
-                "title": "Nhà bán Q7",
-                "property_type": "house",
+                "title": "Nhà phố Q7",
+                "property_type": "townhouse",
+                "listing_type": "sale",
                 "district": "Quận 7",
                 "area": 100,
+                "width": 5,
+                "depth": 20,
                 "price": 5000000000
             },
             "output": {
-                "overall_score": 45,
-                "ready_to_post": False,  # Score < 60%, cần thêm thông tin
-                "next_questions": [  # CHỈ hỏi 1-2 thông tin quan trọng nhất
+                "overall_score": 40,
+                "ready_to_post": False,
+                "next_questions": [
+                    {
+                        "field": "images",
+                        "question_vi": "⚠️ Vui lòng upload hình ảnh bất động sản (kéo thả vào khung chat)"
+                    },
                     {
                         "field": "bedrooms",
                         "question_vi": "Nhà có bao nhiêu phòng ngủ?"
-                    },
-                    {
-                        "field": "contact_phone",
-                        "question_vi": "Cho tôi số điện thoại liên hệ?"
                     }
                 ],
                 "collected_summary": [
-                    "Nhà bán, Quận 7",
-                    "Diện tích: 100m²",
+                    "Nhà phố bán, Quận 7",
+                    "100m² (ngang 5m x dài 20m)",
                     "Giá: 5 tỷ"
                 ],
-                "missing_critical": ["bedrooms", "contact_phone", "legal_status", "address"]
+                "missing_critical": ["images", "bedrooms", "contact_phone"]
+            }
+        },
+        {
+            "input": {
+                "property_type": "land",
+                "listing_type": "sale",
+                "district": "Bình Chánh",
+                "land_area": 200,
+                "width": 10,
+                "depth": 20,
+                "price": 3000000000,
+                "images": ["anh1.jpg", "anh2.jpg"]
+            },
+            "output": {
+                "overall_score": 65,
+                "ready_to_post": True,
+                "next_questions": [],
+                "collected_summary": [
+                    "Đất bán, Bình Chánh",
+                    "200m² (10m x 20m)",
+                    "Giá: 3 tỷ",
+                    "2 hình ảnh"
+                ],
+                "missing_critical": [],
+                "suggestions": [
+                    "💡 Gợi ý: Chọn vị trí trên Google Maps để người mua dễ tìm",
+                    "Nên thêm ít nhất 3 hình ảnh"
+                ]
             }
         }
     ]

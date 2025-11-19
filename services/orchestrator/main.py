@@ -2006,14 +2006,17 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 )
 
                 # Log save result for debugging
+                property_id = None
                 if save_result:
-                    self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] Property saved with ID: {save_result.get('property_id')}")
+                    property_id = save_result.get('property_id')
+                    self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] Property saved with ID: {property_id}")
                 else:
                     self.logger.warning(f"{LogEmoji.WARNING} [Property Posting] Failed to save property, but continuing with response")
 
                 return await self._generate_completion_message(
                     entities=entities,
                     overall_score=overall_score,
+                    property_id=property_id,
                     history=history,
                     query=query,
                     language=language
@@ -3391,6 +3394,15 @@ Nearby districts:"""
                 "area": float(entities.get("area")) if entities.get("area") else None,
                 "floor": entities.get("floor"),
 
+                # Dimensions (for townhouse, land)
+                "width": float(entities.get("width")) if entities.get("width") else None,
+                "depth": float(entities.get("depth")) if entities.get("depth") else None,
+                "land_area": float(entities.get("land_area")) if entities.get("land_area") else None,
+
+                # Geolocation (for map - optional, set by user later)
+                "latitude": float(entities.get("latitude")) if entities.get("latitude") else None,
+                "longitude": float(entities.get("longitude")) if entities.get("longitude") else None,
+
                 # Contact (use dummy for now)
                 "contact_phone": entities.get("contact_phone", "0901234567"),
                 "contact_email": entities.get("contact_email"),
@@ -3402,7 +3414,8 @@ Nearby districts:"""
                 # Flexible attributes (store all other extracted data)
                 "attributes": {k: v for k, v in entities.items() if k not in [
                     "title", "description", "property_type", "district", "ward",
-                    "street", "city", "price", "bedrooms", "bathrooms", "area", "floor"
+                    "street", "city", "price", "bedrooms", "bathrooms", "area", "floor",
+                    "width", "depth", "land_area", "latitude", "longitude"
                 ]}
             }
 
@@ -3444,6 +3457,7 @@ Nearby districts:"""
         self,
         entities: Dict,
         overall_score: float,
+        property_id: str = None,
         history: List[Dict] = None,
         query: str = "",
         language: str = "vi"
@@ -3454,6 +3468,7 @@ Nearby districts:"""
         Args:
             entities: Final extracted entities
             overall_score: Final completeness score
+            property_id: ID of the saved property (for map picker trigger)
             history: Conversation history
             query: Current user query
             language: User's preferred language
@@ -3521,6 +3536,33 @@ Generate a warm, congratulatory closing message in **{language} language** that:
                 data = response.json()
                 message = data.get("content", "").strip()
                 if message:
+                    # Check if location selection is needed (has district but no coordinates)
+                    needs_location = (
+                        property_id and
+                        entities.get("district") and
+                        not entities.get("latitude")
+                    )
+
+                    if needs_location:
+                        # Append location selection trigger for frontend
+                        location_trigger = {
+                            "action": "LOCATION_SELECTION",
+                            "propertyId": property_id,
+                            "address": entities.get("address", "") or entities.get("district", ""),
+                            "latitude": 10.7769,  # Default to Ho Chi Minh City
+                            "longitude": 106.7009
+                        }
+
+                        # Add suggestion text based on language
+                        location_suggestions = {
+                            "vi": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ để người mua dễ dàng tìm đến!",
+                            "en": "\n\n📍 **Suggestion:** Select the exact location on the map to help buyers find it easily!",
+                            "th": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งที่ถูกต้องบนแผนที่เพื่อให้ผู้ซื้อค้นหาได้ง่าย!",
+                            "ja": "\n\n📍 **提案:** 購入者が見つけやすいように地図上で正確な場所を選択してください！"
+                        }
+                        message += location_suggestions.get(language, location_suggestions["en"])
+                        message += f"\n\n<!--LOCATION_SELECTION:{json.dumps(location_trigger)}-->"
+
                     return message
 
             # Fallback
@@ -3530,7 +3572,33 @@ Generate a warm, congratulatory closing message in **{language} language** that:
                 "th": f"✅ เสร็จสิ้น! ข้อมูลของคุณครบถ้วน ({overall_score:.0f}/100). 🎉 พร้อมเผยแพร่แล้ว!",
                 "ja": f"✅ 完了！情報は完全です ({overall_score:.0f}/100). 🎉 投稿の準備ができました！"
             }
-            return fallback_templates.get(language, fallback_templates["en"])
+            fallback_message = fallback_templates.get(language, fallback_templates["en"])
+
+            # Also add location trigger to fallback
+            needs_location = (
+                property_id and
+                entities.get("district") and
+                not entities.get("latitude")
+            )
+
+            if needs_location:
+                location_trigger = {
+                    "action": "LOCATION_SELECTION",
+                    "propertyId": property_id,
+                    "address": entities.get("address", "") or entities.get("district", ""),
+                    "latitude": 10.7769,
+                    "longitude": 106.7009
+                }
+                location_suggestions = {
+                    "vi": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ!",
+                    "en": "\n\n📍 **Suggestion:** Select exact location on map!",
+                    "th": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งบนแผนที่!",
+                    "ja": "\n\n📍 **提案:** 地図で正確な場所を選択！"
+                }
+                fallback_message += location_suggestions.get(language, location_suggestions["en"])
+                fallback_message += f"\n\n<!--LOCATION_SELECTION:{json.dumps(location_trigger)}-->"
+
+            return fallback_message
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate completion message: {e}")

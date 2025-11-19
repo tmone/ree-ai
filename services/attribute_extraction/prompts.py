@@ -26,7 +26,14 @@ class PropertyAttributes(BaseModel):
     bathrooms: Optional[int] = Field(None, description="Số phòng tắm")
     floors: Optional[int] = Field(None, description="Số tầng")
     facade_width: Optional[float] = Field(None, description="Mặt tiền (m)")
+    width: Optional[float] = Field(None, description="Chiều rộng/ngang (m)")
+    depth: Optional[float] = Field(None, description="Chiều dài/sâu (m)")
+    land_area: Optional[float] = Field(None, description="Diện tích đất (m²)")
     alley_width: Optional[float] = Field(None, description="Hẻm rộng (m)")
+
+    # Geolocation
+    latitude: Optional[float] = Field(None, description="Vĩ độ (latitude)")
+    longitude: Optional[float] = Field(None, description="Kinh độ (longitude)")
 
     # Price
     price: Optional[float] = Field(None, description="Giá (VND)")
@@ -97,7 +104,14 @@ Hệ thống yêu cầu TỐI THIỂU 15-20 fields để có tin đăng chuyên 
 - bathrooms: Số phòng tắm/WC
 - floors: Số tầng
 - facade_width: Mặt tiền (m)
+- width: Chiều rộng/ngang (m) - "rộng 5m", "ngang 4m", "chiều ngang"
+- depth: Chiều dài/sâu (m) - "dài 20m", "chiều dài", "chiều sâu"
+- land_area: Diện tích đất (m²) - cho nhà phố/biệt thự/đất
 - alley_width: Hẻm rộng (m)
+
+**3.1 GEOLOCATION (Optional - user chọn trên map)**
+- latitude: Vĩ độ (ví dụ: 10.7769)
+- longitude: Kinh độ (ví dụ: 106.7009)
 
 **4. PRICE**
 - price: Giá (VND) - Chuẩn hóa về số (hỗ trợ cả dấu chấm và phẩy)
@@ -140,7 +154,10 @@ Hệ thống yêu cầu TỐI THIỂU 15-20 fields để có tin đăng chuyên 
 2. **Chuẩn hóa số:**
    - "2.5 tỷ" → 2500000000
    - "70m²" → 70
-   - "5x20m" → 100 (diện tích = 5 * 20)
+   - "5x20m" → width: 5, depth: 20, area: 100 (diện tích = 5 * 20)
+   - "Ngang 4m dài 18m" → width: 4, depth: 18
+   - "Rộng 5m" → width: 5
+   - "Dài 20m" → depth: 20
 
 3. **Xử lý thiếu thông tin:**
    - Nếu không có thông tin → `null`
@@ -263,7 +280,7 @@ Liên hệ: A. Minh - 0901234567 (Chính chủ)
         {
             "input": """
 Nhà phố Quận 2 cho thuê
-MT 5m x 20m, 3 tầng
+Ngang 5m x Dài 20m, 3 tầng
 4 phòng ngủ, 4WC
 Giá: 25 triệu/tháng
 Gần Metro Thảo Điền
@@ -275,10 +292,11 @@ Liên hệ: 0987654321
                 "transaction_type": "cho thuê",
                 "district": "Quận 2",
                 "area": 100,
+                "width": 5,
+                "depth": 20,
                 "bedrooms": 4,
                 "bathrooms": 4,
                 "floors": 3,
-                "facade_width": 5,
                 "price": 25000000,
                 "furniture": None,
                 "contact_phone": "0987654321"

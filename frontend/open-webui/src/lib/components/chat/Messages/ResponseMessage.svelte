@@ -55,6 +55,11 @@
 	import StatusHistory from './ResponseMessage/StatusHistory.svelte';
 	import FullHeightIframe from '$lib/components/common/FullHeightIframe.svelte';
 
+	// Map Picker Components (OpenAI Apps SDK Design Guidelines)
+	import { LocationPickerCard, MapPickerFullscreen } from '$lib/components/property';
+	// Property Search Results (OpenAI Apps SDK Design Guidelines)
+	import { PropertySearchResults } from '$lib/components/apps-sdk';
+
 	interface MessageType {
 		id: string;
 		model: string;
@@ -164,6 +169,124 @@
 	let generatingImage = false;
 
 	let showRateComment = false;
+
+	// Map Picker State (OpenAI Apps SDK Design Guidelines)
+	let showMapPicker = false;
+	let showMapFullscreen = false;
+	let mapPickerData: {
+		propertyId: string;
+		address: string;
+		latitude: number;
+		longitude: number;
+	} = {
+		propertyId: '',
+		address: '',
+		latitude: 10.7769,
+		longitude: 106.7009
+	};
+
+	// Property Search Results State (OpenAI Apps SDK Design Guidelines)
+	let showPropertyResults = false;
+	let propertyResultsData: string = '';
+
+	// Detect LOCATION_SELECTION trigger from message content (HTML comment pattern)
+	$: if (message?.content && message?.done) {
+		const locationMatch = message.content.match(/<!--LOCATION_SELECTION:(.*?)-->/);
+		if (locationMatch) {
+			try {
+				const triggerData = JSON.parse(locationMatch[1]);
+				if (triggerData.action === 'LOCATION_SELECTION') {
+					showMapPicker = true;
+					mapPickerData = {
+						propertyId: triggerData.propertyId || '',
+						address: triggerData.address || '',
+						latitude: triggerData.latitude || 10.7769,
+						longitude: triggerData.longitude || 106.7009
+					};
+				}
+			} catch (e) {
+				console.error('Failed to parse location trigger:', e);
+			}
+		}
+
+		// Detect PROPERTY_RESULTS trigger from message content
+		const propertyMatch = message.content.match(/<!--PROPERTY_RESULTS:(.*?)-->/s);
+		if (propertyMatch) {
+			try {
+				showPropertyResults = true;
+				propertyResultsData = propertyMatch[1];
+			} catch (e) {
+				console.error('Failed to parse property results:', e);
+			}
+		} else {
+			showPropertyResults = false;
+			propertyResultsData = '';
+		}
+	}
+
+	// Also detect LOCATION_SELECTION action from message status (legacy support)
+	$: if (message?.status?.action === 'LOCATION_SELECTION' && message?.done) {
+		showMapPicker = true;
+		// Extract property data from status metadata if available
+		const statusData = message?.status as any;
+		if (statusData?.propertyId) {
+			mapPickerData = {
+				propertyId: statusData.propertyId || '',
+				address: statusData.address || '',
+				latitude: statusData.latitude || 10.7769,
+				longitude: statusData.longitude || 106.7009
+			};
+		}
+	}
+
+	// Handle map location confirmation
+	async function handleMapConfirm(event: CustomEvent) {
+		const { propertyId, latitude, longitude } = event.detail;
+
+		try {
+			// Call API to update property coordinates
+			const response = await fetch(`/api/properties/${propertyId}/coordinates`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${localStorage.token}`
+				},
+				body: JSON.stringify({ latitude, longitude })
+			});
+
+			if (response.ok) {
+				toast.success('Location updated successfully!');
+				showMapPicker = false;
+				showMapFullscreen = false;
+
+				// Optionally send a message to confirm the location was saved
+				submitMessage(message?.id, `Tọa độ đã được cập nhật: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+			} else {
+				toast.error('Failed to update location');
+			}
+		} catch (error) {
+			console.error('Error updating coordinates:', error);
+			toast.error('Error updating location');
+		}
+	}
+
+	// Handle map skip
+	function handleMapSkip() {
+		showMapPicker = false;
+		toast.info('Location selection skipped');
+	}
+
+	// Handle expand to fullscreen
+	function handleMapExpand(event: CustomEvent) {
+		const { propertyId, lat, lng } = event.detail;
+		mapPickerData = {
+			...mapPickerData,
+			propertyId,
+			latitude: lat,
+			longitude: lng
+		};
+		showMapFullscreen = true;
+	}
 
 	const copyToClipboard = async (text) => {
 		text = removeAllDetails(text);
@@ -652,6 +775,28 @@
 								statusHistory={message?.statusHistory}
 								expand={message?.content === ''}
 							/>
+						{/if}
+
+						<!-- Location Picker Card (OpenAI Apps SDK Design Guidelines) -->
+						{#if showMapPicker && message?.done}
+							<div class="my-3" transition:fade={{ duration: 200 }}>
+								<LocationPickerCard
+									propertyId={mapPickerData.propertyId}
+									address={mapPickerData.address}
+									initialLat={mapPickerData.latitude}
+									initialLng={mapPickerData.longitude}
+									on:confirm={handleMapConfirm}
+									on:skip={handleMapSkip}
+									on:expand={handleMapExpand}
+								/>
+							</div>
+						{/if}
+
+						<!-- Property Search Results (OpenAI Apps SDK Design Guidelines) -->
+						{#if showPropertyResults && message?.done}
+							<div class="my-3" transition:fade={{ duration: 200 }}>
+								<PropertySearchResults data={propertyResultsData} />
+							</div>
 						{/if}
 
 						{#if message?.files && message.files?.filter((f) => f.type === 'image').length > 0}
@@ -1510,6 +1655,17 @@
 		</div>
 	</div>
 {/key}
+
+<!-- Fullscreen Map Picker (OpenAI Apps SDK Design Guidelines) -->
+<MapPickerFullscreen
+	bind:isOpen={showMapFullscreen}
+	propertyId={mapPickerData.propertyId}
+	address={mapPickerData.address}
+	latitude={mapPickerData.latitude}
+	longitude={mapPickerData.longitude}
+	on:confirm={handleMapConfirm}
+	on:close={() => (showMapFullscreen = false)}
+/>
 
 <style>
 	.buttons::-webkit-scrollbar {

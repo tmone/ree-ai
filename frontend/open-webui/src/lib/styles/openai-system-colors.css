@@ -1,5 +1,6 @@
 /**
  * OpenAI Design Standards - System Color Palette
+ * Based on Figma: Apps in ChatGPT • Components & Templates
  *
  * IMPORTANT: Follow OpenAI guideline:
  * "Employ system-defined palettes for text and UI elements.
@@ -11,98 +12,153 @@
  * ❌ DON'T: Use brand colors on backgrounds, text, or secondary elements
  * ❌ DON'T: Create custom color schemes (inherit from system)
  *
- * Last Updated: 2025-11-01
+ * Last Updated: 2025-11-19
+ * Source: Figma ChatGPT Design System
  */
 
 :root {
 	/* ============================================
-	   SYSTEM COLORS (Use these for 95% of UI)
+	   SYSTEM COLORS - LIGHT MODE
+	   From Figma node 2001:3519 (Color page)
 	   ============================================ */
 
-	/* Text Colors - Inherit from ChatGPT system */
-	--text-primary: #111827; /* Primary text (headings, body) */
-	--text-secondary: #6b7280; /* Secondary text (metadata, labels) */
-	--text-tertiary: #9ca3af; /* Tertiary text (placeholders, disabled) */
+	/* Background Colors */
+	--bg-primary: #ffffff; /* Primary background (cards, panels) */
+	--bg-secondary: #e8e8e8; /* Secondary background (hover states) */
+	--bg-tertiary: #f3f3f3; /* Tertiary background (subtle areas) */
+
+	/* Text Colors */
+	--text-primary: #0d0d0d; /* Primary text (headings, body) */
+	--text-secondary: #5d5d5d; /* Secondary text (metadata, labels) */
+	--text-tertiary: #8f8f8f; /* Tertiary text (placeholders, disabled) */
 	--text-inverse: #ffffff; /* Text on dark backgrounds */
 
-	/* Background Colors - System defined */
-	--bg-primary: #ffffff; /* Primary background (cards, panels) */
-	--bg-secondary: #f3f4f6; /* Secondary background (hover states, subtle areas) */
-	--bg-tertiary: #e5e7eb; /* Tertiary background (dividers, borders) */
+	/* Icon Colors */
+	--icon-primary: #0d0d0d; /* Primary icons */
+	--icon-secondary: #5d5d5d; /* Secondary icons */
+	--icon-tertiary: #8f8f8f; /* Tertiary icons */
+	--icon-inverse: #ffffff; /* Icons on dark backgrounds */
 
-	/* Border Colors - Subtle, system-defined */
-	--border-color: #e5e7eb; /* Default border color */
+	/* Border Colors */
+	--border-light: rgba(13, 13, 13, 0.05); /* Light borders */
+	--border-default: rgba(13, 13, 13, 0.15); /* Default borders */
+	--border-color: #e5e7eb; /* Legacy border color */
 	--border-color-hover: #d1d5db; /* Border on hover */
-	--border-color-focus: #3b82f6; /* Border on focus (can use brand) */
+	--border-color-focus: #0285ff; /* Border on focus (accent blue) */
 
-	/* Status Colors - Semantic, not brand-specific */
-	--color-success: #059669; /* Success states (green) */
-	--color-success-bg: #d1fae5; /* Success background */
+	/* Accent Colors - Light Mode */
+	--accent-blue: #0285ff; /* Primary accent */
+	--accent-red: #e02e2a; /* Error/danger */
+	--accent-orange: #e25507; /* Warning */
+	--accent-green: #008635; /* Success */
 
-	--color-warning: #d97706; /* Warning states (amber) */
-	--color-warning-bg: #fef3c7; /* Warning background */
+	/* Status Colors - Semantic */
+	--color-success: #008635;
+	--color-success-bg: #e6f4ea;
+	--color-warning: #e25507;
+	--color-warning-bg: #fef3e8;
+	--color-error: #e02e2a;
+	--color-error-bg: #fce8e8;
+	--color-info: #0285ff;
+	--color-info-bg: #e8f4ff;
 
-	--color-error: #dc2626; /* Error states (red) */
-	--color-error-bg: #fee2e2; /* Error background */
-
-	--color-info: #2563eb; /* Info states (blue) */
-	--color-info-bg: #dbeafe; /* Info background */
+	/* Interactive States */
+	--interactive-bg-tertiary-default: #ffffff;
+	--interactive-bg-tertiary-hover: #f9f9f9;
 
 	/* ============================================
 	   BRAND COLORS (Use ONLY on primary CTAs)
 	   ============================================ */
 
-	/* Primary Brand - Use ONLY for:
-	   - Primary action buttons
-	   - Key badges (property type)
-	   - Focus states (borders, outlines)
-	*/
-	--brand-primary: #3b82f6; /* REE AI Primary Blue */
-	--brand-primary-hover: #2563eb; /* Hover state */
-	--brand-primary-active: #1d4ed8; /* Active/pressed state */
-	--brand-primary-disabled: #93c5fd; /* Disabled state */
+	--brand-primary: #0285ff; /* REE AI Primary Blue */
+	--brand-primary-hover: #0070e0;
+	--brand-primary-active: #005cc5;
+	--brand-primary-disabled: #80c2ff;
 
-	/* Secondary Brand - Use sparingly for:
-	   - Secondary action buttons
-	   - Link colors
-	*/
 	--brand-secondary: #0891b2; /* REE AI Secondary Cyan */
 	--brand-secondary-hover: #0e7490;
 
 	/* ============================================
-	   DARK MODE OVERRIDES
+	   DARK MODE COLORS
+	   From Figma node 2001:3519 (Color / dark)
 	   ============================================ */
 
-	/* Dark mode colors (applied via @media) */
-	--text-primary-dark: #f9fafb;
-	--text-secondary-dark: #9ca3af;
-	--text-tertiary-dark: #6b7280;
+	/* Dark mode base colors */
+	--bg-primary-dark: #212121;
+	--bg-secondary-dark: #303030;
+	--bg-tertiary-dark: #414141;
 
-	--bg-primary-dark: #1f2937;
-	--bg-secondary-dark: #111827;
-	--bg-tertiary-dark: #374151;
+	--text-primary-dark: #ffffff;
+	--text-secondary-dark: #cdcdcd;
+	--text-tertiary-dark: #afafaf;
+	--text-inverse-dark: #0d0d0d;
 
+	--icon-primary-dark: #ffffff;
+	--icon-secondary-dark: #cdcdcd;
+	--icon-tertiary-dark: #afafaf;
+
+	--border-light-dark: rgba(255, 255, 255, 0.05);
+	--border-default-dark: rgba(255, 255, 255, 0.15);
 	--border-color-dark: #374151;
 	--border-color-hover-dark: #4b5563;
 
+	/* Accent Colors - Dark Mode */
+	--accent-blue-dark: #48aaff;
+	--accent-red-dark: #ff8583;
+	--accent-orange-dark: #ff9e6c;
+	--accent-green-dark: #40c977;
+
 	/* ============================================
 	   TYPOGRAPHY SCALE
+	   From Figma node 2001:4032 (Typography / Web)
 	   ============================================ */
 
-	/* Font Families - Inherit system fonts (OpenAI requirement) */
-	--font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu',
-		'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-	--font-mono: ui-monospace, 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas,
+	/* Font Families */
+	--font-sans: 'SF Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+		'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+	--font-mono: 'SF Mono', ui-monospace, Monaco, 'Cascadia Code', 'Roboto Mono', Consolas,
 		'Courier New', monospace;
 
-	/* Font Sizes - Consistent scale */
-	--text-xs: 12px; /* Labels, captions */
-	--text-sm: 14px; /* Secondary text, metadata */
-	--text-base: 16px; /* Body text, inputs */
-	--text-lg: 18px; /* Large body text */
-	--text-xl: 20px; /* Small headings */
-	--text-2xl: 24px; /* Medium headings */
-	--text-3xl: 28px; /* Large headings */
+	/* Typography Scale - From Figma */
+	--text-heading1-size: 36px;
+	--text-heading1-weight: 600;
+	--text-heading1-line-height: 40px;
+	--text-heading1-letter-spacing: -0.1px;
+
+	--text-heading2-size: 24px;
+	--text-heading2-weight: 600;
+	--text-heading2-line-height: 28px;
+	--text-heading2-letter-spacing: -0.25px;
+
+	--text-heading3-size: 18px;
+	--text-heading3-weight: 600;
+	--text-heading3-line-height: 26px;
+	--text-heading3-letter-spacing: -0.45px;
+
+	--text-body-size: 16px;
+	--text-body-weight: 400;
+	--text-body-line-height: 26px;
+	--text-body-letter-spacing: -0.4px;
+
+	--text-body-small-size: 14px;
+	--text-body-small-weight: 400;
+	--text-body-small-line-height: 18px;
+	--text-body-small-letter-spacing: -0.3px;
+
+	--text-caption-size: 12px;
+	--text-caption-weight: 400;
+	--text-caption-line-height: 16px;
+	--text-caption-letter-spacing: -0.1px;
+
+	/* Legacy Font Sizes (for compatibility) */
+	--text-xs: 12px;
+	--text-sm: 14px;
+	--text-base: 16px;
+	--text-lg: 18px;
+	--text-xl: 20px;
+	--text-2xl: 24px;
+	--text-3xl: 28px;
+	--text-4xl: 36px;
 
 	/* Font Weights */
 	--font-normal: 400;
@@ -116,19 +172,22 @@
 	--leading-relaxed: 1.75;
 
 	/* ============================================
-	   SPACING SCALE (Grid-based)
+	   SPACING SCALE
+	   From Figma node 2112:10169 (Spacing)
 	   ============================================ */
 
-	--space-1: 4px;
-	--space-2: 8px;
-	--space-3: 12px;
-	--space-4: 16px;
-	--space-5: 20px;
-	--space-6: 24px;
-	--space-8: 32px;
-	--space-10: 40px;
-	--space-12: 48px;
-	--space-16: 64px;
+	--space-0: 0px;
+	--space-1: 2px; /* space-1 */
+	--space-2: 4px; /* space-2 */
+	--space-3: 8px; /* space-4 */
+	--space-4: 12px; /* space-6 */
+	--space-5: 16px; /* space-8 */
+	--space-6: 24px; /* space-12 */
+	--space-7: 32px; /* space-16 */
+	--space-8: 40px; /* space-20 */
+	--space-9: 48px; /* space-24 */
+	--space-10: 64px; /* space-32 */
+	--space-11: 128px; /* space-64 */
 
 	/* ============================================
 	   BORDER RADIUS
@@ -138,6 +197,7 @@
 	--radius-base: 6px; /* Default (buttons, inputs) */
 	--radius-md: 8px; /* Medium (cards) */
 	--radius-lg: 12px; /* Large (panels) */
+	--radius-xl: 16px; /* Extra large */
 	--radius-full: 9999px; /* Pills, circles */
 
 	/* ============================================
@@ -148,6 +208,7 @@
 	--shadow-base: 0 2px 8px rgba(0, 0, 0, 0.1);
 	--shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
 	--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+	--shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.15);
 
 	/* ============================================
 	   TRANSITIONS
@@ -156,6 +217,23 @@
 	--transition-fast: 150ms ease;
 	--transition-base: 200ms ease;
 	--transition-slow: 300ms ease;
+
+	/* ============================================
+	   GRAY SCALE (for Tailwind)
+	   ============================================ */
+
+	--color-gray-50: #f9f9f9;
+	--color-gray-100: #ececec;
+	--color-gray-200: #e3e3e3;
+	--color-gray-300: #cdcdcd;
+	--color-gray-400: #b4b4b4;
+	--color-gray-500: #9b9b9b;
+	--color-gray-600: #676767;
+	--color-gray-700: #4e4e4e;
+	--color-gray-800: #333333;
+	--color-gray-850: #262626;
+	--color-gray-900: #171717;
+	--color-gray-950: #0d0d0d;
 }
 
 /* ============================================
@@ -165,31 +243,118 @@
 @media (prefers-color-scheme: dark) {
 	:root {
 		/* Override with dark mode colors */
-		--text-primary: var(--text-primary-dark);
-		--text-secondary: var(--text-secondary-dark);
-		--text-tertiary: var(--text-tertiary-dark);
-
 		--bg-primary: var(--bg-primary-dark);
 		--bg-secondary: var(--bg-secondary-dark);
 		--bg-tertiary: var(--bg-tertiary-dark);
 
+		--text-primary: var(--text-primary-dark);
+		--text-secondary: var(--text-secondary-dark);
+		--text-tertiary: var(--text-tertiary-dark);
+		--text-inverse: var(--text-inverse-dark);
+
+		--icon-primary: var(--icon-primary-dark);
+		--icon-secondary: var(--icon-secondary-dark);
+		--icon-tertiary: var(--icon-tertiary-dark);
+
+		--border-light: var(--border-light-dark);
+		--border-default: var(--border-default-dark);
 		--border-color: var(--border-color-dark);
 		--border-color-hover: var(--border-color-hover-dark);
+
+		--accent-blue: var(--accent-blue-dark);
+		--accent-red: var(--accent-red-dark);
+		--accent-orange: var(--accent-orange-dark);
+		--accent-green: var(--accent-green-dark);
+
+		--color-success: var(--accent-green-dark);
+		--color-warning: var(--accent-orange-dark);
+		--color-error: var(--accent-red-dark);
+		--color-info: var(--accent-blue-dark);
+
+		--interactive-bg-tertiary-default: #212121;
+		--interactive-bg-tertiary-hover: #303030;
 	}
 }
 
 /* Force dark mode class override */
 .dark {
-	--text-primary: var(--text-primary-dark);
-	--text-secondary: var(--text-secondary-dark);
-	--text-tertiary: var(--text-tertiary-dark);
-
 	--bg-primary: var(--bg-primary-dark);
 	--bg-secondary: var(--bg-secondary-dark);
 	--bg-tertiary: var(--bg-tertiary-dark);
 
+	--text-primary: var(--text-primary-dark);
+	--text-secondary: var(--text-secondary-dark);
+	--text-tertiary: var(--text-tertiary-dark);
+	--text-inverse: var(--text-inverse-dark);
+
+	--icon-primary: var(--icon-primary-dark);
+	--icon-secondary: var(--icon-secondary-dark);
+	--icon-tertiary: var(--icon-tertiary-dark);
+
+	--border-light: var(--border-light-dark);
+	--border-default: var(--border-default-dark);
 	--border-color: var(--border-color-dark);
 	--border-color-hover: var(--border-color-hover-dark);
+
+	--accent-blue: var(--accent-blue-dark);
+	--accent-red: var(--accent-red-dark);
+	--accent-orange: var(--accent-orange-dark);
+	--accent-green: var(--accent-green-dark);
+
+	--color-success: var(--accent-green-dark);
+	--color-warning: var(--accent-orange-dark);
+	--color-error: var(--accent-red-dark);
+	--color-info: var(--accent-blue-dark);
+
+	--interactive-bg-tertiary-default: #212121;
+	--interactive-bg-tertiary-hover: #303030;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Typography utilities */
+.text-heading1 {
+	font-size: var(--text-heading1-size);
+	font-weight: var(--text-heading1-weight);
+	line-height: var(--text-heading1-line-height);
+	letter-spacing: var(--text-heading1-letter-spacing);
+}
+
+.text-heading2 {
+	font-size: var(--text-heading2-size);
+	font-weight: var(--text-heading2-weight);
+	line-height: var(--text-heading2-line-height);
+	letter-spacing: var(--text-heading2-letter-spacing);
+}
+
+.text-heading3 {
+	font-size: var(--text-heading3-size);
+	font-weight: var(--text-heading3-weight);
+	line-height: var(--text-heading3-line-height);
+	letter-spacing: var(--text-heading3-letter-spacing);
+}
+
+.text-body {
+	font-size: var(--text-body-size);
+	font-weight: var(--text-body-weight);
+	line-height: var(--text-body-line-height);
+	letter-spacing: var(--text-body-letter-spacing);
+}
+
+.text-body-small {
+	font-size: var(--text-body-small-size);
+	font-weight: var(--text-body-small-weight);
+	line-height: var(--text-body-small-line-height);
+	letter-spacing: var(--text-body-small-letter-spacing);
+}
+
+.text-caption {
+	font-size: var(--text-caption-size);
+	font-weight: var(--text-caption-weight);
+	line-height: var(--text-caption-line-height);
+	letter-spacing: var(--text-caption-letter-spacing);
 }
 
 /* ============================================
@@ -200,23 +365,24 @@
 Example 1: Text Styling
 -----------------------
 .property-title {
-  color: var(--text-primary);        ✅ System color
-  font-size: var(--text-lg);         ✅ System scale
-  font-weight: var(--font-semibold); ✅ System weight
+  color: var(--text-primary);
+  font-size: var(--text-heading2-size);
+  font-weight: var(--text-heading2-weight);
+  line-height: var(--text-heading2-line-height);
 }
 
 .property-metadata {
-  color: var(--text-secondary);      ✅ System color
-  font-size: var(--text-sm);         ✅ System scale
+  color: var(--text-secondary);
+  font-size: var(--text-body-small-size);
 }
 
 
 Example 2: CTA Button (Brand Color Allowed)
 --------------------------------------------
 .cta-button {
-  background: var(--brand-primary);  ✅ Brand color on CTA
-  color: var(--text-inverse);        ✅ White text
-  padding: var(--space-2) var(--space-4);
+  background: var(--brand-primary);
+  color: var(--text-inverse);
+  padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-base);
   transition: background var(--transition-base);
 }
@@ -229,46 +395,16 @@ Example 2: CTA Button (Brand Color Allowed)
 Example 3: Property Card (System Colors Only)
 ----------------------------------------------
 .property-card {
-  background: var(--bg-primary);     ✅ System background
-  border: 1px solid var(--border-color); ✅ System border
-  border-radius: var(--radius-md);   ✅ System radius
-  padding: var(--space-4);           ✅ System spacing
-  box-shadow: var(--shadow-base);    ✅ System shadow
-}
-
-.property-price {
-  color: var(--text-primary);        ✅ NOT custom red!
-  font-weight: var(--font-bold);     ✅ Emphasis via weight
-  font-size: var(--text-xl);         ✅ System scale
+  background: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-base);
 }
 
 
-Example 4: Badge (Brand Color Allowed)
----------------------------------------
-.property-type-badge {
-  background: var(--brand-primary);  ✅ Brand color on badge
-  color: var(--text-inverse);        ✅ White text
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full); ✅ Pill shape
-  font-size: var(--text-xs);         ✅ System scale
-  font-weight: var(--font-semibold); ✅ System weight
-}
-
-
-WHAT NOT TO DO:
----------------
-❌ .property-card {
-❌   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-❌   /* WRONG: Custom gradient background */
-❌ }
-
-❌ .property-price {
-❌   color: #dc2626; /* WRONG: Custom red for emphasis */
-❌   /* Use font-weight instead! */
-❌ }
-
-❌ .filter-tag {
-❌   background: var(--brand-primary); /* WRONG: Brand color on non-CTA */
-❌   /* Use system colors for secondary elements */
-❌ }
+Example 4: Dark Mode Accent Colors
+-----------------------------------
+Light: --accent-blue: #0285FF
+Dark:  --accent-blue: #48AAFF (automatically applied)
 */

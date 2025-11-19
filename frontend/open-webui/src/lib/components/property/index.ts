@@ -13,3 +13,8 @@ export { default as EmptyState } from './EmptyState.svelte';
 export { default as CompactPropertyCard } from './CompactPropertyCard.svelte';
 export { default as FullscreenPropertyBrowser } from './FullscreenPropertyBrowser.svelte';
 export { default as PropertyComparison } from './PropertyComparison.svelte';
+
+// Map Picker Components (OpenAI Apps SDK Design Guidelines)
+export { default as MapPicker } from './MapPicker.svelte';
+export { default as LocationPickerCard } from './LocationPickerCard.svelte';
+export { default as MapPickerFullscreen } from './MapPickerFullscreen.svelte';

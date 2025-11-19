@@ -5,6 +5,7 @@
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import Source from './Source.svelte';
 	import { settings } from '$lib/stores';
+	import { PropertySearchResults } from '$lib/components/apps-sdk';
 
 	export let id: string;
 	export let token: Token;
@@ -121,6 +122,25 @@
 		{/if}
 	{:else if token.text.includes(`<source_id`)}
 		<Source {id} {token} onClick={onSourceClick} />
+	{:else if token.text && token.text.includes('<property-results')}
+		{@const match = token.text.match(/<property-results\s+data="([^"]+)"[^>]*(?:\/>|><\/property-results>)/)}
+		{@const propertyData = match && match[1]}
+		{#if propertyData}
+			<PropertySearchResults data={propertyData} />
+		{:else}
+			{token.text}
+		{/if}
+	{:else if token.text && token.text.includes('<property-card')}
+		{@const match = token.text.match(/<property-card\s+data="([^"]+)"[^>]*(?:\/>|><\/property-card>)/)}
+		{@const propertyData = match && match[1]}
+		{#if propertyData}
+			{@const property = JSON.parse(decodeURIComponent(propertyData))}
+			<div class="my-2">
+				<PropertySearchResults data={encodeURIComponent(JSON.stringify([property]))} />
+			</div>
+		{:else}
+			{token.text}
+		{/if}
 	{:else}
 		{@const br = token.text.match(/<br\s*\/?>/)}
 		{#if br}

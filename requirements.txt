@@ -68,3 +68,6 @@ sentry-sdk[fastapi]==1.40.0
 
 # Email (for backup notifications)
 email-validator==2.1.0
+
+# Cloud Storage (for property images)
+google-cloud-storage==2.14.0

@@ -303,8 +303,14 @@ class RAGService(BaseService):
             )
             operators_executed.append("memory_storage")
 
+        # Append property data for frontend rendering (OpenAI Apps SDK Design)
+        property_cards_data = self._format_properties_for_frontend(retrieved_properties)
+        final_response = generated_response
+        if property_cards_data:
+            final_response = f"{generated_response}\n\n<!--PROPERTY_RESULTS:{property_cards_data}-->"
+
         return RAGQueryResponse(
-            response=generated_response,
+            response=final_response,
             retrieved_count=len(retrieved_properties),
             confidence=supervisor_result.confidence,
             sources=[
@@ -354,8 +360,14 @@ class RAGService(BaseService):
             retrieved_properties=retrieved_properties
         )
 
+        # Append property data for frontend rendering (OpenAI Apps SDK Design)
+        property_cards_data = self._format_properties_for_frontend(retrieved_properties)
+        final_response = generated_response
+        if property_cards_data:
+            final_response = f"{generated_response}\n\n<!--PROPERTY_RESULTS:{property_cards_data}-->"
+
         return RAGQueryResponse(
-            response=generated_response,
+            response=final_response,
             retrieved_count=len(retrieved_properties),
             confidence=0.9,
             sources=[
@@ -589,6 +601,67 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
         constraint_keywords = ["và", "gần", "giá", "dưới", "trên", "có", "với"]
         count = sum(1 for kw in constraint_keywords if kw in query.lower())
         return count >= 2
+
+    def _format_properties_for_frontend(self, properties: List[Dict[str, Any]]) -> str:
+        """
+        Format property data as URL-encoded JSON for frontend PropertySearchResults component
+        (OpenAI Apps SDK Design Guidelines)
+        """
+        import json
+        from urllib.parse import quote
+
+        if not properties:
+            return ""
+
+        # Format properties for PropertyCard component
+        formatted_properties = []
+        for prop in properties[:6]:  # Limit to 6 for carousel
+            # Format price display
+            price_display = prop.get('price_display', '')
+            if not price_display:
+                price = prop.get('price', 0)
+                if isinstance(price, (int, float)) and price > 0:
+                    if price >= 1_000_000_000:
+                        price_display = f"{price/1_000_000_000:.1f} tỷ"
+                    else:
+                        price_display = f"{price/1_000_000:.0f} triệu"
+                else:
+                    price_display = "Thỏa thuận"
+
+            # Format area display
+            area_display = prop.get('area_display', '')
+            if not area_display and prop.get('area'):
+                area = prop['area']
+                area_display = str(area) if isinstance(area, (int, float)) else area
+
+            # Build location string
+            district = prop.get('district', '')
+            city = prop.get('city', '')
+            location_parts = [p for p in [district, city] if p]
+            address = ', '.join(location_parts) if location_parts else prop.get('location', '')
+
+            # Get first image or placeholder
+            images = prop.get('images', [])
+            image_url = images[0] if images else prop.get('image_url', 'https://via.placeholder.com/400x300?text=No+Image')
+
+            formatted_properties.append({
+                "id": prop.get('property_id', prop.get('id', '')),
+                "title": prop.get('title', 'N/A'),
+                "address": address,
+                "price": price_display,
+                "priceUnit": "VNĐ",
+                "area": area_display,
+                "areaUnit": "m²",
+                "bedrooms": prop.get('bedrooms', 0),
+                "bathrooms": prop.get('bathrooms', 0),
+                "imageUrl": image_url,
+                "propertyType": prop.get('property_type', ''),
+                "transactionType": prop.get('transaction_type', 'sale')
+            })
+
+        # URL encode the JSON
+        json_str = json.dumps(formatted_properties, ensure_ascii=False)
+        return quote(json_str)
 
     async def on_shutdown(self):
         """Cleanup on shutdown"""

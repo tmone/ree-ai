@@ -191,6 +191,14 @@ Trả về JSON theo định dạng đã nêu."""
         """
         Fallback heuristic assessment if LLM fails
         Simple rule-based scoring
+
+        Updated scoring (100 points total):
+        - Basic Info: 20 points
+        - Location: 20 points
+        - Physical Attributes (size): 20 points
+        - Price & Legal: 15 points
+        - Media (images): 15 points - REQUIRED
+        - Amenities & Contact: 10 points
         """
         score = 0
         missing_fields = []
@@ -201,27 +209,28 @@ Trả về JSON theo định dạng đã nêu."""
             "location": 0,
             "physical_attributes": 0,
             "price_legal": 0,
+            "media": 0,
             "amenities_contact": 0
         }
 
-        # Basic Info (25 points)
+        # Basic Info (20 points)
         if property_data.get("property_type"):
-            category_scores["basic_info"] += 7
+            category_scores["basic_info"] += 6
         else:
             missing_fields.append(t("completeness.missing_property_type", language=language))
 
-        if property_data.get("transaction_type"):
-            category_scores["basic_info"] += 8
+        if property_data.get("transaction_type") or property_data.get("listing_type"):
+            category_scores["basic_info"] += 6
         else:
             missing_fields.append(t("completeness.missing_transaction_type", language=language))
 
         if property_data.get("title"):
-            category_scores["basic_info"] += 5
+            category_scores["basic_info"] += 4
         else:
             missing_fields.append(t("completeness.missing_title", language=language))
 
         if property_data.get("description") and len(property_data["description"]) > 100:
-            category_scores["basic_info"] += 5
+            category_scores["basic_info"] += 4
             strengths.append(t("completeness.strength_description", language=language))
 
         # Location (20 points)
@@ -239,25 +248,30 @@ Trả về JSON theo định dạng đã nêu."""
         if property_data.get("ward") or property_data.get("street") or property_data.get("project_name"):
             category_scores["location"] += 5
 
-        # Physical Attributes (25 points)
-        if property_data.get("area"):
-            category_scores["physical_attributes"] += 10
+        # Physical Attributes / Size (20 points) - REQUIRED
+        if property_data.get("area") or property_data.get("land_area"):
+            category_scores["physical_attributes"] += 8
             strengths.append(t("completeness.strength_area", language=language))
         else:
             missing_fields.append(t("completeness.missing_area", language=language))
 
+        # Width & Depth (dài, rộng) - Important for townhouse/land
+        if property_data.get("width") and property_data.get("depth"):
+            category_scores["physical_attributes"] += 6
+            strengths.append("Có thông tin chiều dài và chiều rộng")
+        elif property_data.get("width") or property_data.get("depth"):
+            category_scores["physical_attributes"] += 3
+            missing_fields.append("Thiếu chiều dài hoặc chiều rộng")
+
         if property_data.get("bedrooms"):
-            category_scores["physical_attributes"] += 5
+            category_scores["physical_attributes"] += 3
         elif property_data.get("property_type") not in ["land", "đất"]:
             missing_fields.append(t("completeness.missing_bedrooms", language=language))
 
         if property_data.get("bathrooms") or property_data.get("floors"):
-            category_scores["physical_attributes"] += 5
+            category_scores["physical_attributes"] += 3
 
-        if property_data.get("facade_width") or property_data.get("direction"):
-            category_scores["physical_attributes"] += 5
-
-        # Price & Legal (20 points)
+        # Price & Legal (15 points) - REQUIRED
         if property_data.get("price"):
             category_scores["price_legal"] += 10
             strengths.append(t("completeness.strength_price", language=language))
@@ -265,15 +279,32 @@ Trả về JSON theo định dạng đã nêu."""
             missing_fields.append(t("completeness.missing_price", language=language))
 
         if property_data.get("legal_status"):
-            category_scores["price_legal"] += 5
+            category_scores["price_legal"] += 3
         else:
             missing_fields.append(t("completeness.missing_legal_status", language=language))
 
-        if property_data.get("price_per_m2"):
-            category_scores["price_legal"] += 3
-
         if property_data.get("ownership_type"):
             category_scores["price_legal"] += 2
+
+        # Media - Images (15 points) - REQUIRED
+        images = property_data.get("images", [])
+        if images and len(images) > 0:
+            if len(images) >= 5:
+                category_scores["media"] += 15
+                strengths.append("Có đầy đủ hình ảnh (5+ ảnh)")
+            elif len(images) >= 3:
+                category_scores["media"] += 10
+                suggestions.append("Nên thêm ít nhất 5 hình ảnh để thu hút người xem")
+            else:
+                category_scores["media"] += 5
+                suggestions.append("Cần thêm ít nhất 3 hình ảnh để tin đăng hấp dẫn hơn")
+        else:
+            missing_fields.append("Hình ảnh (bắt buộc)")
+            suggestions.append("⚠️ QUAN TRỌNG: Thêm hình ảnh bất động sản để đăng tin")
+
+        # Bonus for video
+        if property_data.get("videos") and len(property_data["videos"]) > 0:
+            strengths.append("Có video giới thiệu")
 
         # Amenities & Contact (10 points)
         if property_data.get("contact_phone"):
@@ -296,27 +327,33 @@ Trả về JSON theo định dạng đã nêu."""
         overall_score = sum(category_scores.values())
 
         # Generate suggestions based on missing fields
-        if not property_data.get("contact_phone"):
-            suggestions.append(t("completeness.suggestion_add_phone", language=language))
+        if not images or len(images) == 0:
+            suggestions.insert(0, "⚠️ BẮT BUỘC: Thêm hình ảnh để đăng tin")
         if not property_data.get("price"):
             suggestions.append(t("completeness.suggestion_add_price", language=language))
-        if not property_data.get("legal_status"):
-            suggestions.append(t("completeness.suggestion_add_legal", language=language))
+        if not (property_data.get("area") or property_data.get("land_area")):
+            suggestions.append("Thêm diện tích (m²)")
+        if not property_data.get("district"):
+            suggestions.append("Thêm địa chỉ/quận huyện")
         if not property_data.get("bedrooms") and property_data.get("property_type") not in ["land", "đất"]:
             suggestions.append(t("completeness.suggestion_add_bedrooms", language=language))
-        if not property_data.get("description") or len(property_data.get("description", "")) < 100:
-            suggestions.append(t("completeness.suggestion_add_description", language=language))
 
         interpretation = self._get_score_interpretation(overall_score, language)
 
-        # Priority actions
+        # Priority actions - Images first!
         priority_actions = []
-        if not property_data.get("contact_phone"):
-            priority_actions.append(t("completeness.priority_phone_urgent", language=language))
+        if not images or len(images) == 0:
+            priority_actions.append("🔴 BẮT BUỘC: Thêm hình ảnh bất động sản")
         if not property_data.get("price"):
             priority_actions.append(t("completeness.priority_price_urgent", language=language))
-        if not property_data.get("legal_status"):
-            priority_actions.append(t("completeness.priority_legal_important", language=language))
+        if not (property_data.get("area") or property_data.get("land_area")):
+            priority_actions.append("🟡 QUAN TRỌNG: Thêm diện tích")
+        if not property_data.get("district"):
+            priority_actions.append("🟡 QUAN TRỌNG: Thêm địa chỉ")
+
+        # Suggest map GPS if basic location is provided
+        if property_data.get("district") and not property_data.get("latitude"):
+            suggestions.append("💡 GỢI Ý: Chọn vị trí trên bản đồ để người mua dễ tìm")
 
         return CompletenessResponse(
             overall_score=overall_score,

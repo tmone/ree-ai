@@ -80,6 +80,15 @@ async def create_property(
         "area": property_data.area,
         "floor": property_data.floor,
 
+        # Dimensions (for townhouse, land)
+        "width": property_data.width,
+        "depth": property_data.depth,
+        "land_area": property_data.land_area,
+
+        # Geolocation (for map)
+        "latitude": property_data.latitude,
+        "longitude": property_data.longitude,
+
         # Flexible attributes
         "attributes": property_data.attributes or {},
 
@@ -238,6 +247,13 @@ async def update_property(
     if update_data.bathrooms is not None: update_doc['bathrooms'] = update_data.bathrooms
     if update_data.area: update_doc['area'] = update_data.area
     if update_data.floor is not None: update_doc['floor'] = update_data.floor
+    # Dimensions
+    if update_data.width is not None: update_doc['width'] = update_data.width
+    if update_data.depth is not None: update_doc['depth'] = update_data.depth
+    if update_data.land_area is not None: update_doc['land_area'] = update_data.land_area
+    # Geolocation
+    if update_data.latitude is not None: update_doc['latitude'] = update_data.latitude
+    if update_data.longitude is not None: update_doc['longitude'] = update_data.longitude
     if update_data.attributes: update_doc['attributes'] = update_data.attributes
     if update_data.contact_phone: update_doc['contact_phone'] = update_data.contact_phone
     if update_data.contact_email: update_doc['contact_email'] = update_data.contact_email
@@ -410,6 +426,156 @@ async def upload_images(
     except Exception as e:
         logger.error(f"❌ Failed to upload images: {e}")
         raise HTTPException(status_code=500, detail="Failed to upload images")
+
+
+async def upload_image_files(
+    property_id: str,
+    files: list,  # List of UploadFile
+    authorization: str,
+    opensearch_client,
+    properties_index: str
+):
+    """
+    Upload image files directly to Google Cloud Storage.
+
+    Accepts multipart form data with multiple image files.
+    Images are uploaded to GCS and URLs stored in property document.
+    """
+    from shared.utils.gcs_storage import get_gcs_client
+
+    user_id = _extract_user_id_from_token(authorization)
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Get existing property
+    try:
+        property_doc = await opensearch_client.get(
+            index=properties_index,
+            id=property_id
+        )
+    except:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    # Verify ownership
+    if property_doc['_source']['owner_id'] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Check current image count
+    current_images = property_doc['_source'].get('images', [])
+    if len(current_images) + len(files) > 10:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Maximum 10 images allowed. Current: {len(current_images)}, Uploading: {len(files)}"
+        )
+
+    # Get GCS client
+    gcs_client = get_gcs_client()
+
+    # Prepare files for upload
+    upload_files = []
+    for file in files:
+        content = await file.read()
+        upload_files.append((content, file.filename, file.content_type))
+
+    # Upload to GCS
+    uploaded_urls = await gcs_client.upload_images(property_id, upload_files)
+
+    if not uploaded_urls:
+        raise HTTPException(status_code=500, detail="Failed to upload images to storage")
+
+    # Update property with new image URLs
+    new_images = current_images + uploaded_urls
+
+    update_doc = {
+        "images": new_images,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+
+    try:
+        await opensearch_client.update(
+            index=properties_index,
+            id=property_id,
+            body={"doc": update_doc},
+            refresh=True
+        )
+
+        logger.info(f"✅ Images uploaded to GCS for property {property_id}: {len(uploaded_urls)} files")
+
+        return {
+            "message": "Images uploaded successfully",
+            "uploaded_count": len(uploaded_urls),
+            "total_images": len(new_images),
+            "image_urls": uploaded_urls
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to update property with images: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update property with images")
+
+
+async def update_property_coordinates(
+    property_id: str,
+    latitude: float,
+    longitude: float,
+    authorization: str,
+    opensearch_client,
+    properties_index: str
+):
+    """
+    Update property coordinates from map selection.
+
+    Called after user selects location on map.
+    """
+    user_id = _extract_user_id_from_token(authorization)
+
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    # Get existing property
+    try:
+        property_doc = await opensearch_client.get(
+            index=properties_index,
+            id=property_id
+        )
+    except:
+        raise HTTPException(status_code=404, detail="Property not found")
+
+    # Verify ownership
+    if property_doc['_source']['owner_id'] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Validate coordinates
+    if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+        raise HTTPException(status_code=400, detail="Invalid coordinates")
+
+    # Update coordinates
+    update_doc = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "location_geo": {"lat": latitude, "lon": longitude},  # For geo queries
+        "updated_at": datetime.utcnow().isoformat()
+    }
+
+    try:
+        await opensearch_client.update(
+            index=properties_index,
+            id=property_id,
+            body={"doc": update_doc},
+            refresh=True
+        )
+
+        logger.info(f"✅ Coordinates updated for property {property_id}: ({latitude}, {longitude})")
+
+        return {
+            "message": "Coordinates updated successfully",
+            "latitude": latitude,
+            "longitude": longitude
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Failed to update coordinates: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update coordinates")
 
 
 def _extract_user_id_from_token(authorization: Optional[str]) -> Optional[str]:

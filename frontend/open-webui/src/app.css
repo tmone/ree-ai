@@ -1,5 +1,52 @@
 @reference "./tailwind.css";
 
+/* ============================================
+   FONT FACES - OpenAI Design System
+   ============================================ */
+
+/* Primary Font - SF Pro (system font fallback) */
+@font-face {
+	font-family: 'SF Pro';
+	src: local('SF Pro Display'), local('SFProDisplay-Regular'), local('-apple-system'), local('BlinkMacSystemFont');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'SF Pro';
+	src: local('SF Pro Display Medium'), local('SFProDisplay-Medium');
+	font-weight: 500;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'SF Pro';
+	src: local('SF Pro Display Semibold'), local('SFProDisplay-Semibold');
+	font-weight: 600;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'SF Pro';
+	src: local('SF Pro Display Bold'), local('SFProDisplay-Bold');
+	font-weight: 700;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Monospace Font - SF Mono */
+@font-face {
+	font-family: 'SF Mono';
+	src: local('SF Mono'), local('SFMono-Regular');
+	font-weight: 400;
+	font-style: normal;
+	font-display: swap;
+}
+
+/* Legacy fonts for compatibility */
 @font-face {
 	font-family: 'Inter';
 	src: url('/assets/fonts/Inter-Variable.ttf');
@@ -93,8 +140,211 @@ textarea::placeholder {
 	@apply underline;
 }
 
+/* ============================================
+   PRIMARY FONT - OpenAI Design System
+   ============================================ */
 .font-primary {
-	font-family: 'Archivo', 'Vazirmatn', sans-serif;
+	font-family: var(--font-sans);
+}
+
+/* ============================================
+   TYPOGRAPHY UTILITIES - From Figma Design System
+   ============================================ */
+
+/* Heading styles */
+.text-heading-1 {
+	font-size: var(--text-heading1-size);
+	font-weight: var(--text-heading1-weight);
+	line-height: var(--text-heading1-line-height);
+	letter-spacing: var(--text-heading1-letter-spacing);
+	color: var(--text-primary);
+}
+
+.text-heading-2 {
+	font-size: var(--text-heading2-size);
+	font-weight: var(--text-heading2-weight);
+	line-height: var(--text-heading2-line-height);
+	letter-spacing: var(--text-heading2-letter-spacing);
+	color: var(--text-primary);
+}
+
+.text-heading-3 {
+	font-size: var(--text-heading3-size);
+	font-weight: var(--text-heading3-weight);
+	line-height: var(--text-heading3-line-height);
+	letter-spacing: var(--text-heading3-letter-spacing);
+	color: var(--text-primary);
+}
+
+/* Body text styles */
+.text-body {
+	font-size: var(--text-body-size);
+	font-weight: var(--text-body-weight);
+	line-height: var(--text-body-line-height);
+	letter-spacing: var(--text-body-letter-spacing);
+	color: var(--text-primary);
+}
+
+.text-body-small {
+	font-size: var(--text-body-small-size);
+	font-weight: var(--text-body-small-weight);
+	line-height: var(--text-body-small-line-height);
+	letter-spacing: var(--text-body-small-letter-spacing);
+	color: var(--text-primary);
+}
+
+.text-caption {
+	font-size: var(--text-caption-size);
+	font-weight: var(--text-caption-weight);
+	line-height: var(--text-caption-line-height);
+	letter-spacing: var(--text-caption-letter-spacing);
+	color: var(--text-secondary);
+}
+
+/* Secondary text colors */
+.text-color-secondary {
+	color: var(--text-secondary);
+}
+
+.text-color-tertiary {
+	color: var(--text-tertiary);
+}
+
+/* ============================================
+   BUTTON UTILITIES - OpenAI CTA Guidelines
+   Brand colors ONLY on primary CTAs
+   ============================================ */
+
+.btn-primary {
+	background-color: var(--brand-primary);
+	color: var(--text-inverse);
+	padding: var(--space-3) var(--space-5);
+	border-radius: var(--radius-base);
+	font-weight: var(--font-medium);
+	font-size: var(--text-body-small-size);
+	transition: background-color var(--transition-base);
+	cursor: pointer;
+	border: none;
+}
+
+.btn-primary:hover {
+	background-color: var(--brand-primary-hover);
+}
+
+.btn-primary:active {
+	background-color: var(--brand-primary-active);
+}
+
+.btn-primary:disabled {
+	background-color: var(--brand-primary-disabled);
+	cursor: not-allowed;
+}
+
+.btn-secondary {
+	background-color: var(--bg-secondary);
+	color: var(--text-primary);
+	padding: var(--space-3) var(--space-5);
+	border-radius: var(--radius-base);
+	font-weight: var(--font-medium);
+	font-size: var(--text-body-small-size);
+	transition: background-color var(--transition-base);
+	cursor: pointer;
+	border: 1px solid var(--border-default);
+}
+
+.btn-secondary:hover {
+	background-color: var(--bg-tertiary);
+	border-color: var(--border-color-hover);
+}
+
+/* ============================================
+   CARD UTILITIES - System Colors Only
+   ============================================ */
+
+.card-base {
+	background-color: var(--bg-primary);
+	border: 1px solid var(--border-light);
+	border-radius: var(--radius-lg);
+	padding: var(--space-5);
+	box-shadow: var(--shadow-base);
+}
+
+.card-interactive {
+	background-color: var(--bg-primary);
+	border: 1px solid var(--border-light);
+	border-radius: var(--radius-lg);
+	padding: var(--space-5);
+	box-shadow: var(--shadow-base);
+	transition: box-shadow var(--transition-base), border-color var(--transition-base);
+	cursor: pointer;
+}
+
+.card-interactive:hover {
+	box-shadow: var(--shadow-md);
+	border-color: var(--border-default);
+}
+
+/* ============================================
+   INPUT UTILITIES
+   ============================================ */
+
+.input-base {
+	background-color: var(--bg-primary);
+	border: 1px solid var(--border-default);
+	border-radius: var(--radius-base);
+	padding: var(--space-3) var(--space-4);
+	font-size: var(--text-body-size);
+	color: var(--text-primary);
+	transition: border-color var(--transition-base);
+}
+
+.input-base:focus {
+	border-color: var(--border-color-focus);
+	outline: none;
+}
+
+.input-base::placeholder {
+	color: var(--text-tertiary);
+}
+
+/* ============================================
+   STATUS UTILITIES
+   ============================================ */
+
+.status-success {
+	color: var(--color-success);
+}
+
+.status-success-bg {
+	background-color: var(--color-success-bg);
+	color: var(--color-success);
+}
+
+.status-warning {
+	color: var(--color-warning);
+}
+
+.status-warning-bg {
+	background-color: var(--color-warning-bg);
+	color: var(--color-warning);
+}
+
+.status-error {
+	color: var(--color-error);
+}
+
+.status-error-bg {
+	background-color: var(--color-error-bg);
+	color: var(--color-error);
+}
+
+.status-info {
+	color: var(--color-info);
+}
+
+.status-info-bg {
+	background-color: var(--color-info-bg);
+	color: var(--color-info);
 }
 
 .drag-region {
@@ -653,13 +903,9 @@ input[type='number'] {
 }
 
 body {
-	background: #fff;
-	color: #000;
-}
-
-.dark body {
-	background: #171717;
-	color: #eee;
+	background: var(--bg-primary);
+	color: var(--text-primary);
+	font-family: var(--font-sans);
 }
 
 /* Position the handle relative to each LI */

@@ -2,7 +2,7 @@
 DB Gateway Service - OpenSearch Integration
 Central gateway for all database operations using OpenSearch for flexible property data
 """
-from fastapi import FastAPI, HTTPException, Header, Query
+from fastapi import FastAPI, HTTPException, Header, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import time
@@ -1112,12 +1112,63 @@ async def upload_images(
     upload_request: ImageUploadRequest,
     authorization: str = Header(None)
 ):
-    """Upload images to property"""
+    """Upload images to property (using URLs)"""
     if not opensearch_client:
         raise HTTPException(status_code=503, detail="OpenSearch not available")
 
     return await property_management.upload_images(
         upload_request,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.post("/properties/{property_id}/images/upload")
+async def upload_image_files(
+    property_id: str,
+    files: List[UploadFile] = File(..., description="Image files to upload (max 10)"),
+    authorization: str = Header(None)
+):
+    """
+    Upload image files directly to Google Cloud Storage.
+
+    Accepts multipart form data with multiple image files.
+    Supported formats: PNG, JPG, JPEG, GIF, WEBP
+    Max file size: 10MB each
+    Max 10 images per property
+    """
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.upload_image_files(
+        property_id,
+        files,
+        authorization,
+        opensearch_client,
+        settings.OPENSEARCH_PROPERTIES_INDEX
+    )
+
+
+@app.put("/properties/{property_id}/coordinates")
+async def update_property_coordinates(
+    property_id: str,
+    latitude: float = Query(..., ge=-90, le=90, description="Latitude coordinate"),
+    longitude: float = Query(..., ge=-180, le=180, description="Longitude coordinate"),
+    authorization: str = Header(None)
+):
+    """
+    Update property coordinates from map selection.
+
+    Called after user selects location on Google Maps.
+    """
+    if not opensearch_client:
+        raise HTTPException(status_code=503, detail="OpenSearch not available")
+
+    return await property_management.update_property_coordinates(
+        property_id,
+        latitude,
+        longitude,
         authorization,
         opensearch_client,
         settings.OPENSEARCH_PROPERTIES_INDEX

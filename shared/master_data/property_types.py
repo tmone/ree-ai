@@ -136,6 +136,26 @@ class PropertyTypeMaster:
             aliases=["dự án", "tòa nhà", "chung cư"],
             examples=["Vinhomes Central Park", "Masteri Thảo Điền"]
         ),
+        "latitude": AttributeDefinition(
+            name="latitude",
+            type=AttributeType.FLOAT,
+            required=False,
+            description="Latitude coordinate for map",
+            aliases=["vĩ độ", "lat"],
+            min_value=-90,
+            max_value=90,
+            examples=["10.7769", "10.8231"]
+        ),
+        "longitude": AttributeDefinition(
+            name="longitude",
+            type=AttributeType.FLOAT,
+            required=False,
+            description="Longitude coordinate for map",
+            aliases=["kinh độ", "lng", "long"],
+            min_value=-180,
+            max_value=180,
+            examples=["106.7009", "106.6297"]
+        ),
     }
 
     # Apartment/Condo specific attributes
@@ -360,20 +380,30 @@ class PropertyTypeMaster:
             type=AttributeType.FLOAT,
             required=False,
             description="Street frontage width in meters",
-            aliases=["mặt tiền", "ngang"],
+            aliases=["mặt tiền"],
             min_value=3,
             max_value=30,
-            examples=["Mặt tiền 4m", "Ngang 5m"]
+            examples=["Mặt tiền 4m"]
+        ),
+        "width": AttributeDefinition(
+            name="width",
+            type=AttributeType.FLOAT,
+            required=False,
+            description="Lot width in meters",
+            aliases=["ngang", "chiều ngang", "rộng", "chiều rộng"],
+            min_value=3,
+            max_value=30,
+            examples=["Ngang 5m", "Rộng 4m", "Chiều rộng 6m"]
         ),
         "depth": AttributeDefinition(
             name="depth",
             type=AttributeType.FLOAT,
             required=False,
             description="Lot depth in meters",
-            aliases=["chiều sâu", "dài"],
+            aliases=["chiều sâu", "dài", "chiều dài"],
             min_value=5,
             max_value=50,
-            examples=["Dài 20m", "Chiều sâu 15m"]
+            examples=["Dài 20m", "Chiều sâu 15m", "Chiều dài 18m"]
         ),
         "floors": AttributeDefinition(
             name="floors",
@@ -421,16 +451,26 @@ class PropertyTypeMaster:
             type=AttributeType.FLOAT,
             required=False,
             description="Street frontage width in meters",
-            aliases=["mặt tiền", "ngang"],
+            aliases=["mặt tiền"],
             min_value=3,
             max_value=100,
+        ),
+        "width": AttributeDefinition(
+            name="width",
+            type=AttributeType.FLOAT,
+            required=False,
+            description="Lot width in meters",
+            aliases=["ngang", "chiều ngang", "rộng", "chiều rộng"],
+            min_value=3,
+            max_value=100,
+            examples=["Ngang 10m", "Rộng 8m"]
         ),
         "depth": AttributeDefinition(
             name="depth",
             type=AttributeType.FLOAT,
             required=False,
             description="Lot depth in meters",
-            aliases=["chiều sâu", "dài"],
+            aliases=["chiều sâu", "dài", "chiều dài"],
             min_value=5,
             max_value=500,
         ),
@@ -531,7 +571,7 @@ class PropertyTypeMaster:
             aliases=["nha pho", "townhouse", "row house"],
             description="Townhouse (narrow urban house)",
             required_attributes=["title", "price", "district", "bedrooms", "bathrooms", "land_area", "floors"],
-            optional_attributes=["ward", "street", "building_area", "facade_width", "depth", "alley_width", "street_access"],
+            optional_attributes=["ward", "street", "building_area", "facade_width", "width", "depth", "alley_width", "street_access", "latitude", "longitude"],
         ),
         PropertyType(
             code="LAND",
@@ -539,7 +579,7 @@ class PropertyTypeMaster:
             aliases=["dat", "dat nen", "land"],
             description="Land (vacant land for development)",
             required_attributes=["title", "price", "district", "land_area"],
-            optional_attributes=["ward", "street", "facade_width", "depth", "zoning", "street_access", "corner_lot"],
+            optional_attributes=["ward", "street", "facade_width", "width", "depth", "zoning", "street_access", "corner_lot", "latitude", "longitude"],
         ),
         PropertyType(
             code="OFFICE",

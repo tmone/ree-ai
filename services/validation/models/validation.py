@@ -65,6 +65,10 @@ class ValidationRequest(BaseModel):
     )
     user_id: Optional[str] = Field(None, description="User ID for duplicate/spam detection")
     conversation_id: Optional[str] = Field(None, description="Conversation context")
+    language: str = Field(
+        "vi",
+        description="User's preferred language (vi, en, th, ja)"
+    )
     confidence_threshold: float = Field(
         0.8,
         ge=0.0,

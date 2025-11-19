@@ -30,6 +30,7 @@ class OrchestrationRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Conversation ID for context")
     metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
     files: Optional[List[FileAttachment]] = Field(None, description="Attached files (images, documents)")
+    language: Optional[str] = Field("vi", description="User's preferred language (vi, en, th, ja). Auto-detected if not specified.")
 
     def has_files(self) -> bool:
         """Check if request contains file attachments."""

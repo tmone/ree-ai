@@ -32,7 +32,8 @@ class SearchHandler(BaseHandler):
         request_id: str,
         query: str,
         history: Optional[List[Dict[str, Any]]] = None,
-        files: Optional[List] = None
+        files: Optional[List] = None,
+        language: str = "vi"
     ) -> str:
         """
         Execute search flow
@@ -42,6 +43,7 @@ class SearchHandler(BaseHandler):
             query: User search query
             history: Conversation history (optional)
             files: Attached files (optional)
+            language: User's preferred language (vi, en, th, ja)
 
         Returns:
             Natural language response with search results
@@ -127,4 +129,4 @@ class SearchHandler(BaseHandler):
             self.log_handler_complete(request_id, "SearchHandler", duration_ms)
 
             # Fallback response
-            return t('search.service_unavailable', language='vi')
+            return t('search.service_unavailable', language=language)

@@ -25,6 +25,7 @@ from services.attribute_extraction.regex_extractor_simple import SimpleRegexExtr
 from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.utils.query_normalizer import normalize_query  # ITERATION 4: Query normalization
+from shared.utils.i18n import t
 from shared.i18n import get_multilingual_mapper
 from shared.models.attribute_extraction import ExtractionRequest, ExtractionResponse
 
@@ -33,6 +34,7 @@ class QueryExtractionRequest(BaseModel):
     """Request to extract entities from user query"""
     query: str
     intent: Optional[str] = None  # SEARCH, COMPARE, etc.
+    language: str = "vi"  # User's preferred language (vi, en, th, ja)
 
 
 class ImageExtractionRequest(BaseModel):
@@ -120,7 +122,7 @@ class AttributeExtractionService(BaseService):
                 return {"districts": districts, "count": len(districts)}
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to get districts: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.get("/master-data/property-types")
         async def get_property_types():
@@ -130,7 +132,7 @@ class AttributeExtractionService(BaseService):
                 return {"property_types": property_types, "count": len(property_types)}
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to get property types: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.get("/master-data/amenities")
         async def get_amenities(category: Optional[str] = None):
@@ -140,7 +142,7 @@ class AttributeExtractionService(BaseService):
                 return {"amenities": amenities, "count": len(amenities)}
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to get amenities: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.post("/extract-with-master-data", response_model=ExtractionResponse)
         async def extract_with_master_data(request: ExtractionRequest):
@@ -205,7 +207,8 @@ class AttributeExtractionService(BaseService):
                 self.logger.error(f"{LogEmoji.ERROR} Extraction with master data failed: {e}")
                 import traceback
                 traceback.print_exc()
-                raise HTTPException(status_code=500, detail=str(e))
+                lang = request.language if hasattr(request, 'language') and request.language else 'vi'
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language=lang, error=str(e)))
 
         @self.app.get("/admin/pending-items")
         async def get_pending_items(
@@ -230,7 +233,7 @@ class AttributeExtractionService(BaseService):
                 return await self.admin_routes.get_pending_items(status, limit, offset)
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to get pending items: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.post("/admin/approve-item")
         async def approve_pending_item(
@@ -260,7 +263,7 @@ class AttributeExtractionService(BaseService):
                 )
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to approve item: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.post("/admin/reject-item")
         async def reject_pending_item(
@@ -285,7 +288,7 @@ class AttributeExtractionService(BaseService):
                 )
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Failed to reject item: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
         @self.app.post("/extract-query-enhanced", response_model=EnhancedExtractionResponse)
         async def extract_from_query_enhanced(request: QueryExtractionRequest):
@@ -381,7 +384,8 @@ class AttributeExtractionService(BaseService):
                         query=request.query,
                         entities=normalized_entities,
                         confidence=final_confidence,
-                        rag_context=rag_context
+                        rag_context=rag_context,
+                        language=request.language
                     )
                     clarification_questions = clarification_result["questions"]
                     suggestions = clarification_result["suggestions"]
@@ -401,7 +405,7 @@ class AttributeExtractionService(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Enhanced extraction failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language=request.language, error=str(e)))
 
         @self.app.post("/extract-query", response_model=QueryExtractionResponse)
         async def extract_from_query(request: QueryExtractionRequest):
@@ -483,7 +487,7 @@ class AttributeExtractionService(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Entity extraction failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language=request.language, error=str(e)))
 
         @self.app.post("/extract-property", response_model=QueryExtractionResponse)
         async def extract_from_property_description(request: QueryExtractionRequest):
@@ -508,7 +512,7 @@ class AttributeExtractionService(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Property extraction failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language=request.language, error=str(e)))
 
         @self.app.post("/extract-from-images", response_model=QueryExtractionResponse)
         async def extract_from_images(request: ImageExtractionRequest):
@@ -562,7 +566,7 @@ class AttributeExtractionService(BaseService):
 
             except Exception as e:
                 self.logger.error(f"{LogEmoji.ERROR} Image extraction failed: {e}")
-                raise HTTPException(status_code=500, detail=str(e))
+                raise HTTPException(status_code=500, detail=t("attribute_extraction.error_generic", language='vi', error=str(e)))
 
     def _build_query_extraction_prompt(self, query: str, intent: Optional[str] = None) -> str:
         """
@@ -1207,7 +1211,8 @@ Output: {
         query: str,
         entities: Dict[str, Any],
         confidence: float,
-        rag_context: Dict[str, Any]
+        rag_context: Dict[str, Any],
+        language: str = 'vi'
     ) -> Dict[str, Any]:
         """
         Generate clarification questions and suggestions when confidence is low.
@@ -1217,6 +1222,7 @@ Output: {
             entities: Extracted entities
             confidence: Confidence score
             rag_context: RAG context with similar properties
+            language: User's preferred language
 
         Returns:
             Dict with clarification questions and suggestions
@@ -1232,43 +1238,43 @@ Output: {
 
         # Generate questions based on missing info
         if not has_property_type:
-            questions.append("Bạn muốn tìm loại bất động sản nào? (căn hộ, nhà phố, biệt thự)")
+            questions.append(t("attribute_extraction.clarify_property_type", language=language))
             # Get suggestions from RAG
             if rag_context.get("patterns", {}).get("common_property_types"):
                 property_type_suggestions = [
                     {
                         "value": pt["value"],
                         "count": pt["count"],
-                        "label": f"{pt['value']} ({pt['count']} căn)"
+                        "label": t("attribute_extraction.label_count", language=language, value=pt['value'], count=pt['count'])
                     }
                     for pt in rag_context["patterns"]["common_property_types"][:3]
                 ]
                 suggestions.append({
                     "field": "property_type",
-                    "question": "Loại bất động sản",
+                    "question": t("attribute_extraction.suggestion_property_type", language=language),
                     "options": property_type_suggestions
                 })
 
         if not has_location:
-            questions.append("Bạn muốn tìm ở khu vực nào? (Quận/Huyện)")
+            questions.append(t("attribute_extraction.clarify_location", language=language))
             # Get suggestions from RAG
             if rag_context.get("patterns", {}).get("common_districts"):
                 district_suggestions = [
                     {
                         "value": d["value"],
                         "count": d["count"],
-                        "label": f"{d['value']} ({d['count']} căn)"
+                        "label": t("attribute_extraction.label_count", language=language, value=d['value'], count=d['count'])
                     }
                     for d in rag_context["patterns"]["common_districts"][:5]
                 ]
                 suggestions.append({
                     "field": "district",
-                    "question": "Khu vực",
+                    "question": t("attribute_extraction.suggestion_district", language=language),
                     "options": district_suggestions
                 })
 
         if not has_price:
-            questions.append("Ngân sách của bạn là bao nhiêu?")
+            questions.append(t("attribute_extraction.clarify_budget", language=language))
             # Get price range from RAG
             if rag_context.get("value_ranges", {}).get("price"):
                 price_range = rag_context["value_ranges"]["price"]
@@ -1277,67 +1283,70 @@ Output: {
                         "value": "low",
                         "min": price_range["min"],
                         "max": price_range["avg"] * 0.7,
-                        "label": f"Dưới {price_range['avg'] * 0.7 / 1_000_000_000:.1f} tỷ"
+                        "label": t("attribute_extraction.label_under", language=language, amount=f"{price_range['avg'] * 0.7 / 1_000_000_000:.1f}")
                     },
                     {
                         "value": "medium",
                         "min": price_range["avg"] * 0.7,
                         "max": price_range["avg"] * 1.3,
-                        "label": f"{price_range['avg'] * 0.7 / 1_000_000_000:.1f} - {price_range['avg'] * 1.3 / 1_000_000_000:.1f} tỷ"
+                        "label": t("attribute_extraction.label_range", language=language,
+                                   min=f"{price_range['avg'] * 0.7 / 1_000_000_000:.1f}",
+                                   max=f"{price_range['avg'] * 1.3 / 1_000_000_000:.1f}")
                     },
                     {
                         "value": "high",
                         "min": price_range["avg"] * 1.3,
                         "max": price_range["max"],
-                        "label": f"Trên {price_range['avg'] * 1.3 / 1_000_000_000:.1f} tỷ"
+                        "label": t("attribute_extraction.label_above", language=language, amount=f"{price_range['avg'] * 1.3 / 1_000_000_000:.1f}")
                     }
                 ]
                 suggestions.append({
                     "field": "price",
-                    "question": "Ngân sách",
+                    "question": t("attribute_extraction.suggestion_budget", language=language),
                     "options": price_suggestions
                 })
 
         if not has_bedrooms:
-            questions.append("Bạn cần bao nhiêu phòng ngủ?")
+            questions.append(t("attribute_extraction.clarify_bedrooms", language=language))
             suggestions.append({
                 "field": "bedrooms",
-                "question": "Số phòng ngủ",
+                "question": t("attribute_extraction.suggestion_bedrooms", language=language),
                 "options": [
-                    {"value": 1, "label": "1 phòng ngủ (Studio)"},
-                    {"value": 2, "label": "2 phòng ngủ"},
-                    {"value": 3, "label": "3 phòng ngủ"},
-                    {"value": 4, "label": "4+ phòng ngủ"}
+                    {"value": 1, "label": t("attribute_extraction.label_studio", language=language)},
+                    {"value": 2, "label": t("attribute_extraction.label_2br", language=language)},
+                    {"value": 3, "label": t("attribute_extraction.label_3br", language=language)},
+                    {"value": 4, "label": t("attribute_extraction.label_4br", language=language)}
                 ]
             })
 
         # If entities were extracted but confidence still low, ask for confirmation
         if entities and confidence < 0.6:
+            formatted_entities = self._format_entities_for_display(entities, language)
             questions.append(
-                f"Tôi hiểu bạn đang tìm: {self._format_entities_for_display(entities)}. Đúng không?"
+                t("attribute_extraction.clarify_confirm", language=language, entities=formatted_entities)
             )
 
         return {
             "questions": questions,
             "suggestions": suggestions,
-            "reason": f"Confidence thấp ({confidence:.2f}), cần làm rõ thêm thông tin"
+            "reason": t("attribute_extraction.clarify_reason", language=language, confidence=f"{confidence:.2f}")
         }
 
-    def _format_entities_for_display(self, entities: Dict[str, Any]) -> str:
+    def _format_entities_for_display(self, entities: Dict[str, Any], language: str = 'vi') -> str:
         """Format entities for user-friendly display."""
         parts = []
         if "property_type" in entities:
             parts.append(entities["property_type"])
         if "bedrooms" in entities:
-            parts.append(f"{entities['bedrooms']} phòng ngủ")
+            parts.append(t("attribute_extraction.display_bedrooms", language=language, count=entities['bedrooms']))
         if "district" in entities:
-            parts.append(f"tại {entities['district']}")
+            parts.append(t("attribute_extraction.display_at", language=language, location=entities['district']))
         if "max_price" in entities:
-            parts.append(f"dưới {entities['max_price'] / 1_000_000_000:.1f} tỷ")
+            parts.append(t("attribute_extraction.display_under", language=language, amount=f"{entities['max_price'] / 1_000_000_000:.1f}"))
         elif "price" in entities:
-            parts.append(f"khoảng {entities['price'] / 1_000_000_000:.1f} tỷ")
+            parts.append(t("attribute_extraction.display_around", language=language, amount=f"{entities['price'] / 1_000_000_000:.1f}"))
 
-        return " ".join(parts) if parts else "bất động sản"
+        return " ".join(parts) if parts else t("attribute_extraction.display_default", language=language)
 
     async def on_shutdown(self):
         """Cleanup on shutdown"""

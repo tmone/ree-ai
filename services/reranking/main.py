@@ -15,6 +15,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
+from shared.utils.i18n import t
+
 from models.rerank import (
     RerankRequest,
     RerankResponse,
@@ -216,10 +218,12 @@ async def rerank_search_results(request: RerankRequest):
 
     except Exception as e:
         logger.error(f"Error in re-ranking: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Re-ranking failed: {str(e)}"
+        error_msg = t(
+            "reranking.rerank_failed",
+            language=request.language if hasattr(request, 'language') else 'vi',
+            error=str(e)
         )
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.get("/weights")
@@ -251,7 +255,8 @@ async def track_property_view(property_id: str):
         return {"status": "success", "event": "view", "property_id": property_id}
     except Exception as e:
         logger.error(f"Error tracking view for {property_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = t("reranking.analytics_error", language='vi', error=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/analytics/inquiry/{property_id}")
@@ -262,7 +267,8 @@ async def track_property_inquiry(property_id: str):
         return {"status": "success", "event": "inquiry", "property_id": property_id}
     except Exception as e:
         logger.error(f"Error tracking inquiry for {property_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = t("reranking.analytics_error", language='vi', error=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/analytics/favorite/{property_id}")
@@ -273,7 +279,8 @@ async def track_property_favorite(property_id: str):
         return {"status": "success", "event": "favorite", "property_id": property_id}
     except Exception as e:
         logger.error(f"Error tracking favorite for {property_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = t("reranking.analytics_error", language='vi', error=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.post("/analytics/click")
@@ -306,7 +313,8 @@ async def track_property_click(
         }
     except Exception as e:
         logger.error(f"Error tracking click for user {user_id}, property {property_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = t("reranking.analytics_error", language='vi', error=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 @app.put("/analytics/interaction/{interaction_id}")
@@ -336,7 +344,8 @@ async def update_search_interaction(
         }
     except Exception as e:
         logger.error(f"Error updating interaction {interaction_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = t("reranking.analytics_error", language='vi', error=str(e))
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 if __name__ == "__main__":

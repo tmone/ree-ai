@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, Any
 import logging
 
+from shared.utils.i18n import t
+
 from services.validation.models.validation import (
     ValidationRequest,
     ComprehensiveValidationResponse,
@@ -51,8 +53,8 @@ app.add_middleware(
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
-        "service": "validation",
+        "status": t("validation.health_status", language="en"),
+        "service": t("validation.health_service", language="en"),
         "version": "1.0.0"
     }
 
@@ -84,25 +86,34 @@ async def validate_property(request: ValidationRequest) -> ComprehensiveValidati
         # 1. Field presence validation
         validations['field_presence'] = validate_field_presence(
             request.entities,
-            request.intent
+            request.intent,
+            request.language
         )
 
         # 2. Data format validation
-        validations['data_format'] = validate_data_format(request.entities)
+        validations['data_format'] = validate_data_format(
+            request.entities,
+            request.language
+        )
 
         # 3. Logical consistency validation
-        validations['logical_consistency'] = validate_logical_consistency(request.entities)
+        validations['logical_consistency'] = validate_logical_consistency(
+            request.entities,
+            request.language
+        )
 
         # 4. Spam detection
         validations['spam_detection'] = validate_spam_indicators(
             request.entities,
-            request.user_id
+            request.user_id,
+            request.language
         )
 
         # 5. Duplicate detection
         validations['duplicate_detection'] = validate_duplicate_listing(
             request.entities,
-            request.user_id
+            request.user_id,
+            request.language
         )
 
         # Aggregate results
@@ -126,10 +137,14 @@ async def validate_property(request: ValidationRequest) -> ComprehensiveValidati
         confidence_score = calculate_confidence_score(validations, request.entities)
 
         # Generate user-friendly summary
-        summary = generate_summary(critical_errors, errors, warnings, can_save)
+        summary = generate_summary(
+            critical_errors, errors, warnings, can_save, request.language
+        )
 
         # Generate next steps
-        next_steps = generate_next_steps(critical_errors, errors, warnings, can_save)
+        next_steps = generate_next_steps(
+            critical_errors, errors, warnings, can_save, request.language
+        )
 
         response = ComprehensiveValidationResponse(
             overall_valid=overall_valid,
@@ -148,7 +163,12 @@ async def validate_property(request: ValidationRequest) -> ComprehensiveValidati
 
     except Exception as e:
         logger.error(f"Validation error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+        error_msg = t(
+            "validation.validation_failed",
+            language=request.language if hasattr(request, 'language') else 'vi',
+            error=str(e)
+        )
+        raise HTTPException(status_code=500, detail=error_msg)
 
 
 def calculate_confidence_score(
@@ -201,49 +221,63 @@ def generate_summary(
     critical_errors: list,
     errors: list,
     warnings: list,
-    can_save: bool
+    can_save: bool,
+    language: str = 'vi'
 ) -> str:
     """Generate user-friendly validation summary"""
 
     if can_save and not warnings:
-        return "All validations passed. Property is ready to be saved."
+        return t("validation.summary_all_passed", language=language)
 
     if can_save and warnings:
-        return f"Property can be saved, but there are {len(warnings)} recommendations to improve listing quality."
+        return t(
+            "validation.summary_can_save_with_warnings",
+            language=language,
+            count=len(warnings)
+        )
 
     if critical_errors:
-        return f"Cannot save property. {len(critical_errors)} critical error(s) must be fixed."
+        return t(
+            "validation.summary_critical_errors",
+            language=language,
+            count=len(critical_errors)
+        )
 
     if errors:
-        return f"Cannot save property. {len(errors)} error(s) must be fixed."
+        return t(
+            "validation.summary_errors",
+            language=language,
+            count=len(errors)
+        )
 
-    return "Validation completed."
+    return t("validation.summary_completed", language=language)
 
 
 def generate_next_steps(
     critical_errors: list,
     errors: list,
     warnings: list,
-    can_save: bool
+    can_save: bool,
+    language: str = 'vi'
 ) -> list[str]:
     """Generate actionable next steps for user"""
 
     steps = []
 
     if critical_errors:
-        steps.append("Fix all critical errors to continue")
+        steps.append(t("validation.next_step_fix_critical", language=language))
         steps.extend(critical_errors[:3])  # Show first 3 critical errors
 
     if errors and not critical_errors:
-        steps.append("Fix all errors to continue")
+        steps.append(t("validation.next_step_fix_errors", language=language))
         steps.extend(errors[:3])  # Show first 3 errors
 
     if warnings and can_save:
-        steps.append("Consider addressing these recommendations:")
+        steps.append(t("validation.next_step_consider_recommendations", language=language))
         steps.extend(warnings[:2])  # Show first 2 warnings
 
     if can_save and not steps:
-        steps.append("Property is ready to save")
+        steps.append(t("validation.next_step_ready_to_save", language=language))
 
     return steps
 

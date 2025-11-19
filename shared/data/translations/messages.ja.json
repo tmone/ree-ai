@@ -92,6 +92,130 @@
     "suggest_new_properties": "検索履歴（{location}、{budget_str}）に基づいて、"
   },
 
+  "validation": {
+    "health_status": "正常",
+    "health_service": "検証",
+    "validation_failed": "検証が失敗しました：{error}",
+
+    "summary_all_passed": "すべての検証に合格しました。物件を保存する準備ができました。",
+    "summary_can_save_with_warnings": "物件を保存できますが、リスティング品質を向上させるための{count}件の推奨事項があります。",
+    "summary_critical_errors": "物件を保存できません。{count}件の重大なエラーを修正する必要があります。",
+    "summary_errors": "物件を保存できません。{count}件のエラーを修正する必要があります。",
+    "summary_completed": "検証が完了しました。",
+
+    "next_step_fix_critical": "続行するにはすべての重大なエラーを修正してください",
+    "next_step_fix_errors": "続行するにはすべてのエラーを修正してください",
+    "next_step_consider_recommendations": "次の推奨事項を検討してください：",
+    "next_step_ready_to_save": "物件を保存する準備ができました",
+
+    "field_presence_missing_required": "必須フィールドがありません：{field}",
+    "field_presence_please_provide": "続行するには{field}を提供してください",
+    "field_presence_consider_adding": "より良い可視性とユーザーエンゲージメントのために'{field}'の追加を検討してください",
+
+    "data_format_must_be_numeric": "{field}は数値である必要があります。{type}を取得しました",
+    "data_format_too_low": "{field}が低すぎます：{value} {unit}（最小：{min} {unit}）",
+    "data_format_too_high": "{field}が高すぎます：{value} {unit}（最大：{max} {unit}）",
+    "data_format_invalid_phone": "電話番号の形式が無効です：{phone}。期待される形式：0901234567または+81901234567",
+    "data_format_invalid_email": "メールアドレスの形式が無効です：{email}",
+    "data_format_must_provide_contact": "連絡先として少なくとも電話番号またはメールアドレスを提供する必要があります",
+    "data_format_both_contact_better": "電話とメールの両方を提供すると応答率が向上します",
+
+    "logical_price_low": "{district}の価格が低いようです：{price_per_sqm}円/㎡（一般的：{min_price}-{max_price}）。価格が正しいことを確認してください。",
+    "logical_price_high": "{district}の価格が高いようです：{price_per_sqm}円/㎡（一般的：{min_price}-{max_price}）。価格が正しいことを確認してください。",
+    "logical_bathroom_unusual": "バスルーム数が異常です：{bedrooms}寝室に対して{bathrooms}バスルーム。正しいことを確認してください。",
+    "logical_area_small": "寝室数に対して面積が小さいです：{bedrooms}寝室に対して{area}㎡（寝室あたり{area_per_bedroom}㎡）。確認してください。",
+    "logical_area_large": "寝室数に対して面積が大きいです：{bedrooms}寝室に対して{area}㎡（寝室あたり{area_per_bedroom}㎡）。寝室数の確認を検討してください。",
+    "logical_floor_exceeds": "階数（{floor}）が総階数（{total_floors}）を超えることはできません",
+
+    "spam_excessive_caps": "テキスト内の大文字が過剰です",
+    "spam_excessive_punctuation": "句読点が過剰です",
+    "spam_keywords_detected": "複数のスパムキーワードが検出されました（{count}）",
+    "spam_price_zero": "価格をゼロにすることはできません",
+    "spam_flagged": "潜在的なスパムとしてフラグが立てられたリスティング",
+
+    "duplicate_note": "重複検出にはデータベース統合が必要です"
+  },
+
+  "classification": {
+    "core_gateway_error": "Core Gatewayエラー：{detail}",
+    "classification_failed": "分類が失敗しました：{error}",
+    "fallback_chat_reasoning": "一般的な会話または挨拶が検出されました",
+    "fallback_heuristic_reasoning": "フォールバックヒューリスティック分類"
+  },
+
+  "reranking": {
+    "rerank_failed": "再ランク付けが失敗しました：{error}",
+    "analytics_error": "アナリティクス追跡エラー：{error}"
+  },
+
+  "attribute_extraction": {
+    "error_generic": "エラー：{error}",
+    "clarify_property_type": "どのタイプの物件をお探しですか？（マンション、一戸建て、別荘）",
+    "clarify_location": "どのエリアで検索しますか？（区/エリア）",
+    "clarify_budget": "予算はいくらですか？",
+    "clarify_bedrooms": "寝室は何室必要ですか？",
+    "clarify_confirm": "あなたは次を探していると理解しています：{entities}。正しいですか？",
+    "clarify_reason": "信頼度が低い（{confidence}）ため、詳細情報が必要です",
+
+    "suggestion_property_type": "物件タイプ",
+    "suggestion_district": "エリア",
+    "suggestion_budget": "予算",
+    "suggestion_bedrooms": "寝室数",
+
+    "label_under": "{amount}億円未満",
+    "label_range": "{min} - {max}億円",
+    "label_above": "{amount}億円以上",
+    "label_count": "{value}（{count}ユニット）",
+    "label_studio": "1寝室（スタジオ）",
+    "label_2br": "2寝室",
+    "label_3br": "3寝室",
+    "label_4br": "4寝室以上",
+
+    "display_bedrooms": "{count}寝室",
+    "display_at": "{location}で",
+    "display_under": "{amount}億円未満",
+    "display_around": "約{amount}億円",
+    "display_default": "物件"
+  },
+
+  "completeness": {
+    "core_gateway_error": "Core Gatewayエラー：{detail}",
+    "assessment_failed": "完全性評価が失敗しました：{error}",
+
+    "score_excellent": "優秀 - リスティングは非常に完全です",
+    "score_good": "良好 - 主要情報が提供されています",
+    "score_fair": "まあまあ - 一部の情報が不足しています",
+    "score_average": "平均 - 多くの重要な詳細が不足しています",
+    "score_poor": "不十分 - 緊急に詳細情報が必要です",
+
+    "missing_property_type": "property_type（物件タイプ）",
+    "missing_transaction_type": "transaction_type（売却/賃貸）",
+    "missing_title": "title（タイトル）",
+    "missing_district": "district（区/エリア）",
+    "missing_address": "address（詳細住所）",
+    "missing_area": "area（面積）",
+    "missing_bedrooms": "bedrooms（寝室数）",
+    "missing_price": "price（価格） - 必須",
+    "missing_legal_status": "legal_status（法的状態）",
+    "missing_contact_phone": "contact_phone（電話番号） - 必須",
+
+    "strength_description": "✅ 詳細な説明があります",
+    "strength_location": "✅ 場所情報があります",
+    "strength_area": "✅ 面積情報があります",
+    "strength_price": "✅ 価格情報があります",
+    "strength_contact": "✅ 連絡先電話番号があります",
+
+    "suggestion_add_phone": "📌 今すぐ電話番号を追加 - 必須！",
+    "suggestion_add_price": "📌 今すぐ価格を追加 - 必須情報！",
+    "suggestion_add_legal": "📌 法的状態（権利証書）を追加して信頼性を向上",
+    "suggestion_add_bedrooms": "📌 寝室数を追加 - 重要な情報",
+    "suggestion_add_description": "📌 より詳細な説明（100語以上）を書いて視聴者を引き付ける",
+
+    "priority_phone_urgent": "1. 電話番号を追加 - 緊急",
+    "priority_price_urgent": "2. 価格を追加 - 緊急",
+    "priority_legal_important": "3. 法的情報を追加 - 重要"
+  },
+
   "common": {
     "yes": "はい",
     "no": "いいえ",

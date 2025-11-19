@@ -304,6 +304,8 @@ services:
       - REDIS_PORT=${REDIS_PORT:-6379}
     ports:
       - "8083:8080"
+    volumes:
+      - ./shared/data/translations:/app/shared/data/translations:ro
     depends_on:
       - core-gateway
       - redis
@@ -331,6 +333,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8089:8080"
+    volumes:
+      - ./shared/data/translations:/app/shared/data/translations:ro
     depends_on:
       - postgres
       - core-gateway
@@ -425,6 +429,8 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
     ports:
       - "8084:8080"
+    volumes:
+      - ./shared/data/translations:/app/shared/data/translations:ro
     depends_on:
       - postgres
       - core-gateway
@@ -451,6 +457,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8086:8080"
+    volumes:
+      - ./shared/data/translations:/app/shared/data/translations:ro
     depends_on:
       - postgres
     networks:
@@ -524,6 +532,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     ports:
       - "8087:8080"
+    volumes:
+      - ./shared/data/translations:/app/shared/data/translations:ro
     depends_on:
       - postgres
     networks:

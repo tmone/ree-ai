@@ -41,6 +41,9 @@ frontend/ree-ai-app/
 Thumbs.db
 nul
 
+# Git hooks
+.githooks/
+
 # Docker
 docker-compose.override.yml
 

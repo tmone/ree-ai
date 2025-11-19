@@ -5,6 +5,7 @@ Detect potential spam or fraudulent property listings
 
 import re
 from typing import Dict, Any, Optional
+from shared.utils.i18n import t
 from services.validation.models.validation import ValidationResult, ValidationSeverity
 
 
@@ -20,12 +21,13 @@ SPAM_KEYWORDS_VI = [
 SPAM_THRESHOLD = 50  # Score >= 50 is considered spam
 
 
-def check_excessive_caps(text: str) -> tuple[int, Optional[str]]:
+def check_excessive_caps(text: str, language: str = 'vi') -> tuple[int, Optional[str]]:
     """
     Check for excessive uppercase characters
 
     Args:
         text: Text to check
+        language: User's preferred language
 
     Returns:
         (score, reason) tuple
@@ -36,17 +38,18 @@ def check_excessive_caps(text: str) -> tuple[int, Optional[str]]:
     uppercase_ratio = sum(1 for c in text if c.isupper()) / max(len(text), 1)
 
     if uppercase_ratio > 0.5:
-        return 20, "Excessive uppercase in text"
+        return 20, t("validation.spam_excessive_caps", language=language)
 
     return 0, None
 
 
-def check_excessive_punctuation(text: str) -> tuple[int, Optional[str]]:
+def check_excessive_punctuation(text: str, language: str = 'vi') -> tuple[int, Optional[str]]:
     """
     Check for repeated punctuation marks
 
     Args:
         text: Text to check
+        language: User's preferred language
 
     Returns:
         (score, reason) tuple
@@ -55,17 +58,18 @@ def check_excessive_punctuation(text: str) -> tuple[int, Optional[str]]:
         return 0, None
 
     if re.search(r'[!?]{3,}', text):
-        return 15, "Excessive punctuation"
+        return 15, t("validation.spam_excessive_punctuation", language=language)
 
     return 0, None
 
 
-def check_spam_keywords(text: str) -> tuple[int, Optional[str]]:
+def check_spam_keywords(text: str, language: str = 'vi') -> tuple[int, Optional[str]]:
     """
     Check for common spam keywords
 
     Args:
         text: Text to check
+        language: User's preferred language
 
     Returns:
         (score, reason) tuple
@@ -77,17 +81,18 @@ def check_spam_keywords(text: str) -> tuple[int, Optional[str]]:
     spam_count = sum(1 for keyword in SPAM_KEYWORDS_VI if keyword in text_lower)
 
     if spam_count >= 3:
-        return 25, f"Multiple spam keywords detected ({spam_count})"
+        return 25, t("validation.spam_keywords_detected", language=language, count=spam_count)
 
     return 0, None
 
 
-def check_zero_price(entities: Dict[str, Any]) -> tuple[int, Optional[str]]:
+def check_zero_price(entities: Dict[str, Any], language: str = 'vi') -> tuple[int, Optional[str]]:
     """
     Check if price is zero or unrealistic
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         (score, reason) tuple
@@ -95,14 +100,15 @@ def check_zero_price(entities: Dict[str, Any]) -> tuple[int, Optional[str]]:
     price = entities.get('price', 0)
 
     if price == 0:
-        return 30, "Price cannot be zero"
+        return 30, t("validation.spam_price_zero", language=language)
 
     return 0, None
 
 
 def validate_spam_indicators(
     entities: Dict[str, Any],
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
+    language: str = 'vi'
 ) -> ValidationResult:
     """
     Detect potential spam or fraudulent listings
@@ -110,6 +116,7 @@ def validate_spam_indicators(
     Args:
         entities: Extracted property attributes
         user_id: User ID for tracking patterns
+        language: User's preferred language
 
     Returns:
         ValidationResult with spam detection results
@@ -123,25 +130,25 @@ def validate_spam_indicators(
     combined_text = f"{title} {description}"
 
     # Check excessive caps
-    score, reason = check_excessive_caps(combined_text)
+    score, reason = check_excessive_caps(combined_text, language)
     if reason:
         spam_score += score
         reasons.append(reason)
 
     # Check excessive punctuation
-    score, reason = check_excessive_punctuation(combined_text)
+    score, reason = check_excessive_punctuation(combined_text, language)
     if reason:
         spam_score += score
         reasons.append(reason)
 
     # Check spam keywords
-    score, reason = check_spam_keywords(combined_text)
+    score, reason = check_spam_keywords(combined_text, language)
     if reason:
         spam_score += score
         reasons.append(reason)
 
     # Check zero price
-    score, reason = check_zero_price(entities)
+    score, reason = check_zero_price(entities, language)
     if reason:
         spam_score += score
         reasons.append(reason)
@@ -161,7 +168,7 @@ def validate_spam_indicators(
     if is_spam:
         return ValidationResult(
             valid=False,
-            errors=["Listing flagged as potential spam"],
+            errors=[t("validation.spam_flagged", language=language)],
             warnings=reasons,
             severity=ValidationSeverity.CRITICAL,
             metadata={'spam_score': spam_score}

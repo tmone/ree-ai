@@ -5,6 +5,7 @@ Validates numeric ranges, contact information formats, and data types
 
 import re
 from typing import Dict, Any
+from shared.utils.i18n import t
 from services.validation.models.validation import ValidationResult, ValidationSeverity
 
 
@@ -46,12 +47,16 @@ PHONE_PATTERNS = [
 ]
 
 
-def validate_numeric_ranges(entities: Dict[str, Any]) -> ValidationResult:
+def validate_numeric_ranges(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate all numeric fields are within reasonable ranges
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with errors for out-of-range values
@@ -66,23 +71,36 @@ def validate_numeric_ranges(entities: Dict[str, Any]) -> ValidationResult:
 
         # Check type
         if not isinstance(value, (int, float)):
-            errors.append(f"{field} must be numeric, got {type(value).__name__}")
+            errors.append(
+                t("validation.data_format_must_be_numeric",
+                  language=language,
+                  field=field,
+                  type=type(value).__name__)
+            )
             continue
 
         # Check minimum
         if value < rules['min']:
             unit = rules.get('unit', '')
             errors.append(
-                f"{field} too low: {value:,} {unit} "
-                f"(minimum: {rules['min']:,} {unit})"
+                t("validation.data_format_too_low",
+                  language=language,
+                  field=field,
+                  value=f"{value:,}",
+                  unit=unit,
+                  min=f"{rules['min']:,}")
             )
 
         # Check maximum
         if value > rules['max']:
             unit = rules.get('unit', '')
             errors.append(
-                f"{field} too high: {value:,} {unit} "
-                f"(maximum: {rules['max']:,} {unit})"
+                t("validation.data_format_too_high",
+                  language=language,
+                  field=field,
+                  value=f"{value:,}",
+                  unit=unit,
+                  max=f"{rules['max']:,}")
             )
 
     if errors:
@@ -131,12 +149,16 @@ def validate_email(email: str) -> bool:
     return bool(re.match(pattern, email))
 
 
-def validate_contact_info(entities: Dict[str, Any]) -> ValidationResult:
+def validate_contact_info(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Validate contact information formats
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         ValidationResult with errors for invalid contact info
@@ -150,20 +172,28 @@ def validate_contact_info(entities: Dict[str, Any]) -> ValidationResult:
     # Validate phone if present
     if phone:
         if not validate_phone_number(phone):
-            errors.append(f"Invalid phone number format: {phone}. Expected format: 0901234567 or +84901234567")
+            errors.append(
+                t("validation.data_format_invalid_phone", language=language, phone=phone)
+            )
 
     # Validate email if present
     if email:
         if not validate_email(email):
-            errors.append(f"Invalid email format: {email}")
+            errors.append(
+                t("validation.data_format_invalid_email", language=language, email=email)
+            )
 
     # Must have at least one contact method
     if not phone and not email:
-        errors.append("Must provide at least phone number or email for contact")
+        errors.append(
+            t("validation.data_format_must_provide_contact", language=language)
+        )
 
     # Warning if only one contact method
     if (phone and not email) or (email and not phone):
-        warnings.append("Providing both phone and email increases response rate")
+        warnings.append(
+            t("validation.data_format_both_contact_better", language=language)
+        )
 
     if errors:
         return ValidationResult(
@@ -183,21 +213,25 @@ def validate_contact_info(entities: Dict[str, Any]) -> ValidationResult:
     return ValidationResult(valid=True, severity=ValidationSeverity.INFO)
 
 
-def validate_data_format(entities: Dict[str, Any]) -> ValidationResult:
+def validate_data_format(
+    entities: Dict[str, Any],
+    language: str = 'vi'
+) -> ValidationResult:
     """
     Combined data format validation (numeric + contact)
 
     Args:
         entities: Extracted property attributes
+        language: User's preferred language
 
     Returns:
         Aggregated ValidationResult
     """
     # Validate numeric ranges
-    numeric_result = validate_numeric_ranges(entities)
+    numeric_result = validate_numeric_ranges(entities, language)
 
     # Validate contact info
-    contact_result = validate_contact_info(entities)
+    contact_result = validate_contact_info(entities, language)
 
     # Aggregate results
     all_errors = numeric_result.errors + contact_result.errors

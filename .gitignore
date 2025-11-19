@@ -172,3 +172,6 @@ temp_*.py
 
 # Production environment (should use server-specific config)
 .env.production
+
+# Ignore Figma design file
+docs/design/UI.fig

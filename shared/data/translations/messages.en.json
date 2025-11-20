@@ -87,6 +87,14 @@
     "service_unavailable": "Sorry, I cannot answer this question right now. Please try again later."
   },
 
+  "property_detail": {
+    "position_not_found": "Sorry, I couldn't find a property at position {position} in the search history. Would you like to search again or select another property?",
+    "keyword_not_found": "Sorry, I couldn't find any property with keyword \"{keyword}\". Would you like to try a different keyword or provide more details?",
+    "id_not_found": "Sorry, I couldn't identify a property from your request. Could you provide an ID or more specific description?",
+    "not_found": "Sorry, I couldn't find a property with ID `{property_id}`. This listing may have been removed or the ID might be incorrect.",
+    "error": "Sorry, an error occurred while loading property details. Please try again later."
+  },
+
   "conversation_context": {
     "based_on_history": "Based on your search history ({location}, {budget}), I can suggest newly posted properties from the past 7 days.",
     "suggest_new_properties": "Based on your search history ({location}, {budget_str}), "

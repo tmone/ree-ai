@@ -87,6 +87,14 @@
     "service_unavailable": "Xin lỗi, tôi không thể trả lời câu hỏi này lúc này. Vui lòng thử lại sau."
   },
 
+  "property_detail": {
+    "position_not_found": "Xin lỗi, tôi không tìm thấy bất động sản ở vị trí số {position} trong lịch sử tìm kiếm. Bạn có thể tìm kiếm lại hoặc chọn căn khác không?",
+    "keyword_not_found": "Xin lỗi, tôi không tìm thấy bất động sản nào với từ khóa \"{keyword}\". Bạn có thể thử từ khóa khác hoặc cung cấp thêm thông tin không?",
+    "id_not_found": "Xin lỗi, tôi không xác định được bất động sản nào từ yêu cầu của bạn. Bạn có thể cung cấp ID hoặc mô tả cụ thể hơn không?",
+    "not_found": "Xin lỗi, tôi không tìm thấy bất động sản với ID `{property_id}`. Có thể tin này đã bị xóa hoặc ID không chính xác.",
+    "error": "Xin lỗi, đã xảy ra lỗi khi tải thông tin bất động sản. Vui lòng thử lại sau."
+  },
+
   "conversation_context": {
     "based_on_history": "Dựa trên lịch sử tìm kiếm của bạn ({location}, {budget}), tôi có thể gợi ý thêm các bất động sản mới đăng trong 7 ngày qua.",
     "suggest_new_properties": "Dựa trên lịch sử tìm kiếm của bạn ({location}, {budget_str}), "

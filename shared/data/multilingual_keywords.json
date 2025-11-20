@@ -145,6 +145,29 @@
       ]
     },
 
+    "property_detail": {
+      "description": "Request property details by ID or reference",
+      "vi": [
+        "chi tiết", "chi tiet",
+        "xem thêm", "xem them",
+        "thông tin đầy đủ", "thong tin day du",
+        "cho tôi xem", "cho toi xem",
+        "xem chi tiết", "xem chi tiet",
+        "thông tin", "thong tin",
+        "căn số", "can so",
+        "id", "property id",
+        "mã số", "ma so"
+      ],
+      "en": [
+        "details", "show details",
+        "full information", "more info",
+        "view property", "property details",
+        "show me", "tell me about",
+        "id", "property id",
+        "number"
+      ]
+    },
+
     "chat": {
       "description": "General conversation",
       "vi": [

@@ -588,6 +588,7 @@ class AttributeExtractionService(BaseService):
 
 **TIER 2** (HIGHLY RECOMMENDED - prioritize these):
 - bedrooms, bathrooms, ward, street, furniture, direction, legal_status, contact_phone, project_name
+- **width, depth** (chiều rộng, chiều dài) - **IMPORTANT for townhouse (nhà phố), villa (biệt thự), land (đất)**
 
 **TIER 3** (NICE-TO-HAVE - only request if score < 70% and mentioned):
 - floors, facade_width, alley_width, year_built, contact_name, balcony_direction, property_condition
@@ -643,6 +644,19 @@ If you detect any of these famous projects, automatically extract the correspond
 - area: Diện tích (m²)
 - min_area: Diện tích tối thiểu
 - max_area: Diện tích tối đa
+
+**🏠 DIMENSIONS (Kích thước - IMPORTANT for townhouse/villa/land):**
+- width: Chiều rộng/Chiều ngang (m)
+  * "ngang 5m" → 5
+  * "mặt tiền 8m" → 8
+  * "chiều rộng 4m" → 4
+- depth: Chiều dài/Chiều sâu (m)
+  * "dài 20m" → 20
+  * "chiều sâu 15m" → 15
+  * "sâu 25m" → 25
+- **CONDITIONAL LOGIC:**
+  * IF property_type = "townhouse" OR "villa" OR "land" → PRIORITIZE extracting width + depth
+  * IF property_type = "apartment" → width/depth NOT applicable (skip)
 
 **4. PRICE**
 - price: Giá cụ thể (VND)

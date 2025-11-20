@@ -205,12 +205,16 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-service-account.json
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-asset-dev.entreal.com}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID}
     ports:
       - "8081:8080"
     volumes:
       - ./core:/app/core
       - ./shared:/app/shared
       - ./services/db_gateway:/app/services/db_gateway
+      - ./credentials:/app/credentials:ro
     depends_on:
       - postgres
       - opensearch
@@ -238,12 +242,16 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcs-service-account.json
+      - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-asset-dev.entreal.com}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID}
     ports:
       - "8090:8080"
     volumes:
       - ./core:/app/core
       - ./shared:/app/shared
       - ./services/orchestrator:/app/services/orchestrator
+      - ./credentials:/app/credentials:ro
     depends_on:
       - core-gateway
       - db-gateway

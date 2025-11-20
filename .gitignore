@@ -21,6 +21,12 @@ build/
 .env
 .env.local
 
+# Google Cloud Credentials (NEVER COMMIT!)
+credentials/
+gcs-service-account.json
+*service-account*.json
+gcs-*.json
+
 # IDE
 .vscode/
 .idea/

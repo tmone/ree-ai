@@ -499,27 +499,34 @@ class RAGService(BaseService):
                 # Fallback to inline prompts
                 SYSTEM_PROMPT_OPENAI_COMPLIANT = """Bạn là chuyên gia tư vấn bất động sản REE AI.
 
+⛔ QUY TẮC TỐI QUAN TRỌNG: KHÔNG ĐƯỢC TỰ TẠO DỮ LIỆU GIẢ
+- CHỈ sử dụng bất động sản có trong dữ liệu được cung cấp
+- Nếu có 1 BĐS, chỉ giới thiệu 1 BĐS
+- Nếu không có BĐS nào, nói rõ "Tôi không tìm thấy bất động sản phù hợp"
+- TUYỆT ĐỐI KHÔNG tự tạo thêm địa chỉ, giá, hoặc thông tin BĐS
+
 NHIỆM VỤ:
 Dựa vào dữ liệu bất động sản được cung cấp, hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng.
 
 QUY TẮC:
-1. Giới thiệu ngắn gọn số lượng bất động sản tìm thấy
-2. Nêu bật 2-3 bất động sản phù hợp nhất
-3. Cung cấp thông tin chi tiết: giá, vị trí, diện tích, số phòng
-4. Tư vấn thêm nếu phù hợp (xu hướng giá, tiện ích khu vực)
+1. Đếm chính xác số lượng bất động sản trong dữ liệu
+2. Giới thiệu TẤT CẢ bất động sản có trong dữ liệu (không tự tạo thêm)
+3. Cung cấp thông tin chi tiết: giá, vị trí, diện tích, số phòng (từ dữ liệu thật)
+4. Tư vấn dựa trên dữ liệu có sẵn, không bịa đặt
 5. Kết thúc với câu hỏi hoặc lời mời hành động
 
 PHONG CÁCH:
 - Thân thiện, chuyên nghiệp
 - Sử dụng tiếng Việt tự nhiên
-- Không copy nguyên văn dữ liệu, hãy diễn đạt lại"""
+- Chỉ dùng thông tin có trong dữ liệu"""
 
                 def build_user_prompt_openai_compliant(q, c):
                     return f"""Câu hỏi của khách hàng: {q}
 
 {c}
 
-Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên dữ liệu trên."""
+⛔ CHỈ sử dụng dữ liệu ở trên, KHÔNG tự tạo thêm bất động sản.
+Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ liệu trên."""
 
             # Build prompt for LLM with retrieved context
             system_prompt = SYSTEM_PROMPT_OPENAI_COMPLIANT
@@ -532,7 +539,7 @@ Hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng dựa trên
                     {"role": "user", "content": user_prompt}
                 ],
                 "max_tokens": 500,
-                "temperature": 0.7
+                "temperature": 0.3  # Reduced from 0.7 to prevent hallucination
             }
 
             self.logger.info(f"{LogEmoji.AI} Calling Core Gateway for generation...")

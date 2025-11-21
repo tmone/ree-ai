@@ -321,7 +321,8 @@ Respond with JSON only."""
                         primary_intent,
                         sale_keywords,
                         rent_keywords,
-                        possessive_keywords
+                        possessive_keywords,
+                        keyword_language  # Add language parameter for other intents
                     )
 
                     # Weighted combination (architecture: α * semantic + β * attribute)
@@ -462,7 +463,8 @@ Respond with JSON only."""
         primary_intent: str,
         sale_keywords: list,
         rent_keywords: list,
-        possessive_keywords: list
+        possessive_keywords: list,
+        language: str = 'vi'
     ) -> float:
         """
         Calculate keyword matching score (0.0 - 1.0)
@@ -478,6 +480,7 @@ Respond with JSON only."""
             sale_keywords: Sale keywords for language
             rent_keywords: Rent keywords for language
             possessive_keywords: Possessive keywords for language
+            language: Language code for loading additional intent keywords
 
         Returns:
             Keyword match score (0.0 - 1.0)
@@ -526,10 +529,31 @@ Respond with JSON only."""
             else:
                 return 0.0
 
+        # PRICE_CONSULTATION: Price inquiry
+        elif primary_intent == "PRICE_CONSULTATION":
+            # Load price consultation keywords from master data
+            price_keywords = i18n_loader.get_intent_keywords('price_consultation', language)
+            if any(kw in query_lower for kw in price_keywords):
+                return 1.0  # Perfect match
+            else:
+                return 0.0  # No keyword support
+
+        # PROPERTY_DETAIL: Property detail request
+        elif primary_intent == "PROPERTY_DETAIL":
+            # Load property detail keywords from master data
+            detail_keywords = i18n_loader.get_intent_keywords('property_detail', language)
+            if any(kw in query_lower for kw in detail_keywords):
+                return 1.0  # Perfect match
+            else:
+                return 0.0  # No keyword support
+
         # CHAT: General conversation
         elif primary_intent == "CHAT":
-            # If CHAT but has property keywords, penalize
-            if has_possessive or has_sale or has_rent:
+            # Load chat keywords from master data
+            chat_keywords = i18n_loader.get_intent_keywords('chat', language)
+            if any(kw in query_lower for kw in chat_keywords):
+                return 1.0  # Perfect match
+            elif has_possessive or has_sale or has_rent:
                 return 0.0  # Keywords contradict CHAT intent
             else:
                 return 0.5  # Neutral score for CHAT

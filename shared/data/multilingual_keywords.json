@@ -338,5 +338,127 @@
     "ja": [
       "違う", "間違い", "なぜ", "エラー", "おかしい"
     ]
+  },
+
+  "field_labels": {
+    "description": "i18n labels for property fields (NEVER hardcode field labels!)",
+    "vi": {
+      "title": "Tiêu đề",
+      "listing_type": "Loại tin",
+      "price": "Giá",
+      "location": "Vị trí",
+      "bedrooms": "Phòng ngủ",
+      "bathrooms": "Phòng tắm",
+      "area": "Diện tích",
+      "description": "Mô tả",
+      "property_type": "Loại hình",
+      "district": "Quận/Huyện",
+      "city": "Thành phố",
+      "contact_phone": "Số điện thoại",
+      "property_fallback": "Bất động sản",
+      "district_fallback": "khu vực này",
+      "contact_for_price": "Liên hệ",
+      "negotiable_price": "Giá thỏa thuận",
+      "dimensions": "Kích thước",
+      "images": "Hình ảnh",
+      "more_images": "và {count} ảnh khác",
+      "amenities": "Tiện ích",
+      "contact": "Liên hệ",
+      "width_depth": "ngang x dài"
+    },
+    "en": {
+      "title": "Title",
+      "listing_type": "Listing Type",
+      "price": "Price",
+      "location": "Location",
+      "bedrooms": "Bedrooms",
+      "bathrooms": "Bathrooms",
+      "area": "Area",
+      "description": "Description",
+      "property_type": "Property Type",
+      "district": "District",
+      "city": "City",
+      "contact_phone": "Contact Phone",
+      "property_fallback": "Property",
+      "district_fallback": "this area",
+      "contact_for_price": "Contact",
+      "negotiable_price": "Negotiable",
+      "dimensions": "Dimensions",
+      "images": "Images",
+      "more_images": "and {count} more images",
+      "amenities": "Amenities",
+      "contact": "Contact",
+      "width_depth": "width x depth"
+    },
+    "th": {
+      "title": "หัวข้อ",
+      "listing_type": "ประเภทประกาศ",
+      "price": "ราคา",
+      "location": "ที่ตั้ง",
+      "bedrooms": "ห้องนอน",
+      "bathrooms": "ห้องน้ำ",
+      "area": "พื้นที่",
+      "description": "คำอธิบาย",
+      "property_type": "ประเภททรัพย์สิน",
+      "district": "เขต",
+      "city": "เมือง",
+      "contact_phone": "โทรศัพท์ติดต่อ"
+    },
+    "ja": {
+      "title": "タイトル",
+      "listing_type": "物件タイプ",
+      "price": "価格",
+      "location": "場所",
+      "bedrooms": "寝室",
+      "bathrooms": "浴室",
+      "area": "面積",
+      "description": "説明",
+      "property_type": "物件種類",
+      "district": "区",
+      "city": "市",
+      "contact_phone": "連絡先電話"
+    }
+  },
+
+  "ui_messages": {
+    "description": "User interface messages and system responses (NEVER hardcode in code!)",
+    "vi": {
+      "please_prefix": "Vui lòng:",
+      "no_results": "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn.",
+      "no_results_suggestions": "Bạn có thể thử:\n- Tăng ngân sách hoặc mở rộng khu vực tìm kiếm\n- Điều chỉnh yêu cầu về diện tích hoặc số phòng\n- Cho tôi biết thêm chi tiết về nhu cầu của bạn",
+      "error_occurred": "Xin lỗi, tôi gặp sự cố khi tìm kiếm bất động sản.",
+      "error_retry": "Vui lòng thử lại sau hoặc liên hệ hỗ trợ nếu vấn đề vẫn tiếp tục.",
+      "image_analysis_prompt": "Phân tích hình ảnh này và cho tôi biết về bất động sản trong ảnh."
+    },
+    "en": {
+      "please_prefix": "Please:",
+      "no_results": "Sorry, I couldn't find any properties matching your requirements.",
+      "no_results_suggestions": "You may try:\n- Increase budget or expand search area\n- Adjust area or bedroom requirements\n- Provide more details about your needs",
+      "error_occurred": "Sorry, I encountered an issue while searching for properties.",
+      "error_retry": "Please try again later or contact support if the problem persists.",
+      "image_analysis_prompt": "Analyze this image and tell me about the property shown."
+    }
+  },
+
+  "price_display": {
+    "description": "Price formatting and display (NEVER hardcode formats!)",
+    "vi": {
+      "billion_format": "{value} tỷ",
+      "million_format": "{value} triệu",
+      "billion_vnd_format": "{value} tỷ VNĐ",
+      "million_vnd_format": "{value} triệu VNĐ",
+      "negotiable": "Thỏa thuận",
+      "negotiable_full": "Giá thỏa thuận",
+      "contact_for_price": "Liên hệ"
+    },
+    "en": {
+      "billion_format": "{value}B",
+      "million_format": "{value}M",
+      "billion_vnd_format": "{value} billion VND",
+      "million_vnd_format": "{value} million VND",
+      "negotiable": "Negotiable",
+      "negotiable_full": "Price negotiable",
+      "contact_for_price": "Contact for price"
+    }
   }
 }

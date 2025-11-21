@@ -27,6 +27,7 @@ from shared.models.orchestrator import (
 from shared.models.core_gateway import LLMRequest, Message, ModelType, FileAttachment
 from shared.utils.logger import LogEmoji
 from shared.config import settings
+from shared.utils.i18n_loader import get_i18n_loader
 
 
 
@@ -100,6 +101,9 @@ class Orchestrator(BaseService):
 
         # PostgreSQL connection pool for conversation memory
         self.db_pool = None
+
+        # i18n Master Data Loader - CRITICAL for multilingual compliance
+        self.i18n_loader = get_i18n_loader()
 
         self.logger.info(f"{LogEmoji.INFO} CTO Architecture Mode Enabled")
         self.logger.info(f"{LogEmoji.INFO} Conversation Memory: PostgreSQL")
@@ -1451,8 +1455,9 @@ Standalone query:"""
             # Build property list
             properties_text = []
             for idx, prop in enumerate(results[:5], 1):  # Top 5 only
-                title = prop.get("title", "Bất động sản")
-                price = prop.get("price", "Liên hệ")
+                field_labels = self.i18n_loader.get_field_labels('vi')
+                title = prop.get("title", field_labels['property_fallback'])
+                price = prop.get("price", field_labels['contact_for_price'])
                 area = prop.get("area", "")
                 bedrooms = prop.get("bedrooms")
 
@@ -1577,8 +1582,9 @@ Bạn quan tâm căn nào? Hoặc muốn tìm với tiêu chí cụ thể hơn?"
         response_parts = [t('search.found_properties', language=language, count=len(results)) + ":\n"]
 
         for i, prop in enumerate(results[:3], 1):  # Top 3
-            title = prop.get("title", "Không có tiêu đề")
-            price = prop.get("price_display", prop.get("price", "Liên hệ"))
+            field_labels = self.i18n_loader.get_field_labels('vi')
+            title = prop.get("title", field_labels['property_fallback'])
+            price = prop.get("price_display", prop.get("price", field_labels['contact_for_price']))
             area = prop.get("area", "N/A")
             location = prop.get("district", prop.get("region", "N/A"))
 
@@ -1851,8 +1857,9 @@ Respond like a real person, not a mechanical chatbot!"""
         try:
             self.logger.info(f"{LogEmoji.AI} [Property Posting] Intent: {primary_intent}")
 
-            # Determine transaction type from intent
-            transaction_type = "bán" if primary_intent == "POST_SALE" else "cho thuê"
+            # Determine transaction type from intent - Load from master data (NEVER hardcode!)
+            listing_type_display = self.i18n_loader.get_listing_type_display('vi')
+            transaction_type = listing_type_display['sale'] if primary_intent == "POST_SALE" else listing_type_display['rent']
 
             # INTERNAL REASONING LOOP CONFIGURATION
             MAX_ITERATIONS = 5
@@ -2030,7 +2037,8 @@ Re-extract property attributes with improved understanding. Focus on filling mis
 
                             error_message = f"{summary}\n\n"
                             if next_steps:
-                                error_message += "Vui lòng:\n" + "\n".join(f"• {step}" for step in next_steps)
+                                please_prefix = self.i18n_loader.get_ui_message('please_prefix', 'vi')
+                                error_message += f"{please_prefix}:\n" + "\n".join(f"• {step}" for step in next_steps)
 
                             self.logger.warning(f"{LogEmoji.WARNING} [Validation] Property validation failed: {summary}")
                             return error_message
@@ -3327,8 +3335,9 @@ Query mới:"""
                     prop = item["property"]
                     score = item["score"]
 
-                    title = prop.get("title", "Không có tiêu đề")
-                    price = prop.get("price_display", prop.get("price", "Liên hệ"))
+                    field_labels = self.i18n_loader.get_field_labels('vi')
+                    title = prop.get("title", field_labels['property_fallback'])
+                    price = prop.get("price_display", prop.get("price", field_labels['contact_for_price']))
                     area = prop.get("area", "N/A")
                     location = prop.get("district", prop.get("region", "N/A"))
                     prop_bedrooms = prop.get("bedrooms") or prop.get("bedroom", "N/A")
@@ -4002,25 +4011,30 @@ Nearby districts:"""
         try:
             self.logger.info(f"{LogEmoji.INFO} [Save Property] Preparing to save property for user {user_id}")
 
-            # Map Vietnamese transaction type to ListingType enum
-            listing_type = "sale" if transaction_type == "bán" else "rent"
+            # Map Vietnamese transaction type to ListingType enum - Load from master data
+            listing_type_display = self.i18n_loader.get_listing_type_display('vi')
+            listing_type = "sale" if transaction_type == listing_type_display['sale'] else "rent"
 
-            # Build fallback title and description if not provided
-            fallback_title = f"{entities.get('property_type', 'Property').title()} in {entities.get('district', 'Unknown')}"
+            # Build fallback title and description if not provided - Load from master data
+            field_labels = self.i18n_loader.get_field_labels('vi')
+            property_fallback = field_labels['property_fallback']
+            district_fallback = field_labels['district_fallback']
+
+            fallback_title = f"{entities.get('property_type', property_fallback).title()} in {entities.get('district', district_fallback)}"
             if entities.get('bedrooms'):
                 fallback_title = f"{entities.get('bedrooms')}BR {fallback_title}"
 
             # Create detailed fallback description (minimum 50 chars required)
             fallback_description_parts = [
-                f"{entities.get('property_type', 'Property').title()} for {listing_type}",
-                f"located in {entities.get('district', 'Unknown')}, {entities.get('city', 'Ho Chi Minh City')}."
+                f"{entities.get('property_type', property_fallback).title()} for {listing_type}",
+                f"located in {entities.get('district', district_fallback)}, {entities.get('city', district_fallback)}."
             ]
             if entities.get('area'):
-                fallback_description_parts.append(f"Area: {entities.get('area')} m².")
+                fallback_description_parts.append(f"{field_labels['dimensions']}: {entities.get('area')} m².")
             if entities.get('bedrooms'):
-                fallback_description_parts.append(f"Bedrooms: {entities.get('bedrooms')}.")
+                fallback_description_parts.append(f"{field_labels['bedrooms']}: {entities.get('bedrooms')}.")
             if entities.get('price'):
-                fallback_description_parts.append(f"Price: {entities.get('price'):,.0f} VND.")
+                fallback_description_parts.append(f"{field_labels['price']}: {entities.get('price'):,.0f} VND.")
 
             fallback_description = " ".join(fallback_description_parts)
 
@@ -4159,6 +4173,8 @@ Nearby districts:"""
             entities_text = "\n".join(entity_summary) if entity_summary else "Property details provided"
 
             # Build prompt for completion message
+            property_saved_status = "PROPERTY SAVED SUCCESSFULLY ✅" if property_id else "PROPERTY READY (not saved yet)"
+
             prompt = f"""You are a helpful real estate assistant. The user has provided all necessary information for their property posting.
 
 **USER LANGUAGE**: {language} (CRITICAL: Respond ONLY in this language!)
@@ -4168,11 +4184,13 @@ Nearby districts:"""
 
 **COMPLETENESS SCORE**: {overall_score}/100 (Complete!)
 
+**STATUS**: {property_saved_status}
+
 **YOUR TASK**:
 Generate a warm, congratulatory closing message in **{language} language** that:
 1. Congratulates user on providing complete information ✅
-2. Briefly summarizes the key property details
-3. Informs them the posting is ready to be published
+2. {"CLEARLY STATES that the property HAS BEEN SAVED/PUBLISHED ✅" if property_id else "Informs them the posting is ready"}
+3. Briefly summarizes the key property details
 4. Thanks them for using the service
 5. Offers to help with anything else if needed
 
@@ -4181,6 +4199,7 @@ Generate a warm, congratulatory closing message in **{language} language** that:
 - Use emojis appropriately: ✅ 🎉 🏠 💚
 - Keep it concise (3-4 sentences max)
 - CRITICAL: Write EVERYTHING in {language} language!
+{"- MUST mention that property has been saved/published successfully!" if property_id else ""}
 
 **OUTPUT** (in {language} language):"""
 
@@ -4849,8 +4868,9 @@ Generate a professional price consultation report in **{language} language** tha
 
                 # Prioritize matching properties
                 if matches_district or shown < 2:
-                    title = prop.get("title", "Không có tiêu đề")
-                    price = prop.get("price_display", prop.get("price", "Liên hệ"))
+                    field_labels = self.i18n_loader.get_field_labels('vi')
+                    title = prop.get("title", field_labels['property_fallback'])
+                    price = prop.get("price_display", prop.get("price", field_labels['contact_for_price']))
                     area = prop.get("area", "N/A")
                     location = prop.get("district", prop.get("region", "N/A"))
 
@@ -4919,6 +4939,8 @@ Generate a professional price consultation report in **{language} language** tha
             # Convert string IDs to deterministic UUIDs
             conv_uuid = self._string_to_uuid(conversation_id)
 
+            self.logger.debug(f"{LogEmoji.INFO} [History] Querying messages for conversation_id={conversation_id}, uuid={conv_uuid}")
+
             async with self.db_pool.acquire() as conn:
                 # Get last N messages from conversation
                 # Note: message.data is JSON containing role info
@@ -4930,9 +4952,11 @@ Generate a professional price consultation report in **{language} language** tha
                     ORDER BY created_at DESC
                     LIMIT $2
                     """,
-                    conv_uuid,
+                    str(conv_uuid),
                     limit
                 )
+
+                self.logger.debug(f"{LogEmoji.INFO} [History] Found {len(rows)} messages for conversation {conversation_id}")
 
                 # Reverse to chronological order
                 messages = []
@@ -4942,21 +4966,31 @@ Generate a professional price consultation report in **{language} language** tha
                         "content": row['content']
                     })
 
+                if messages:
+                    self.logger.info(f"{LogEmoji.INFO} [History] Retrieved {len(messages)} messages from conversation {conversation_id}")
+                else:
+                    self.logger.debug(f"{LogEmoji.INFO} [History] No messages found for conversation {conversation_id}")
+
                 return messages
 
         except Exception as e:
             self.logger.warning(f"{LogEmoji.WARNING} Failed to retrieve conversation history: {e}")
+            import traceback
+            self.logger.debug(f"{LogEmoji.WARNING} Traceback: {traceback.format_exc()}")
             return []
 
     async def _save_message(self, user_id: str, conversation_id: str, role: str, content: str, metadata: Dict = None):
         """Save message to PostgreSQL conversation history"""
         if not self.db_pool:
+            self.logger.debug(f"{LogEmoji.WARNING} [Save] No DB pool available, skipping message save")
             return
 
         try:
             # Convert string IDs to deterministic UUIDs
             user_uuid = self._string_to_uuid(user_id)
             conv_uuid = self._string_to_uuid(conversation_id)
+
+            self.logger.debug(f"{LogEmoji.INFO} [Save] Saving {role} message to conversation_id={conversation_id}, uuid={conv_uuid}")
 
             # Using current Unix timestamp in milliseconds
             current_time = int(time.time() * 1000)
@@ -4969,7 +5003,7 @@ Generate a professional price consultation report in **{language} language** tha
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     ON CONFLICT (id) DO UPDATE SET last_active_at = $8
                     """,
-                    user_uuid,
+                    str(user_uuid),
                     user_id,  # name
                     f"{user_id}@system.local",  # email
                     "user",  # role
@@ -4986,8 +5020,8 @@ Generate a professional price consultation report in **{language} language** tha
                     VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (id) DO UPDATE SET updated_at = $6
                     """,
-                    conv_uuid,
-                    user_uuid,
+                    str(conv_uuid),
+                    str(user_uuid),
                     "Property Posting",  # Default title
                     False,  # archived
                     current_time,
@@ -5005,8 +5039,8 @@ Generate a professional price consultation report in **{language} language** tha
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                     """,
                     msg_id,
-                    user_uuid,
-                    conv_uuid,  # channel_id links to chat.id
+                    str(user_uuid),
+                    str(conv_uuid),  # channel_id links to chat.id
                     content,
                     json.dumps({"role": role}),  # Store role in data field
                     json.dumps(metadata or {}),
@@ -5014,8 +5048,12 @@ Generate a professional price consultation report in **{language} language** tha
                     current_time
                 )
 
+                self.logger.debug(f"{LogEmoji.SUCCESS} [Save] Message saved successfully: role={role}, msg_id={msg_id}, channel_id={conv_uuid}")
+
         except Exception as e:
             self.logger.warning(f"{LogEmoji.WARNING} Failed to save message: {e}")
+            import traceback
+            self.logger.debug(f"{LogEmoji.WARNING} Save traceback: {traceback.format_exc()}")
 
     async def on_shutdown(self):
         """Cleanup resources on shutdown"""

@@ -5,6 +5,7 @@ Enhanced with Redis caching for 400x performance improvement
 UPDATED 2025-11-16: Added CHAT intent detection for general conversations
 UPDATED 2025-11-16 v2: Fixed CHAT vs ACTION intent priority (actions take precedence)
 UPDATED 2025-11-16 v3: Refactored to use language-agnostic English prompts (i18n ready)
+UPDATED 2025-11-21: CRITICAL i18n compliance - load keywords from master data
 """
 import httpx
 import os
@@ -18,6 +19,10 @@ from shared.config import settings
 from shared.utils.logger import LogEmoji
 from shared.utils.redis_cache import get_cache
 from shared.utils.i18n import t
+from shared.utils.i18n_loader import get_i18n_loader
+
+# Load master data - NEVER hardcode keywords!
+i18n_loader = get_i18n_loader()
 
 
 def load_prompt(filename: str) -> str:
@@ -389,14 +394,15 @@ Respond with JSON only."""
             "muốn tìm",         # "want to find"
         ]
 
-        sale_keywords = ["bán", "mua"]
-        rent_keywords = ["cho thuê", "thuê"]
+        # Load transaction type keywords from master data
+        sale_keywords_vi = i18n_loader.get_listing_type_keywords('sale', 'vi')
+        rent_keywords_vi = i18n_loader.get_listing_type_keywords('rent', 'vi')
 
         is_posting = any(kw in query_lower for kw in posting_keywords)
         is_searching = any(kw in query_lower for kw in search_keywords) or not is_posting  # Default to search
 
-        is_sale = any(kw in query_lower for kw in sale_keywords)
-        is_rent = any(kw in query_lower for kw in rent_keywords)
+        is_sale = any(kw in query_lower for kw in sale_keywords_vi)
+        is_rent = any(kw in query_lower for kw in rent_keywords_vi)
 
         # Determine primary intent
         if is_posting and is_sale:

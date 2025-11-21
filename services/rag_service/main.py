@@ -11,6 +11,8 @@ BACKWARD COMPATIBLE: Falls back to basic pipeline if advanced components unavail
 import os
 import uuid
 import time
+import json
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import HTTPException
 from pydantic import BaseModel
@@ -21,6 +23,12 @@ from shared.utils.logger import LogEmoji, StructuredLogger, setup_logger
 from shared.utils.http_client import HTTPClientFactory
 from shared.utils.retry import retry_on_http_error
 from shared.exceptions import ServiceUnavailableError, RAGPipelineError
+from shared.utils.i18n_loader import get_i18n_loader
+
+# Load master data using i18n_loader - NEVER hardcode display names or field labels!
+i18n_loader = get_i18n_loader()
+LISTING_TYPE_DISPLAY = i18n_loader.get_listing_type_display('vi')
+FIELD_LABELS = i18n_loader.get_field_labels('vi')
 
 # Try importing advanced RAG components
 try:
@@ -340,8 +348,9 @@ class RAGService(BaseService):
         )
 
         if not retrieved_properties:
+            no_results_msg = i18n_loader.get_ui_message('no_results', 'vi')
             return RAGQueryResponse(
-                response="Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn.",
+                response=no_results_msg,
                 retrieved_count=0,
                 confidence=0.0,
                 sources=[],
@@ -439,17 +448,25 @@ class RAGService(BaseService):
 
         for i, prop in enumerate(properties, 1):
             context_parts.append(f"## BẤT ĐỘNG SẢN #{i}\n")
-            context_parts.append(f"- **Tiêu đề**: {prop.get('title', 'N/A')}\n")
+            # Use i18n field labels from master data
+            context_parts.append(f"- **{FIELD_LABELS['title']}**: {prop.get('title', 'N/A')}\n")
+
+            # Listing Type - CRITICAL: Show sale/rent info using master data
+            listing_type = prop.get('listing_type', 'N/A')
+            if listing_type != 'N/A':
+                # Get display name from master data (never hardcode!)
+                listing_type_display = LISTING_TYPE_DISPLAY.get(listing_type, listing_type)
+                context_parts.append(f"- **{FIELD_LABELS['listing_type']}**: {listing_type_display}\n")
 
             # Price - use price_display if available (normalized format)
             price_display = prop.get('price_display')
             if price_display:
-                context_parts.append(f"- **Giá**: {price_display}\n")
+                context_parts.append(f"- **{FIELD_LABELS['price']}**: {price_display}\n")
             else:
                 price = prop.get('price', 0)
                 if isinstance(price, (int, float)) and price > 0:
                     price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
-                    context_parts.append(f"- **Giá**: {price_str}\n")
+                    context_parts.append(f"- **{FIELD_LABELS['price']}**: {price_str}\n")
 
             # Location - use city/district if available
             city = prop.get('city', '')
@@ -457,27 +474,27 @@ class RAGService(BaseService):
             ward = prop.get('ward', '')
             location_parts = [p for p in [ward, district, city] if p]
             location_str = ', '.join(location_parts) if location_parts else prop.get('location', 'N/A')
-            context_parts.append(f"- **Vị trí**: {location_str}\n")
+            context_parts.append(f"- **{FIELD_LABELS['location']}**: {location_str}\n")
 
             # Attributes
             if prop.get('bedrooms'):
-                context_parts.append(f"- **Phòng ngủ**: {prop['bedrooms']}\n")
+                context_parts.append(f"- **{FIELD_LABELS['bedrooms']}**: {prop['bedrooms']}\n")
             if prop.get('bathrooms'):
-                context_parts.append(f"- **Phòng tắm**: {prop['bathrooms']}\n")
+                context_parts.append(f"- **{FIELD_LABELS['bathrooms']}**: {prop['bathrooms']}\n")
 
             # Area - use area_display if available (normalized format)
             area_display = prop.get('area_display')
             if area_display:
-                context_parts.append(f"- **Diện tích**: {area_display}\n")
+                context_parts.append(f"- **{FIELD_LABELS['area']}**: {area_display}\n")
             elif prop.get('area'):
                 area = prop['area']
                 area_str = f"{area} m²" if isinstance(area, (int, float)) else str(area)
-                context_parts.append(f"- **Diện tích**: {area_str}\n")
+                context_parts.append(f"- **{FIELD_LABELS['area']}**: {area_str}\n")
 
             # Description excerpt
             if prop.get('description'):
                 desc = prop['description'][:200]
-                context_parts.append(f"- **Mô tả**: {desc}...\n")
+                context_parts.append(f"- **{FIELD_LABELS['description']}**: {desc}...\n")
 
             context_parts.append("\n")
 
@@ -566,7 +583,7 @@ Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ
     def _format_simple_response(self, properties: List[Dict[str, Any]]) -> str:
         """Fallback: Simple formatting without LLM generation"""
         if not properties:
-            return "Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn."
+            return i18n_loader.get_ui_message('no_results', 'vi')
 
         response_parts = [f"Tôi đã tìm thấy {len(properties)} bất động sản phù hợp:\n\n"]
 
@@ -576,9 +593,10 @@ Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ
             if not price_str:
                 price = prop.get('price', 0)
                 if isinstance(price, (int, float)) and price > 0:
-                    price_str = f"{price/1_000_000_000:.1f} tỷ"
+                    # Format price using i18n_loader
+                    price_str = i18n_loader.format_price(price, 'vi')
                 else:
-                    price_str = "Giá thỏa thuận"
+                    price_str = i18n_loader.get_price_format('negotiable', 'vi')
 
             # Use district/city if available
             location_str = prop.get('district', prop.get('location', 'N/A'))

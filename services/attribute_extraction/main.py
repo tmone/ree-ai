@@ -27,6 +27,7 @@ from shared.utils.logger import LogEmoji
 from shared.utils.query_normalizer import normalize_query  # ITERATION 4: Query normalization
 from shared.utils.i18n import t
 from shared.i18n import get_multilingual_mapper
+from shared.utils.i18n_loader import get_i18n_loader
 from shared.models.attribute_extraction import ExtractionRequest, ExtractionResponse
 
 
@@ -98,6 +99,9 @@ class AttributeExtractionService(BaseService):
 
         # ITERATION 4: Initialize regex extractor (baseline fallback)
         self.regex_extractor = SimpleRegexExtractor()
+
+        # i18n Master Data Loader - CRITICAL for multilingual compliance
+        self.i18n_loader = get_i18n_loader()
 
         # NEW: Initialize admin routes
         self.admin_routes = AdminRoutes()
@@ -455,11 +459,16 @@ class AttributeExtractionService(BaseService):
                     original_value = normalized_entities["listing_type"]
                     value_lower = original_value.lower().strip() if original_value else ""
 
-                    # Simple mapping for common Vietnamese keywords
-                    listing_type_map = {
-                        "cho thuê": "rent", "cho thue": "rent", "thuê": "rent", "thue": "rent",
-                        "bán": "sale", "ban": "sale", "cần bán": "sale", "can ban": "sale"
-                    }
+                    # Load listing type keywords from master data (NEVER hardcode!)
+                    sale_keywords = self.i18n_loader.get_listing_type_keywords('sale', 'vi')
+                    rent_keywords = self.i18n_loader.get_listing_type_keywords('rent', 'vi')
+
+                    # Build mapping dynamically from master data
+                    listing_type_map = {}
+                    for kw in sale_keywords:
+                        listing_type_map[kw.lower()] = "sale"
+                    for kw in rent_keywords:
+                        listing_type_map[kw.lower()] = "rent"
 
                     normalized_value = listing_type_map.get(value_lower, original_value)
                     if normalized_value != original_value:

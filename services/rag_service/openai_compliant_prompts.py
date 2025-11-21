@@ -15,6 +15,11 @@ References:
 Last Updated: 2025-11-01
 """
 
+from shared.utils.i18n_loader import get_i18n_loader
+
+# Load i18n for multilingual compliance
+_i18n_loader = get_i18n_loader()
+
 # ============================================
 # SYSTEM PROMPTS
 # ============================================
@@ -174,16 +179,21 @@ Generate a natural, helpful response following the guidelines above. Remember:
 # FALLBACK RESPONSES (No Marketing)
 # ============================================
 
-FALLBACK_NO_RESULTS = """Xin lỗi, tôi không tìm thấy bất động sản phù hợp với yêu cầu của bạn.
+def get_fallback_no_results(lang='vi'):
+    """Get no results message from master data (i18n compliant)"""
+    no_results = _i18n_loader.get_ui_message('no_results', lang)
+    suggestions = _i18n_loader.get_ui_message('no_results_suggestions', lang)
+    return f"{no_results}\n\n{suggestions}"
 
-Bạn có thể thử:
-- Tăng ngân sách hoặc mở rộng khu vực tìm kiếm
-- Điều chỉnh yêu cầu về diện tích hoặc số phòng
-- Cho tôi biết thêm chi tiết về nhu cầu của bạn"""
+def get_fallback_error(lang='vi'):
+    """Get error message from master data (i18n compliant)"""
+    error_msg = _i18n_loader.get_ui_message('error_occurred', lang)
+    retry_msg = _i18n_loader.get_ui_message('error_retry', lang)
+    return f"{error_msg}\n\n{retry_msg}"
 
-FALLBACK_ERROR = """Xin lỗi, tôi gặp sự cố khi tìm kiếm bất động sản.
-
-Vui lòng thử lại sau hoặc liên hệ hỗ trợ nếu vấn đề vẫn tiếp tục."""
+# Legacy constants for backward compatibility (deprecated - use functions above)
+FALLBACK_NO_RESULTS = get_fallback_no_results('vi')
+FALLBACK_ERROR = get_fallback_error('vi')
 
 
 # ============================================

@@ -1,9 +1,16 @@
 You are an expert at classifying real estate queries in ANY language.
 
+**🚨 CRITICAL: CONFIDENCE REQUIREMENTS 🚨**
+- Price questions (giá, how much, worth, valuation) → PRICE_CONSULTATION with confidence ≥0.85
+- Greetings (xin chào, hello, bạn là ai, who are you) → CHAT with confidence ≥0.90
+- "Help me"/"Giúp tôi" without context → CHAT with confidence ≥0.90
+- Capability questions (what can you do, bạn có thể làm gì) → CHAT with confidence ≥0.90
+
 Your tasks:
 1. Classify query MODE (filter/semantic/both)
 2. Detect ALL intents in the query (multi-intent support)
 3. Work with queries in ANY language (Vietnamese, English, Thai, Indonesian, etc.)
+4. **FOLLOW the confidence guidelines above - DO NOT return low confidence for obvious queries!**
 
 **🚨 CRITICAL: CONVERSATION CONTEXT AWARENESS 🚨**
 
@@ -135,14 +142,19 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
      - "weather", "food recommendations", "how are you"
      - Vietnamese: "thời tiết", "ăn gì ngon"
 
-  **Examples of CHAT intent:**
-  ✅ "Xin chào" → intents: ["CHAT"], primary: "CHAT"
-  ✅ "Hello" → intents: ["CHAT"], primary: "CHAT"
-  ✅ "Bạn là ai?" → intents: ["CHAT"], primary: "CHAT"
-  ✅ "What can you do?" → intents: ["CHAT"], primary: "CHAT"
-  ✅ "Giúp tôi với" (vague, no context) → intents: ["CHAT"], primary: "CHAT"
-  ✅ "How are you?" → intents: ["CHAT"], primary: "CHAT"
-  ✅ "What is real estate?" → intents: ["CHAT"], primary: "CHAT"
+  **⚠️ CRITICAL: Greetings and general questions are ALWAYS CHAT with HIGH confidence (≥0.90)!**
+
+  **Examples of CHAT intent (MUST classify as CHAT):**
+  ✅ "Xin chào" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "Hello" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "Bạn là ai?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "Who are you?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "What can you do?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "Bạn có thể làm gì?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "Giúp tôi với" (vague, no context) → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.90
+  ✅ "Help me" (vague, no context) → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.90
+  ✅ "How are you?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.95
+  ✅ "What is real estate?" → intents: ["CHAT"], primary: "CHAT", confidence: ≥0.90
 
   **CRITICAL - HOW TO questions about posting/renting ARE actions, NOT chat:**
   - ❌ "How to rent out my house?" → POST_RENT (action intent!)
@@ -168,13 +180,17 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
   - Vietnamese: "giá bao nhiêu", "hỏi giá", "tư vấn giá", "định giá", "giá thị trường"
   - "is it reasonable", "fair price", "worth it"
 
-  **Examples of PRICE_CONSULTATION intent:**
-  ✅ "Nhà tôi giá bao nhiêu?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
-  ✅ "Giá căn hộ này hợp lý không?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
-  ✅ "Tư vấn giá bất động sản" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
-  ✅ "What's the market price?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
-  ✅ "How much is my house worth?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
-  ✅ "Property valuation in District 7" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  **⚠️ CRITICAL: Price questions are ALWAYS PRICE_CONSULTATION with HIGH confidence (≥0.85)!**
+
+  **Examples of PRICE_CONSULTATION intent (MUST classify as PRICE_CONSULTATION):**
+  ✅ "Nhà tôi giá bao nhiêu?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
+  ✅ "Giá căn hộ này hợp lý không?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.85
+  ✅ "Tư vấn giá bất động sản" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
+  ✅ "What's the market price?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
+  ✅ "What's the market price in District 2?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
+  ✅ "How much is my house worth?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.95
+  ✅ "Is this price reasonable?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
+  ✅ "Property valuation in District 7" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION", confidence: ≥0.90
 
   **NOT PRICE_CONSULTATION (these are actions):**
   ❌ "Find house under 3 billion" → SEARCH_BUY (has specific price filter)

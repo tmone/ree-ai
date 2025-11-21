@@ -209,20 +209,19 @@ class Orchestrator(BaseService):
                     )
 
                 # Step 0: Auto-detect language if not specified
-                if not request.language or request.language == "vi":
-                    # Try to detect language from query or user profile
+                if not request.language or request.language in ["vi", "auto"]:
+                    # Try to detect language from query using langdetect
                     try:
-                        detected_lang = await auto_detect_language(
-                            user_id=request.user_id,
-                            accept_language=None,  # Not available in this context
-                            default=request.language or "vi"
+                        detected_lang = self._detect_language(
+                            history=[],  # No history available yet
+                            entities=None,
+                            current_query=request.query
                         )
-                        if detected_lang != request.language:
-                            request.language = detected_lang
-                            self.logger.info(f"{LogEmoji.INFO} [{request_id}] Auto-detected language: {request.language}")
+                        request.language = detected_lang
+                        self.logger.info(f"{LogEmoji.INFO} [{request_id}] Auto-detected language: {request.language}")
                     except Exception as e:
                         self.logger.warning(f"{LogEmoji.WARNING} [{request_id}] Language detection failed: {e}")
-                        request.language = request.language or "vi"
+                        request.language = "vi"
                 else:
                     self.logger.info(f"{LogEmoji.INFO} [{request_id}] Using specified language: {request.language}")
 

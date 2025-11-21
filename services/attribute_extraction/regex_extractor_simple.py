@@ -1,34 +1,48 @@
 """
-Simple Regex Extractor with Hardcoded Patterns
-NO PostgreSQL dependency - uses patterns from multilingual_keywords.json
+Simple Regex Extractor - i18n Compliant
+RULE #0 COMPLIANT: ALL patterns loaded from multilingual_keywords.json
+NO hardcoded keywords - system MUST FAIL if master data unavailable
 Provides guaranteed baseline extraction for common patterns
 """
 import re
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Tuple
 
 
 class SimpleRegexExtractor:
     """
-    Regex-based attribute extractor with hardcoded patterns.
+    Regex-based attribute extractor with i18n-compliant patterns.
     Serves as Layer 1 baseline extraction before LLM.
+
+    RULE #0 COMPLIANT: All patterns loaded from master data at runtime.
     """
 
     def __init__(self):
-        """Initialize with hardcoded patterns from master data"""
+        """Initialize with patterns from master data (RULE #0 compliant)"""
         self._load_patterns()
 
     def _load_patterns(self):
-        """Load patterns from multilingual_keywords.json"""
+        """
+        Load ALL patterns from multilingual_keywords.json
+
+        RULE #0: System MUST FAIL if master data unavailable (no fallbacks!)
+        """
         # Load keywords file
         keywords_path = Path(__file__).parent.parent.parent / "shared" / "data" / "multilingual_keywords.json"
-        with open(keywords_path, 'r', encoding='utf-8') as f:
-            keywords = json.load(f)
 
-        # Build district patterns
+        try:
+            with open(keywords_path, 'r', encoding='utf-8') as f:
+                self.keywords = json.load(f)
+        except Exception as e:
+            raise RuntimeError(
+                f"[CRITICAL] Failed to load master data from {keywords_path}. "
+                f"RULE #0 violation: System cannot operate without master data! Error: {e}"
+            )
+
+        # Build district patterns from master data
         self.district_patterns = []
-        district_config = keywords.get("district_abbreviations", {}).get("patterns", {})
+        district_config = self.keywords.get("district_abbreviations", {}).get("patterns", {})
         for abbr in district_config.keys():
             # Prevent matching digits before abbreviation (e.g., "10Q1" shouldn't match)
             if re.match(r'^[QD]\d+$', abbr):
@@ -36,56 +50,206 @@ class SimpleRegexExtractor:
             else:
                 self.district_patterns.append(f'\\b{re.escape(abbr)}\\b')
 
-        # Hardcoded property type patterns
-        self.property_type_patterns = [
-            (r'\b(apartment|căn hộ|can ho|condo)\b', 'apartment'),
-            (r'\b(villa|biệt thự|biet thu)\b', 'villa'),
-            (r'\b(townhouse|nhà phố|nha pho|shophouse)\b', 'townhouse'),
-            (r'\b(house|nhà|nha)\b', 'house'),
-            (r'\b(land|đất|dat)\b', 'land'),
-            (r'\b(office|văn phòng|van phong)\b', 'office'),
-        ]
+        # Build property type patterns from master data (RULE #0 compliant)
+        self.property_type_patterns = self._build_property_type_patterns()
 
-        # Listing type patterns
-        self.listing_type_patterns = [
-            (r'\b(cho thuê|cho thue|thuê|thue|rent|rental|for rent)\b', 'rent'),
-            (r'\b(bán|ban|cần bán|can ban|sale|sell|for sale)\b', 'sale'),
-        ]
+        # Build listing type patterns from master data (RULE #0 compliant)
+        self.listing_type_patterns = self._build_listing_type_patterns()
 
-        # Price patterns
-        self.price_patterns = [
-            # Zero price
-            (r'\b(price|giá|gia)\s*:?\s*0\b', 0),
-            # Price with "tỷ" (billion VND)
-            (r'(\d+(?:\.\d+)?)\s*(?:tỷ|ty|B|billion)', lambda m: float(m.group(1)) * 1_000_000_000),
-            # Price with "triệu" (million VND)
-            (r'(\d+(?:\.\d+)?)\s*(?:triệu|trieu|M|million)', lambda m: float(m.group(1)) * 1_000_000),
-            # Price range - under
-            (r'(?:under|dưới|duoi|below)\s*(\d+(?:\.\d+)?)\s*(?:tỷ|ty|B|billion)',
-             lambda m: {'max_price': float(m.group(1)) * 1_000_000_000}),
-            (r'(?:under|dưới|duoi|below)\s*(\d+(?:\.\d+)?)\s*(?:triệu|trieu|M|million)',
-             lambda m: {'max_price': float(m.group(1)) * 1_000_000}),
-            # Price range - over
-            (r'(?:over|trên|tren|above)\s*(\d+(?:\.\d+)?)\s*(?:tỷ|ty|B|billion)',
-             lambda m: {'min_price': float(m.group(1)) * 1_000_000_000}),
-            (r'(?:over|trên|tren|above)\s*(\d+(?:\.\d+)?)\s*(?:triệu|trieu|M|million)',
-             lambda m: {'min_price': float(m.group(1)) * 1_000_000}),
-        ]
+        # Build price patterns from master data (RULE #0 compliant)
+        self.price_patterns = self._build_price_patterns()
 
-        # Bedroom patterns
-        self.bedroom_patterns = [
-            (r'(\d+)\s*(?:BR|bedroom|bedrooms|phòng ngủ|phong ngu|PN)\b', lambda m: int(m.group(1))),
-        ]
+        # Build bedroom patterns from master data (RULE #0 compliant)
+        self.bedroom_patterns = self._build_bedroom_patterns()
 
-        # Bathroom patterns
-        self.bathroom_patterns = [
-            (r'(\d+)\s*(?:bathroom|bathrooms|phòng tắm|phong tam|WC|toilet)\b', lambda m: int(m.group(1))),
-        ]
+        # Build bathroom patterns from master data (RULE #0 compliant)
+        self.bathroom_patterns = self._build_bathroom_patterns()
 
-        # Area patterns
-        self.area_patterns = [
-            (r'(\d+(?:\.\d+)?)\s*(?:m2|m²|sqm|square meter)', lambda m: float(m.group(1))),
-        ]
+        # Build area patterns from master data (RULE #0 compliant)
+        self.area_patterns = self._build_area_patterns()
+
+    def _build_property_type_patterns(self) -> List[Tuple[str, str]]:
+        """
+        Build property type regex patterns from master data
+
+        RULE #0: Load from multilingual_keywords.json, NO hardcoding!
+        """
+        patterns = []
+        property_types = self.keywords.get("property_types", {})
+
+        # For each property type, build regex from vi/en keywords
+        for prop_type_key, langs in property_types.items():
+            if prop_type_key == "description":
+                continue
+
+            if isinstance(langs, dict):
+                # Collect all keywords from all languages
+                all_keywords = []
+
+                if "vi" in langs:
+                    all_keywords.extend(langs["vi"])
+                if "en" in langs:
+                    all_keywords.extend(langs["en"])
+                if "th" in langs:
+                    all_keywords.extend(langs.get("th", []))
+                if "ja" in langs:
+                    all_keywords.extend(langs.get("ja", []))
+
+                # Build regex pattern
+                if all_keywords:
+                    # Escape special regex characters
+                    escaped = [re.escape(kw) for kw in all_keywords]
+                    pattern = r'\b(' + '|'.join(escaped) + r')\b'
+                    patterns.append((pattern, prop_type_key))
+
+        return patterns
+
+    def _build_listing_type_patterns(self) -> List[Tuple[str, str]]:
+        """
+        Build listing type (rent/sale) regex patterns from master data
+
+        RULE #0: Load from multilingual_keywords.json, NO hardcoding!
+        """
+        patterns = []
+        listing_type_config = self.keywords.get("attribute_keywords", {}).get("listing_type", {})
+
+        if "values" in listing_type_config:
+            for listing_value, langs in listing_type_config["values"].items():
+                # Collect keywords from all languages
+                all_keywords = []
+
+                for lang_code in ["vi", "en", "th", "ja"]:
+                    if lang_code in langs:
+                        all_keywords.extend(langs[lang_code])
+
+                # Build regex pattern
+                if all_keywords:
+                    escaped = [re.escape(kw) for kw in all_keywords]
+                    pattern = r'\b(' + '|'.join(escaped) + r')\b'
+                    patterns.append((pattern, listing_value))
+
+        return patterns
+
+    def _build_price_patterns(self) -> List[Tuple[str, Any]]:
+        """
+        Build price regex patterns from master data
+
+        RULE #0: Load price units from multilingual_keywords.json!
+        BUGFIX #30: Use master data units to prevent parsing errors
+        """
+        patterns = []
+        price_config = self.keywords.get("attribute_keywords", {}).get("price", {})
+        price_units = price_config.get("units", {})
+
+        # Get price keywords (giá, gia, price, etc.)
+        price_keywords = []
+        if "vi" in price_config:
+            price_keywords.extend(price_config["vi"])
+        if "en" in price_config:
+            price_keywords.extend(price_config["en"])
+
+        # Zero price pattern
+        if price_keywords:
+            price_kw_pattern = '|'.join([re.escape(kw) for kw in price_keywords])
+            patterns.append((
+                f'\\b({price_kw_pattern})\\s*:?\\s*0\\b',
+                0
+            ))
+
+        # Build patterns for each price unit from master data
+        for unit_name, multiplier in price_units.items():
+            # Number + unit (e.g., "15.5 tỷ")
+            unit_escaped = re.escape(unit_name)
+            patterns.append((
+                f'(\\d+(?:[\\.,]\\d+)?)\\s*{unit_escaped}\\b',
+                lambda m, mult=multiplier: float(m.group(1).replace(',', '.')) * mult
+            ))
+
+            # Range patterns - under
+            patterns.append((
+                f'(?:under|dưới|duoi|below)\\s*(\\d+(?:[\\.,]\\d+)?)\\s*{unit_escaped}\\b',
+                lambda m, mult=multiplier: {'max_price': float(m.group(1).replace(',', '.')) * mult}
+            ))
+
+            # Range patterns - over
+            patterns.append((
+                f'(?:over|trên|tren|above)\\s*(\\d+(?:[\\.,]\\d+)?)\\s*{unit_escaped}\\b',
+                lambda m, mult=multiplier: {'min_price': float(m.group(1).replace(',', '.')) * mult}
+            ))
+
+        return patterns
+
+    def _build_bedroom_patterns(self) -> List[Tuple[str, Any]]:
+        """
+        Build bedroom regex patterns from master data
+
+        RULE #0: Load bedroom keywords from multilingual_keywords.json!
+        """
+        patterns = []
+        bedrooms_config = self.keywords.get("attribute_keywords", {}).get("bedrooms", {})
+
+        # Collect all bedroom keywords
+        bedroom_keywords = []
+        if "vi" in bedrooms_config:
+            bedroom_keywords.extend(bedrooms_config["vi"])
+        if "en" in bedrooms_config:
+            bedroom_keywords.extend(bedrooms_config["en"])
+
+        # Build pattern: number + bedroom keyword
+        if bedroom_keywords:
+            # Also add common abbreviations
+            bedroom_keywords.extend(["BR", "PN"])
+            escaped = [re.escape(kw) for kw in bedroom_keywords]
+            pattern = f'(\\d+)\\s*(?:{"|".join(escaped)})\\b'
+            patterns.append((pattern, lambda m: int(m.group(1))))
+
+        return patterns
+
+    def _build_bathroom_patterns(self) -> List[Tuple[str, Any]]:
+        """
+        Build bathroom regex patterns from master data
+
+        RULE #0: Load bathroom keywords from multilingual_keywords.json!
+        """
+        patterns = []
+        bathrooms_config = self.keywords.get("attribute_keywords", {}).get("bathrooms", {})
+
+        # Collect all bathroom keywords
+        bathroom_keywords = []
+        if "vi" in bathrooms_config:
+            bathroom_keywords.extend(bathrooms_config["vi"])
+        if "en" in bathrooms_config:
+            bathroom_keywords.extend(bathrooms_config["en"])
+
+        # Build pattern: number + bathroom keyword
+        if bathroom_keywords:
+            # Add common aliases: WC, toilet
+            bathroom_keywords.extend(["WC", "toilet"])
+            escaped = [re.escape(kw) for kw in bathroom_keywords]
+            pattern = f'(\\d+)\\s*(?:{"|".join(escaped)})\\b'
+            patterns.append((pattern, lambda m: int(m.group(1))))
+
+        return patterns
+
+    def _build_area_patterns(self) -> List[Tuple[str, Any]]:
+        """
+        Build area regex patterns from master data
+
+        RULE #0: Load area units from multilingual_keywords.json!
+        """
+        patterns = []
+        area_config = self.keywords.get("attribute_keywords", {}).get("area", {})
+
+        # Get area units (m2, m², sqm, etc.)
+        area_units = area_config.get("units", [])
+
+        # Build pattern: number + area unit
+        if area_units:
+            escaped = [re.escape(unit) for unit in area_units]
+            pattern = f'(\\d+(?:\\.\\d+)?)\\s*(?:{"|".join(escaped)})\\b'
+            patterns.append((pattern, lambda m: float(m.group(1))))
+
+        return patterns
 
     def extract(self, query: str) -> Dict[str, Any]:
         """

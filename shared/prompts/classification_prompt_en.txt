@@ -5,6 +5,47 @@ Your tasks:
 2. Detect ALL intents in the query (multi-intent support)
 3. Work with queries in ANY language (Vietnamese, English, Thai, Indonesian, etc.)
 
+**🚨 CRITICAL: CONVERSATION CONTEXT AWARENESS 🚨**
+
+⚠️ **BUG#29 FIX - MANDATORY RULES:**
+
+When conversation context is provided (previous messages), you ABSOLUTELY MUST:
+
+1. **READ THE FULL CONTEXT** - Don't just look at current query! The conversation history is THE MOST IMPORTANT signal!
+
+2. **MAINTAIN INTENT** - If previous turn established clear intent (POST/SEARCH/SALE/RENT), **ALWAYS continue with same intent** unless user EXPLICITLY says "no" or changes topic!
+
+3. **HIGH CONFIDENCE** - Context makes intent **CLEARER**, **NOT** more ambiguous! If Turn 1 had 95% confidence, Turn 2+ should have **≥90% confidence**!
+
+4. **NO FALSE CLARIFICATION** - Follow-up queries in ongoing conversation should **NEVER NEVER NEVER** trigger clarification! User is just adding details, NOT changing intent!
+
+**Examples of follow-up queries (intent MUST be maintained from context):**
+
+✅ CORRECT:
+- Context: "Tôi muốn đăng tin bán nhà..." (POST_SALE established, confidence 95%)
+  Current: "Với địa chỉ cụ thể là..." → **MUST be POST_SALE** (confidence ≥90%)
+
+- Context: "Tìm căn hộ cho thuê..." (SEARCH_RENT established, confidence 92%)
+  Current: "Có view đẹp không?" → **MUST be SEARCH_RENT** (confidence ≥90%)
+
+- Context: "Đăng tin cho thuê 2PN..." (POST_RENT established, confidence 96%)
+  Current: "Tôi xác nhận thông tin" → **MUST be POST_RENT** (confidence ≥95%)
+
+❌ WRONG (BUG#29 - DON'T DO THIS!):
+- Context: "Đăng tin bán nhà" (POST_SALE 95%)
+  Current: "Với địa chỉ..." → Confidence drops to 65% → Triggers clarification ❌ **WRONG! Should maintain 90%+**
+
+**ONLY trigger clarification when:**
+- **NO context** AND query is truly ambiguous (first message)
+- User **EXPLICITLY changes topic** with words like: "Không", "Thôi", "Tôi muốn thay đổi", "Actually I want to...", "No, I mean..."
+- First message with possessive but no sale/rent keywords ("Tôi có nhà")
+
+**🚫 DO NOT trigger clarification for:**
+- Follow-up queries adding more details
+- Confirmation queries ("Vâng", "Đúng rồi", "Yes")
+- Additional information ("Với địa chỉ...", "Số điện thoại...")
+- ANY query in Turn 2+ of an ongoing conversation with established intent
+
 **PART 1: MODE CLASSIFICATION**
 
 1. **filter** - Query contains CLEAR structured attributes:
@@ -30,6 +71,18 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
   Keywords (any language):
   - "post for sale", "I have house to sell", "want to sell my house"
   - "đăng tin bán", "tôi có nhà bán", "cần bán nhà", "muốn bán"
+
+  **IMPORTANT - POSSESSIVE INDICATORS (without explicit sale/rent):**
+  - "I have a house" (en) - AMBIGUOUS if no "sell/rent" keyword → requires clarification
+  - "My house", "My apartment", "I own property" (en) - AMBIGUOUS → requires clarification
+  - "Tôi có nhà", "Căn hộ của tôi", "Nhà tôi" (vi) - AMBIGUOUS → requires clarification
+  - "ฉันมีบ้าน", "บ้านของฉัน" (th) - AMBIGUOUS → requires clarification
+  - "私の家", "私のマンション", "持っている" (ja) - AMBIGUOUS → requires clarification
+
+  **When you detect possessive keywords WITHOUT explicit "sell/rent" keywords:**
+  - Lower your confidence to 0.6-0.7
+  - Mark as likely POST intent but AMBIGUOUS between SALE/RENT
+  - System will trigger clarification question
 
 - **POST_RENT**: User wants to POST property FOR RENT
   Keywords (any language):

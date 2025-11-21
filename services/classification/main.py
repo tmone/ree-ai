@@ -6,6 +6,8 @@ UPDATED 2025-11-16: Added CHAT intent detection for general conversations
 UPDATED 2025-11-16 v2: Fixed CHAT vs ACTION intent priority (actions take precedence)
 UPDATED 2025-11-16 v3: Refactored to use language-agnostic English prompts (i18n ready)
 UPDATED 2025-11-21: CRITICAL i18n compliance - load keywords from master data
+UPDATED 2025-11-21 v4: Added clarification mechanism for ambiguous queries (100% i18n compliant)
+UPDATED 2025-11-21 v5: FIXED - Use confidence threshold for clarification (not just keywords)
 """
 import httpx
 import os
@@ -51,6 +53,10 @@ class ClassifyResponse(BaseModel):
     # NEW: Multi-intent support
     intents: Optional[List[str]] = None  # ["SEARCH", "PRICE_SUGGESTION", "COMPARE"]
     primary_intent: Optional[str] = None  # Primary intent
+    # NEW: Clarification support for ambiguous queries
+    clarification_needed: Optional[bool] = False  # Whether to ask user for clarification
+    clarification_question: Optional[str] = None  # Question to ask user
+    possible_intents: Optional[List[str]] = None  # All possible intents when ambiguous
 
 
 class ClassificationService(BaseService):
@@ -66,8 +72,8 @@ class ClassificationService(BaseService):
     def __init__(self):
         super().__init__(
             name="classification_service",
-            version="2.0.0",  # Enhanced with Redis caching
-            capabilities=["query_classification", "intent_detection", "intelligent_caching"],
+            version="2.1.0",  # Added clarification for ambiguous queries
+            capabilities=["query_classification", "intent_detection", "intelligent_caching", "clarification"],
             port=8080
         )
 
@@ -288,11 +294,43 @@ Respond with JSON only."""
                     result = json.loads(content)
 
                     mode = result.get("mode", "semantic")
-                    confidence = result.get("confidence", 0.7)
+                    llm_confidence = result.get("confidence", 0.7)  # Renamed: This is LLM-only confidence
                     reasoning = result.get("reasoning", "")
                     # NEW: Multi-intent fields
                     intents = result.get("intents", ["SEARCH_BUY"])  # Default to SEARCH_BUY
                     primary_intent = result.get("primary_intent", "SEARCH_BUY")
+
+                    # ========================================
+                    # WEIGHTED SCORING: LLM + Keywords
+                    # Architecture pattern: α * semantic + β * attribute_match
+                    # ========================================
+                    query_lower = request.query.lower()
+
+                    # Load keywords from master data
+                    sale_keywords = i18n_loader.get_listing_type_keywords('sale', request.language)
+                    rent_keywords = i18n_loader.get_listing_type_keywords('rent', request.language)
+                    possessive_keywords = i18n_loader.get_possessive_keywords(request.language)
+
+                    # Calculate keyword match score (0.0 - 1.0)
+                    keyword_score = self._calculate_keyword_score(
+                        query_lower,
+                        primary_intent,
+                        sale_keywords,
+                        rent_keywords,
+                        possessive_keywords
+                    )
+
+                    # Weighted combination (architecture: α * semantic + β * attribute)
+                    WEIGHT_LLM = 0.7  # α - LLM semantic understanding
+                    WEIGHT_KEYWORD = 0.3  # β - Keyword pattern matching
+
+                    confidence = (WEIGHT_LLM * llm_confidence) + (WEIGHT_KEYWORD * keyword_score)
+
+                    self.logger.info(
+                        f"{LogEmoji.INFO} Confidence breakdown: "
+                        f"LLM={llm_confidence:.2f} (70%), Keywords={keyword_score:.2f} (30%), "
+                        f"Final={confidence:.2f}"
+                    )
 
                     # Validate mode
                     if mode not in ["filter", "semantic", "both"]:
@@ -304,12 +342,88 @@ Respond with JSON only."""
                     self.logger.info(f"{LogEmoji.INFO} Reasoning: {reasoning}")
                     self.logger.info(f"{LogEmoji.INFO} Intents: {intents} (primary: {primary_intent})")
 
+                    # NEW: Check if clarification needed for ambiguous queries
+                    # Uses WEIGHTED confidence (LLM + keywords)
+                    clarification_needed = False
+                    clarification_question = None
+                    possible_intents = None
+
+                    # Configuration - FIX Bug#29: Context-aware thresholds
+                    # When user is in conversation (has context), threshold should be lower
+                    # because context provides additional clarity about intent
+                    has_context = bool(request.context and len(request.context) > 0)
+
+                    if has_context:
+                        # Follow-up queries: More lenient threshold
+                        # Example: "Bổ sung địa chỉ..." after "Đăng tin cho thuê..." → confidence 0.665 should PASS
+                        CONFIDENCE_THRESHOLD_LOW = 0.60  # Context helps clarify
+                        CONFIDENCE_THRESHOLD_MEDIUM = 0.75
+                        self.logger.info(f"{LogEmoji.INFO} Context-aware threshold: 0.60 (lenient for follow-up)")
+                    else:
+                        # First query: Strict threshold
+                        CONFIDENCE_THRESHOLD_LOW = 0.75  # Very ambiguous
+                        CONFIDENCE_THRESHOLD_MEDIUM = 0.85  # Somewhat ambiguous
+
+                    # Check if sale/rent keywords are present (already loaded above)
+                    has_sale_keyword = any(kw in query_lower for kw in sale_keywords)
+                    has_rent_keyword = any(kw in query_lower for kw in rent_keywords)
+                    has_property_possession = any(kw in query_lower for kw in possessive_keywords)
+
+                    # CASE 1: Very low confidence (< threshold) → Multi-choice clarification
+                    # EXCEPTION: For SEARCH intents, allow without listing type (CTO req: search both ban+cho thue)
+                    if confidence < CONFIDENCE_THRESHOLD_LOW:
+                        # Check if this is a SEARCH intent
+                        is_search_intent = (primary_intent in ["SEARCH", "SEARCH_BUY", "SEARCH_RENT"] or
+                                          "SEARCH" in str(primary_intent))
+
+                        # Only trigger clarification if NOT a search intent
+                        # For SEARCH: User doesn't need to specify ban/cho thue, will search both
+                        if not is_search_intent:
+                            clarification_needed = True
+                            possible_intents = ["SEARCH_BUY", "SEARCH_RENT", "POST_SALE", "POST_RENT"]
+                            clarification_question = i18n_loader.get_ui_message(
+                                'clarification_main_intent',
+                                lang=request.language
+                            )
+                            self.logger.info(
+                                f"{LogEmoji.WARNING} Very low confidence ({confidence:.2f}) - "
+                                f"multi-choice clarification needed"
+                            )
+                        else:
+                            # SEARCH intent without clear listing type → Don't clarify, search both
+                            self.logger.info(
+                                f"{LogEmoji.INFO} SEARCH intent with low confidence ({confidence:.2f}) - "
+                                f"will search both BUY and RENT (CTO requirement)"
+                            )
+
+                    # CASE 2: Possessive keywords WITHOUT sale/rent keywords
+                    # → Binary choice clarification (BẤT KỂ confidence!)
+                    # Vì query như "Tôi có căn nhà" là MƠ HỒ dù LLM tự tin
+                    elif (has_property_possession and
+                          not has_sale_keyword and
+                          not has_rent_keyword and
+                          primary_intent in ["POST_SALE", "POST_RENT"]):
+
+                        clarification_needed = True
+                        possible_intents = ["POST_SALE", "POST_RENT"]
+                        clarification_question = i18n_loader.get_ui_message(
+                            'clarification_sale_or_rent',
+                            lang=request.language
+                        )
+                        self.logger.info(
+                            f"{LogEmoji.WARNING} Possessive without sale/rent keywords "
+                            f"(confidence: {confidence:.2f}) - binary choice clarification needed"
+                        )
+
                     response = ClassifyResponse(
                         mode=mode,
                         confidence=confidence,
                         reasoning=reasoning,
                         intents=intents,
-                        primary_intent=primary_intent
+                        primary_intent=primary_intent,
+                        clarification_needed=clarification_needed,
+                        clarification_question=clarification_question,
+                        possible_intents=possible_intents
                     )
 
                     # NEW: Cache the result for future requests (only if cache_key was created)
@@ -337,6 +451,88 @@ Respond with JSON only."""
                     error=str(e)
                 )
                 raise HTTPException(status_code=500, detail=error_msg)
+
+    def _calculate_keyword_score(
+        self,
+        query_lower: str,
+        primary_intent: str,
+        sale_keywords: list,
+        rent_keywords: list,
+        possessive_keywords: list
+    ) -> float:
+        """
+        Calculate keyword matching score (0.0 - 1.0)
+
+        Scoring logic:
+        - Exact intent keyword match: 1.0
+        - Possessive without sale/rent: 0.3 (ambiguous)
+        - No keyword match: 0.0
+
+        Args:
+            query_lower: Lowercase query
+            primary_intent: LLM-detected intent
+            sale_keywords: Sale keywords for language
+            rent_keywords: Rent keywords for language
+            possessive_keywords: Possessive keywords for language
+
+        Returns:
+            Keyword match score (0.0 - 1.0)
+        """
+        has_sale = any(kw in query_lower for kw in sale_keywords)
+        has_rent = any(kw in query_lower for kw in rent_keywords)
+        has_possessive = any(kw in query_lower for kw in possessive_keywords)
+
+        # POST_SALE: Check if sale keywords present
+        if primary_intent == "POST_SALE":
+            if has_sale:
+                return 1.0  # Perfect match
+            elif has_possessive and not has_rent:
+                return 0.3  # Possessive but ambiguous (missing "sell" keyword)
+            else:
+                return 0.0  # No keyword support
+
+        # POST_RENT: Check if rent keywords present
+        elif primary_intent == "POST_RENT":
+            if has_rent:
+                return 1.0  # Perfect match
+            elif has_possessive and not has_sale:
+                return 0.3  # Possessive but ambiguous (missing "rent" keyword)
+            else:
+                return 0.0  # No keyword support
+
+        # SEARCH_BUY: Check if buy keywords present
+        elif primary_intent == "SEARCH_BUY":
+            buy_keywords = ["buy", "purchase", "mua", "tìm mua", "tim mua", "ซื้อ", "購入"]
+            if any(kw in query_lower for kw in buy_keywords):
+                return 1.0
+            elif has_sale:  # "sale" can imply buying
+                return 0.5
+            else:
+                return 0.0
+
+        # SEARCH_RENT: Check if rent search keywords present
+        elif primary_intent == "SEARCH_RENT":
+            rent_search_keywords = ["find to rent", "looking to rent", "need to rent",
+                                    "tìm thuê", "tim thue", "cần thuê", "can thue",
+                                    "หาเช่า", "賃貸を探す"]
+            if any(kw in query_lower for kw in rent_search_keywords):
+                return 1.0
+            elif has_rent:  # Generic rent keyword
+                return 0.7
+            else:
+                return 0.0
+
+        # CHAT: General conversation
+        elif primary_intent == "CHAT":
+            # If CHAT but has property keywords, penalize
+            if has_possessive or has_sale or has_rent:
+                return 0.0  # Keywords contradict CHAT intent
+            else:
+                return 0.5  # Neutral score for CHAT
+
+        # Unknown intent
+        else:
+            return 0.0
 
     def _fallback_classification(self, query: str, language: str = 'vi') -> Dict:
         """

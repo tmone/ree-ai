@@ -185,6 +185,33 @@
     }
   },
 
+  "possessive_keywords": {
+    "description": "Keywords indicating property ownership (for ambiguous intent detection)",
+    "vi": [
+      "tôi có", "toi co",
+      "của tôi", "cua toi",
+      "nhà tôi", "nha toi",
+      "căn hộ tôi", "can ho toi",
+      "căn nhà của tôi", "can nha cua toi",
+      "bất động sản của tôi", "bat dong san cua toi",
+      "tôi sở hữu", "toi so huu"
+    ],
+    "en": [
+      "i have", "i own",
+      "my house", "my apartment", "my property",
+      "my home", "my condo", "my villa",
+      "i possess", "i am the owner"
+    ],
+    "th": [
+      "ฉันมี", "บ้านของฉัน",
+      "ทรัพย์สินของฉัน", "ฉันเป็นเจ้าของ"
+    ],
+    "ja": [
+      "私の家", "私のマンション",
+      "持っている", "所有している"
+    ]
+  },
+
   "property_types": {
     "description": "Property type keywords",
     "vi": {
@@ -284,11 +311,15 @@
         "rent": {
           "vi": ["cho thuê", "cho thue", "thuê", "thue", "rent"],
           "en": ["rent", "rental", "for rent", "to rent"],
+          "th": ["ให้เช่า", "เช่า", "ต้องการให้เช่า", "ให้เช่าบ้าน"],
+          "ja": ["賃貸", "貸す", "賃貸したい", "賃貸する"],
           "normalized": "rent"
         },
         "sale": {
           "vi": ["bán", "ban", "cần bán", "can ban", "sale"],
           "en": ["sale", "sell", "for sale", "to sell"],
+          "th": ["ขาย", "ขายบ้าน", "ต้องการขาย", "ขายทรัพย์สิน"],
+          "ja": ["売却", "売る", "販売", "売りたい", "売却する"],
           "normalized": "sale"
         }
       }
@@ -428,7 +459,10 @@
       "no_results_suggestions": "Bạn có thể thử:\n- Tăng ngân sách hoặc mở rộng khu vực tìm kiếm\n- Điều chỉnh yêu cầu về diện tích hoặc số phòng\n- Cho tôi biết thêm chi tiết về nhu cầu của bạn",
       "error_occurred": "Xin lỗi, tôi gặp sự cố khi tìm kiếm bất động sản.",
       "error_retry": "Vui lòng thử lại sau hoặc liên hệ hỗ trợ nếu vấn đề vẫn tiếp tục.",
-      "image_analysis_prompt": "Phân tích hình ảnh này và cho tôi biết về bất động sản trong ảnh."
+      "save_failed_error": "Xin lỗi, đã có lỗi xảy ra khi lưu tin đăng vào hệ thống. Vui lòng thử lại sau hoặc liên hệ bộ phận hỗ trợ.",
+      "image_analysis_prompt": "Phân tích hình ảnh này và cho tôi biết về bất động sản trong ảnh.",
+      "clarification_sale_or_rent": "Bạn muốn đăng tin bán hay cho thuê?",
+      "clarification_main_intent": "Bạn muốn:\n1. Tìm nhà để mua\n2. Tìm nhà để thuê\n3. Đăng tin bán nhà\n4. Đăng tin cho thuê\n\nVui lòng cho tôi biết bạn muốn làm gì?"
     },
     "en": {
       "please_prefix": "Please:",
@@ -436,7 +470,18 @@
       "no_results_suggestions": "You may try:\n- Increase budget or expand search area\n- Adjust area or bedroom requirements\n- Provide more details about your needs",
       "error_occurred": "Sorry, I encountered an issue while searching for properties.",
       "error_retry": "Please try again later or contact support if the problem persists.",
-      "image_analysis_prompt": "Analyze this image and tell me about the property shown."
+      "save_failed_error": "Sorry, an error occurred while saving your property listing to the system. Please try again later or contact support.",
+      "image_analysis_prompt": "Analyze this image and tell me about the property shown.",
+      "clarification_sale_or_rent": "Do you want to sell or rent out your property?",
+      "clarification_main_intent": "What would you like to do?\n1. Find a property to buy\n2. Find a property to rent\n3. Post a property for sale\n4. Post a property for rent\n\nPlease let me know your intention."
+    },
+    "th": {
+      "clarification_sale_or_rent": "คุณต้องการขายหรือให้เช่า?",
+      "clarification_main_intent": "คุณต้องการ:\n1. ซื้อบ้าน\n2. เช่าบ้าน\n3. ขายบ้าน\n4. ให้เช่าบ้าน"
+    },
+    "ja": {
+      "clarification_sale_or_rent": "売却ですか、賃貸ですか？",
+      "clarification_main_intent": "何をしたいですか？\n1. 物件を購入\n2. 物件を賃貸\n3. 物件を売却\n4. 物件を貸出"
     }
   },
 

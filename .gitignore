@@ -181,3 +181,4 @@ temp_*.py
 
 # Ignore Figma design file
 docs/design/UI.fig
+.clauderules

@@ -220,6 +220,27 @@ class I18nLoader:
             fmt = self.get_price_format('million_format', lang)
             return fmt.format(value=f"{value:.0f}")
 
+    def get_possessive_keywords(self, lang: str = 'vi') -> List[str]:
+        """
+        Get possessive keywords for ambiguous intent detection
+
+        Args:
+            lang: Language code (vi/en/th/ja)
+
+        Returns:
+            List of possessive keywords
+
+        Example:
+            kw = i18n.get_possessive_keywords('vi')
+            # ['tôi có', 'của tôi', 'nhà tôi', ...]
+        """
+        try:
+            return self._data['possessive_keywords'][lang]
+        except KeyError as e:
+            raise RuntimeError(
+                f"Possessive keywords not found for language '{lang}'. Error: {e}"
+            )
+
     def get_raw_data(self) -> Dict:
         """
         Get raw master data dictionary

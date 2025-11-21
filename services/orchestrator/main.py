@@ -243,30 +243,81 @@ class Orchestrator(BaseService):
                         self.logger.info(f"{LogEmoji.INFO} [{request_id}] Retrieved {len(history)} messages from PostgreSQL")
 
                 # Step 1: Enhanced intent detection using classification service
+                # CRITICAL FIX: Always classify intent, even with files!
+                # Images can be for POST (property photos), SEARCH (reverse image search), or CHAT (analysis)
+
+                # Build query context that mentions images if present
+                query_with_context = request.query
                 if request.has_files():
-                    # Images/documents → Use vision model for analysis
-                    intent = "chat"  # Vision analysis goes through chat path
-                    primary_intent = "CHAT"
-                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Intent: {intent} (multimodal analysis)")
+                    query_with_context = f"{request.query} [User uploaded {len(request.files)} image(s)]"
+                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Multimodal query with {len(request.files)} image(s)")
+
+                # Use classification service for intelligent intent detection
+                classification_result = await self._classify_query(
+                    query_with_context,
+                    history=history,
+                    language=request.language
+                )
+                primary_intent = classification_result.get("primary_intent", "SEARCH_BUY")
+                all_intents = classification_result.get("intents", [primary_intent])
+
+                self.logger.info(f"{LogEmoji.AI} [{request_id}] Primary Intent: {primary_intent}, All: {all_intents}, Multimodal: {request.has_files()}")
+
+                # ========================================
+                # NEW: Check if clarification needed (weighted scoring integration)
+                # ========================================
+                clarification_needed = classification_result.get("clarification_needed", False)
+
+                if clarification_needed:
+                    clarification_question = classification_result.get("clarification_question", "")
+                    possible_intents = classification_result.get("possible_intents", [])
+
+                    self.logger.info(
+                        f"{LogEmoji.WARNING} [{request_id}] Clarification needed. "
+                        f"Possible intents: {possible_intents}"
+                    )
+
+                    # Return clarification question immediately
+                    # Don't route to any handler yet - wait for user response
+                    await self._save_message(request.user_id, conversation_id, "user", request.query)
+                    await self._save_message(
+                        request.user_id,
+                        conversation_id,
+                        "assistant",
+                        clarification_question,
+                        metadata={
+                            "clarification_needed": True,
+                            "possible_intents": possible_intents
+                        }
+                    )
+
+                    execution_time = (time.time() - start_time) * 1000
+
+                    return OrchestrationResponse(
+                        intent=IntentType.CHAT,  # Temporary intent during clarification
+                        confidence=classification_result.get("confidence", 0.5),
+                        response=clarification_question,
+                        service_used="classification_clarification",
+                        execution_time_ms=execution_time,
+                        metadata={
+                            "flow": "clarification",
+                            "clarification_needed": True,
+                            "possible_intents": possible_intents,
+                            "request_id": request_id
+                        }
+                    )
+
+                # Map primary intent to routing decision
+                if primary_intent in ["POST_SALE", "POST_RENT"]:
+                    intent = "post_property"
+                elif primary_intent in ["SEARCH_BUY", "SEARCH_RENT"]:
+                    intent = "search"
+                elif primary_intent == "PRICE_CONSULTATION":
+                    intent = "price_consultation"
+                elif primary_intent == "PROPERTY_DETAIL":
+                    intent = "property_detail"
                 else:
-                    # Use classification service for intelligent intent detection with conversation context
-                    classification_result = await self._classify_query(request.query, history=history)
-                    primary_intent = classification_result.get("primary_intent", "SEARCH_BUY")
-                    all_intents = classification_result.get("intents", [primary_intent])
-
-                    self.logger.info(f"{LogEmoji.AI} [{request_id}] Primary Intent: {primary_intent}, All: {all_intents}")
-
-                    # Map primary intent to routing decision
-                    if primary_intent in ["POST_SALE", "POST_RENT"]:
-                        intent = "post_property"
-                    elif primary_intent in ["SEARCH_BUY", "SEARCH_RENT"]:
-                        intent = "search"
-                    elif primary_intent == "PRICE_CONSULTATION":
-                        intent = "price_consultation"
-                    elif primary_intent == "PROPERTY_DETAIL":
-                        intent = "property_detail"
-                    else:
-                        intent = "chat"
+                    intent = "chat"
 
                 # Step 2: Route based on intent (with history context + files)
                 if intent == "post_property":
@@ -1761,13 +1812,19 @@ Respond like a real person, not a mechanical chatbot!"""
     # Classification & Property Posting Methods
     # ========================================
 
-    async def _classify_query(self, query: str, history: Optional[List[Dict]] = None) -> Dict:
+    async def _classify_query(
+        self,
+        query: str,
+        history: Optional[List[Dict]] = None,
+        language: str = 'vi'
+    ) -> Dict:
         """
         Call classification service for intelligent intent detection
 
         Args:
             query: Current user query
             history: Conversation history for context-aware classification
+            language: User's preferred language (vi/en/th/ja)
 
         Returns dict with:
         - mode: "filter" | "semantic" | "both"
@@ -1775,6 +1832,9 @@ Respond like a real person, not a mechanical chatbot!"""
         - intents: List of all detected intents
         - confidence: float
         - reasoning: str
+        - clarification_needed: bool (NEW - from weighted scoring)
+        - clarification_question: str (NEW - multilingual)
+        - possible_intents: List[str] (NEW - for clarification)
         """
         try:
             self.logger.info(f"{LogEmoji.AI} Calling classification service...")
@@ -1789,7 +1849,11 @@ Respond like a real person, not a mechanical chatbot!"""
 
             response = await self.http_client.post(
                 f"{self.classification_url}/classify",
-                json={"query": query, "context": context},
+                json={
+                    "query": query,
+                    "context": context,
+                    "language": language  # NEW: Pass language for multilingual clarification
+                },
                 timeout=10.0
             )
 
@@ -1913,9 +1977,15 @@ Original query: {query}
 Previous extraction (iteration {iteration-1}):
 {json.dumps(entities, ensure_ascii=False, indent=2)}
 
+⚠️ **CRITICAL - BUG#30 FIX**: Price values above are ALREADY in VND (final unit).
+- DO NOT convert/recalculate price units
+- If price = 15500000000 → Keep as 15500000000 VND (15.5 billion VND)
+- DO NOT change to 15500000 (that would be wrong!)
+- Only extract NEW missing fields from user's latest message
+
 Previous completeness score: {previous_score}/100
 
-Re-extract property attributes with improved understanding. Focus on filling missing fields and improving accuracy."""
+Re-extract property attributes with improved understanding. Focus on filling missing fields and improving accuracy. KEEP all existing price values AS-IS (already in VND)."""
 
                 extraction_response = await self.http_client.post(
                     f"{self.extraction_url}/extract-query",
@@ -2068,17 +2138,22 @@ Re-extract property attributes with improved understanding. Focus on filling mis
                 if save_result:
                     property_id = save_result.get('property_id')
                     self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] Property saved with ID: {property_id}")
-                else:
-                    self.logger.warning(f"{LogEmoji.WARNING} [Property Posting] Failed to save property, but continuing with response")
 
-                return await self._generate_completion_message(
-                    entities=entities,
-                    overall_score=overall_score,
-                    property_id=property_id,
-                    history=history,
-                    query=query,
-                    language=language
-                )
+                    # SUCCESS: Generate completion message
+                    return await self._generate_completion_message(
+                        entities=entities,
+                        overall_score=overall_score,
+                        property_id=property_id,
+                        history=history,
+                        query=query,
+                        language=language
+                    )
+                else:
+                    # BUG#31 FIX: FAILED to save - return ERROR message to user!
+                    self.logger.error(f"{LogEmoji.ERROR} [Property Posting] ❌ FAILED to save property to database!")
+
+                    # RULE #0 COMPLIANT: Load error message from master data
+                    return t("ui_messages.save_failed_error", language=language)
 
             # Otherwise: Generate regular feedback with improvement suggestions
             self.logger.info(f"{LogEmoji.AI} [Property Posting] Generating feedback (Score: {overall_score}/100, Confirmed: {is_user_confirming})")
@@ -4345,14 +4420,17 @@ Generate a warm, congratulatory closing message in **{language} language** that:
             entities_text = "\n".join(entities_summary) if entities_summary else "No specific details yet"
 
             # Determine assistant mode based on score
+            # FIX Bug#28: POST intent should NEVER show formal scores to user
+            # Score is INTERNAL for orchestration logic only (decide when to save DB)
+            # User just wants to POST property, not get graded!
             if overall_score < 30:
                 mode = "INITIAL_ASSISTANT"  # Conversational, no formal evaluation
-            elif overall_score < 60:
-                mode = "GUIDING_ASSISTANT"  # Light guidance, minimal scoring
             else:
-                mode = "DETAILED_REVIEW"  # Full evaluation with scoring
+                # POST intent: ALWAYS use guiding mode (no formal scoring)
+                # Just ask for missing info naturally, don't show "Score: 60/100"
+                mode = "GUIDING_ASSISTANT"  # Light guidance, minimal scoring
 
-            self.logger.info(f"{LogEmoji.INFO} [Posting Feedback] Mode: {mode} (score: {overall_score}/100)")
+            self.logger.info(f"{LogEmoji.INFO} [Posting Feedback] Mode: {mode} (score: {overall_score}/100 - INTERNAL ONLY)")
 
             # Build LLM prompt based on assistant mode
             frustration_note = ""

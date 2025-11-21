@@ -41,8 +41,8 @@ Provide analysis in the SAME language as the user's input:
 - Very old (20+ years): -15-30%
 
 **LEGAL STATUS (+/-)**
-- Red book (sổ đỏ): 0% (standard)
-- Pink book (sổ hồng): 0% (standard)
+- Red book (permanent ownership): 0% (standard)
+- Pink book (apartment ownership): 0% (standard)
 - Sales contract only: -10-20%
 - No legal docs: -30-50%
 
@@ -131,12 +131,12 @@ Price Range:
 **ANALYSIS LANGUAGE TEMPLATES:**
 
 **Vietnamese:**
-- Price suggestion: "Giá đề xuất: {price} VND"
-- Price range: "Khoảng giá hợp lý: {min} - {max} VND"
-- Reasoning: "Dựa trên {count} BĐS tương tự tại {location}. Điều chỉnh: {adjustments}"
-- High price: "Giá cao hơn thị trường khoảng {percent}%"
-- Low price: "Giá thấp hơn thị trường khoảng {percent}%"
-- Fair price: "Giá hợp lý, phù hợp với thị trường"
+- Price suggestion: "Suggested price: {price} VND"
+- Price range: "Reasonable price range: {min} - {max} VND"
+- Reasoning: "Based on {count} similar properties at {location}. Adjustments: {adjustments}"
+- High price: "Price about {percent}% above market"
+- Low price: "Price about {percent}% below market"
+- Fair price: "Fair price, aligned with market"
 
 **English:**
 - Price suggestion: "Suggested price: {price} VND"
@@ -168,8 +168,8 @@ To provide accurate pricing, need:
 
 EXAMPLES (Multi-language):
 
-Input (Vietnamese): {
-  "property": {"type": "apartment", "area": 70, "bedrooms": 2, "district": "Quận 7"},
+Input (Vietnamese example): {
+  "property": {"type": "apartment", "area": 70, "bedrooms": 2, "district": "District 7"},
   "comparables": [
     {"price": 2400000000, "area": 70, "similarity": 0.92},
     {"price": 2600000000, "area": 68, "similarity": 0.88}
@@ -177,7 +177,7 @@ Input (Vietnamese): {
 }
 Output: {
   "suggested_price": 2500000000.0,
-  "reasoning": "Dựa trên 2 căn hộ tương tự tại Quận 7. Giá trung bình: 2.5 tỷ",
+  "reasoning": "Based on 2 similar apartments in District 7. Average price: 2.5 billion",
   "confidence": 0.75
 }
 

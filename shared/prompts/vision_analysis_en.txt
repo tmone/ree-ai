@@ -88,9 +88,9 @@ Auto-detect the user's language and match it
 **Language-specific responses:**
 
 Vietnamese users:
-- Use familiar terms: căn hộ, phòng khách, bếp
+- Use familiar terms: apartment, living room, kitchen (in Vietnamese)
 - Reference local context: Q7, Vinhomes, Masteri
-- Price in tỷ/triệu
+- Price in billion/million VND
 
 English users:
 - Use international terms: apartment, living room, kitchen
@@ -105,18 +105,18 @@ Provide a natural, conversational response that covers:
 3. Key selling points
 4. Advice or recommendations (if asked)
 
-**Example Response (Vietnamese for Vietnamese user):**
+**Example Response (Vietnamese example translated to English for demonstration):**
 
-"Từ hình ảnh, tôi thấy đây là một căn hộ hiện đại với phong cách tối giản. Phòng khách rộng khoảng 30-35m², có cửa sổ lớn hướng ra view thành phố, ánh sáng tự nhiên rất tốt.
+"From the image, I can see this is a modern apartment with minimalist style. The living room is approximately 30-35sqm, with large windows facing city view, excellent natural lighting.
 
-Nội thất cao cấp với sàn gỗ công nghiệp, trần thạch cao có đèn âm, bếp mở kết nối với phòng khách tạo không gian thoáng đãng. Tôi ước tính đây là căn hộ trong tầm giá 80-100 triệu/m², phù hợp với phân khúc cao cấp.
+High-end finishes with engineered wood flooring, gypsum ceiling with recessed lighting, open kitchen connected to living room creating spacious feel. I estimate this is in the premium range of 80-100 million VND/sqm.
 
-Điểm mạnh:
-- View đẹp, tầng cao
-- Thiết kế hiện đại, tối ưu không gian
-- Ánh sáng tự nhiên tốt
+Strengths:
+- Beautiful view, high floor
+- Modern design, optimized space
+- Excellent natural lighting
 
-Phù hợp cho: Gia đình trẻ, chuyên gia nước ngoài, hoặc đầu tư cho thuê cao cấp."
+Suitable for: Young families, expat professionals, or premium rental investment."
 
 **Example Response (English for English user):**
 

@@ -62,14 +62,24 @@
         "đăng tin bán", "dang tin ban",
         "muốn bán", "muon ban",
         "cần bán", "can ban",
-        "tôi có nhà bán", "toi co nha ban"
+        "tôi có nhà bán", "toi co nha ban",
+        "đăng tin", "tôi có", "nhà của tôi",
+        "định bán", "sắp bán"
       ],
       "en": [
         "sell house", "sell property",
         "sell apartment", "sell land",
         "post for sale", "want to sell",
         "need to sell", "selling",
-        "i have property to sell"
+        "i have property to sell",
+        "post property", "i have", "my house",
+        "planning to sell", "going to sell"
+      ],
+      "th": [
+        "ขาย", "ขายบ้าน", "ต้องการขาย"
+      ],
+      "ja": [
+        "売る", "販売", "売却する"
       ]
     },
 
@@ -80,7 +90,8 @@
         "muốn cho thuê", "muon cho thue",
         "cần cho thuê", "can cho thue",
         "đăng tin cho thuê", "dang tin cho thue",
-        "tôi có nhà cho thuê", "toi co nha cho thue"
+        "tôi có nhà cho thuê", "toi co nha cho thue",
+        "có nhà cho thuê"
       ],
       "en": [
         "rent out", "for rent",
@@ -88,7 +99,14 @@
         "need to rent out",
         "post for rent",
         "renting out",
-        "i have property to rent"
+        "i have property to rent",
+        "have property for rent"
+      ],
+      "th": [
+        "ให้เช่า", "เช่าบ้าน"
+      ],
+      "ja": [
+        "賃貸", "貸す"
       ]
     },
 
@@ -99,14 +117,23 @@
         "cần mua", "can mua",
         "muốn mua", "muon mua",
         "tìm mua", "tim mua",
-        "mua nhà", "mua can ho"
+        "mua nhà", "mua can ho",
+        "tìm", "tìm kiếm", "đang tìm", "muốn tìm"
       ],
       "en": [
         "find house to buy",
         "want to buy", "need to buy",
         "looking for property",
         "buy house", "buy apartment",
-        "purchase property"
+        "purchase property",
+        "find", "search", "looking for",
+        "buy", "purchase"
+      ],
+      "th": [
+        "ซื้อ", "หาซื้อ", "ต้องการซื้อ"
+      ],
+      "ja": [
+        "購入", "買う", "探す"
       ]
     },
 
@@ -117,13 +144,21 @@
         "cần thuê", "can thue",
         "muốn thuê", "muon thue",
         "tìm thuê", "tim thue",
-        "thuê nhà", "thue nha"
+        "thuê nhà", "thue nha",
+        "find to rent", "looking to rent"
       ],
       "en": [
         "find rental", "find house to rent",
         "want to rent", "need to rent",
         "looking for rental",
-        "rent apartment", "rent house"
+        "rent apartment", "rent house",
+        "find to rent", "looking to rent"
+      ],
+      "th": [
+        "เช่า", "หาเช่า", "ต้องการเช่า"
+      ],
+      "ja": [
+        "賃貸", "借りる", "賃貸を探す"
       ]
     },
 
@@ -171,17 +206,41 @@
     "chat": {
       "description": "General conversation",
       "vi": [
-        "chào", "xin chào",
+        "chào", "xin chào", "chào bạn",
         "hello", "hi",
-        "hôm nay", "thế nào",
-        "cảm ơn", "tạm biệt"
+        "hôm nay", "thế nào", "thứ mấy", "mấy giờ",
+        "cảm ơn", "tạm biệt", "bye",
+        "bạn là ai", "bạn có thể",
+        "thời tiết", "để xây nhà", "thủ tục", "cách đầu tư", "làm thế nào"
       ],
       "en": [
         "hello", "hi", "hey",
         "how are you",
         "thank you", "bye",
-        "good morning", "good evening"
+        "good morning", "good evening",
+        "who are you", "what can you",
+        "weather", "how to build", "procedures", "how to invest", "how do i"
+      ],
+      "th": [
+        "สวัสดี", "ขอบคุณ", "ลาก่อน"
+      ],
+      "ja": [
+        "こんにちは", "ありがとう", "さようなら"
       ]
+    }
+  },
+
+  "classification_keywords": {
+    "description": "Keywords for classification fallback logic",
+    "structured_keywords": {
+      "description": "Keywords indicating structured search (specific attributes)",
+      "vi": ["pn", "phòng ngủ", "tỷ", "triệu", "vnd", "quận", "phường", "căn hộ", "nhà phố", "biệt thự"],
+      "en": ["bedroom", "br", "bed", "billion", "million", "district", "ward", "apartment", "house", "villa"]
+    },
+    "semantic_keywords": {
+      "description": "Keywords indicating semantic search (vague/descriptive)",
+      "vi": ["đẹp", "sang", "hiện đại", "cổ điển", "yên tĩnh", "sầm uất", "thoáng", "gần", "view", "tiện ích"],
+      "en": ["beautiful", "luxury", "modern", "classic", "quiet", "busy", "airy", "near", "view", "amenities"]
     }
   },
 
@@ -462,7 +521,13 @@
       "save_failed_error": "Xin lỗi, đã có lỗi xảy ra khi lưu tin đăng vào hệ thống. Vui lòng thử lại sau hoặc liên hệ bộ phận hỗ trợ.",
       "image_analysis_prompt": "Phân tích hình ảnh này và cho tôi biết về bất động sản trong ảnh.",
       "clarification_sale_or_rent": "Bạn muốn đăng tin bán hay cho thuê?",
-      "clarification_main_intent": "Bạn muốn:\n1. Tìm nhà để mua\n2. Tìm nhà để thuê\n3. Đăng tin bán nhà\n4. Đăng tin cho thuê\n\nVui lòng cho tôi biết bạn muốn làm gì?"
+      "clarification_main_intent": "Bạn muốn:\n1. Tìm nhà để mua\n2. Tìm nhà để thuê\n3. Đăng tin bán nhà\n4. Đăng tin cho thuê\n\nVui lòng cho tôi biết bạn muốn làm gì?",
+      "map_suggestion": "\n\n📍 **Chọn vị trí chính xác trên bản đồ**\n\nTôi đã xác định khu vực của bạn là **{district}**. Bạn có muốn chọn vị trí chính xác trên bản đồ không? (Tùy chọn, giúp người mua dễ tìm thấy hơn)",
+      "location_suggestion": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ để người mua dễ dàng tìm đến!",
+      "location_suggestion_short": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ!",
+      "completion_message": "✅ Hoàn tất! Thông tin đăng tin đã đầy đủ ({score}/100). 🎉 Tin của bạn đã sẵn sàng đăng tải!",
+      "price_consultation_status_with_data": "📊 Tư vấn giá: Có dữ liệu thị trường",
+      "price_consultation_status_no_data": "📊 Tư vấn giá: Không có dữ liệu thị trường"
     },
     "en": {
       "please_prefix": "Please:",
@@ -473,15 +538,33 @@
       "save_failed_error": "Sorry, an error occurred while saving your property listing to the system. Please try again later or contact support.",
       "image_analysis_prompt": "Analyze this image and tell me about the property shown.",
       "clarification_sale_or_rent": "Do you want to sell or rent out your property?",
-      "clarification_main_intent": "What would you like to do?\n1. Find a property to buy\n2. Find a property to rent\n3. Post a property for sale\n4. Post a property for rent\n\nPlease let me know your intention."
+      "clarification_main_intent": "What would you like to do?\n1. Find a property to buy\n2. Find a property to rent\n3. Post a property for sale\n4. Post a property for rent\n\nPlease let me know your intention.",
+      "map_suggestion": "\n\n📍 **Select Exact Location on Map**\n\nI've identified your area as **{district}**. Would you like to select the exact location on the map? (Optional, helps buyers find it easier)",
+      "location_suggestion": "\n\n📍 **Suggestion:** Select the exact location on the map to help buyers find it easily!",
+      "location_suggestion_short": "\n\n📍 **Suggestion:** Select exact location on map!",
+      "completion_message": "✅ Complete! Your posting information is ready ({score}/100). 🎉 Your property is ready to be published!",
+      "price_consultation_status_with_data": "📊 Price Consultation: Market data available",
+      "price_consultation_status_no_data": "📊 Price Consultation: No market data available"
     },
     "th": {
       "clarification_sale_or_rent": "คุณต้องการขายหรือให้เช่า?",
-      "clarification_main_intent": "คุณต้องการ:\n1. ซื้อบ้าน\n2. เช่าบ้าน\n3. ขายบ้าน\n4. ให้เช่าบ้าน"
+      "clarification_main_intent": "คุณต้องการ:\n1. ซื้อบ้าน\n2. เช่าบ้าน\n3. ขายบ้าน\n4. ให้เช่าบ้าน",
+      "map_suggestion": "\n\n📍 **เลือกตำแหน่งที่แน่นอนบนแผนที่**\n\nฉันระบุพื้นที่ของคุณเป็น **{district}** คุณต้องการเลือกตำแหน่งที่แน่นอนบนแผนที่หรือไม่? (ทางเลือก ช่วยให้ผู้ซื้อค้นหาได้ง่ายขึ้น)",
+      "location_suggestion": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งที่ถูกต้องบนแผนที่เพื่อให้ผู้ซื้อค้นหาได้ง่าย!",
+      "location_suggestion_short": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งบนแผนที่!",
+      "completion_message": "✅ เสร็จสิ้น! ข้อมูลของคุณครบถ้วน ({score}/100). 🎉 พร้อมเผยแพร่แล้ว!",
+      "price_consultation_status_with_data": "📊 การปรึกษาราคา: มีข้อมูลตลาด",
+      "price_consultation_status_no_data": "📊 การปรึกษาราคา: ไม่มีข้อมูลตลาด"
     },
     "ja": {
       "clarification_sale_or_rent": "売却ですか、賃貸ですか？",
-      "clarification_main_intent": "何をしたいですか？\n1. 物件を購入\n2. 物件を賃貸\n3. 物件を売却\n4. 物件を貸出"
+      "clarification_main_intent": "何をしたいですか？\n1. 物件を購入\n2. 物件を賃貸\n3. 物件を売却\n4. 物件を貸出",
+      "map_suggestion": "\n\n📍 **地図で正確な場所を選択**\n\nあなたのエリアを **{district}** として特定しました。地図で正確な場所を選択しますか？ (オプション、買い手が見つけやすくなります)",
+      "location_suggestion": "\n\n📍 **提案:** 購入者が見つけやすいように地図上で正確な場所を選択してください！",
+      "location_suggestion_short": "\n\n📍 **提案:** 地図で正確な場所を選択！",
+      "completion_message": "✅ 完了！情報は完全です ({score}/100). 🎉 投稿の準備ができました！",
+      "price_consultation_status_with_data": "📊 価格相談: 市場データあり",
+      "price_consultation_status_no_data": "📊 価格相談: 市場データなし"
     }
   },
 

@@ -14,32 +14,32 @@ Extract from queries in ANY language (Vietnamese, English, Thai, Indonesian, etc
 - transaction_type: sale, rent
 
 **2. LOCATION**
-- district: District/County (Quận 7, District 2, etc.)
-- ward: Ward/Subdistrict (Phường Tân Phú, Ward 5, etc.)
+- district: District/County (District 7, District 2, etc.)
+- ward: Ward/Subdistrict (Ward Tan Phu, Ward 5, etc.)
 - street: Street name
 - address: Full address
 - project_name: Project/Development name (Vinhomes, Masteri, etc.)
 
 **3. PHYSICAL ATTRIBUTES**
 - area: Area in m² (convert from other units if needed)
-- bedrooms: Number of bedrooms (BR, PN, 房间)
-- bathrooms: Number of bathrooms (WC, bath, 浴室)
+- bedrooms: Number of bedrooms (BR, bedroom keywords)
+- bathrooms: Number of bathrooms (WC, bathroom keywords)
 - floors: Number of floors/stories
-- facade_width: Street frontage in meters (mặt tiền)
-- alley_width: Alley width in meters (hẻm)
+- facade_width: Street frontage in meters
+- alley_width: Alley width in meters
 
 **4. PRICE**
-- price: Price in VND (convert "tỷ"=billion, "triệu"=million, $=USD*25000)
+- price: Price in VND (convert billion/million keywords, $=USD*25000)
 - price_per_m2: Price per square meter
 - deposit: Deposit amount
 
 **5. LEGAL STATUS**
-- legal_status: sổ đỏ (red book), sổ hồng (pink book), hợp đồng (contract)
-- ownership_type: permanent (vĩnh viễn), 50 years
+- legal_status: red book, pink book, contract
+- ownership_type: permanent, 50 years
 
 **6. FEATURES**
-- furniture: full (full furniture), basic (cơ bản), none (không)
-- direction: East (Đông), West (Tây), North (Bắc), South (Nam), NE, SE, NW, SW
+- furniture: full (full furniture), basic, none
+- direction: East, West, North, South, NE, SE, NW, SW
 - balcony_direction: Balcony orientation
 
 **7. AMENITIES (Boolean)**
@@ -52,23 +52,23 @@ Extract from queries in ANY language (Vietnamese, English, Thai, Indonesian, etc
 🤖 EXTRACTION RULES:
 
 **Multi-language Number Parsing:**
-- Vietnamese: "2 tỷ" = 2,000,000,000 VND, "500 triệu" = 500,000,000 VND
+- Vietnamese: "2 billion" = 2,000,000,000 VND, "500 million" = 500,000,000 VND
 - English: "2.5 billion" = 2,500,000,000, "$100k" = 2,500,000,000 VND (assume $1=25k VND)
-- Thai: "2 ล้าน" = 2,000,000
+- Thai: "2 million" = 2,000,000
 
 **Multi-language Room Keywords:**
-- Bedrooms: BR, PN, phòng ngủ, bedroom, 房间, ห้องนอน
-- Bathrooms: WC, toilet, phòng tắm, bathroom, 浴室, ห้องน้ำ
+- Bedrooms: BR, bedroom keywords in multiple languages
+- Bathrooms: WC, toilet, bathroom keywords in multiple languages
 
 **Area Keywords:**
-- m², sqm, square meters, vuông, 平方米, ตารางเมตร
+- m², sqm, square meter keywords in multiple languages
 - Convert: 1 sqft = 0.093 m²
 
 **Direction Keywords:**
-- East: Đông, East, ตะวันออก
-- West: Tây, West, ตะวันตก
-- North: Bắc, North, เหนือ
-- South: Nam, South, ใต้
+- East: East direction keywords in multiple languages
+- West: West direction keywords in multiple languages
+- North: North direction keywords in multiple languages
+- South: South direction keywords in multiple languages
 
 **Default Values:**
 - If not mentioned, set to null/None
@@ -80,7 +80,7 @@ Extract from queries in ANY language (Vietnamese, English, Thai, Indonesian, etc
   "title": "Luxury 2BR apartment in District 7",
   "property_type": "apartment",
   "transaction_type": "sale",
-  "district": "Quận 7",
+  "district": "District 7",
   "area": 70.0,
   "bedrooms": 2,
   "bathrooms": 2,
@@ -95,13 +95,13 @@ Extract from queries in ANY language (Vietnamese, English, Thai, Indonesian, etc
 
 EXAMPLES (Multi-language):
 
-Input (Vietnamese): "Bán căn hộ 2PN 70m² Quận 7 giá 2.5 tỷ, full nội thất, hướng Đông, có hồ bơi"
+Input (Vietnamese example): "Sell apartment 2BR 70sqm District 7 price 2.5 billion, full furniture, East direction, has pool"
 Output: {
   "property_type": "apartment",
   "transaction_type": "sale",
   "bedrooms": 2,
   "area": 70.0,
-  "district": "Quận 7",
+  "district": "District 7",
   "price": 2500000000.0,
   "furniture": "full",
   "direction": "East",
@@ -119,13 +119,13 @@ Output: {
   "parking": true
 }
 
-Input (Vietnamese): "Cho thuê biệt thự Phú Mỹ Hưng 300m², 4PN, 50 triệu/tháng"
+Input (Vietnamese example): "For rent villa Phu My Hung 300sqm, 4BR, 50 million/month"
 Output: {
   "property_type": "villa",
   "transaction_type": "rent",
   "area": 300.0,
   "bedrooms": 4,
-  "project_name": "Phú Mỹ Hưng",
+  "project_name": "Phu My Hung",
   "price": 50000000.0
 }
 

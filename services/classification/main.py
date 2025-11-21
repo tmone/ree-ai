@@ -502,7 +502,8 @@ Respond with JSON only."""
 
         # SEARCH_BUY: Check if buy keywords present
         elif primary_intent == "SEARCH_BUY":
-            buy_keywords = ["buy", "purchase", "mua", "tìm mua", "tim mua", "ซื้อ", "購入"]
+            # Load buy keywords from master data (all languages)
+            buy_keywords = i18n_loader.get_intent_keywords('search_buy')
             if any(kw in query_lower for kw in buy_keywords):
                 return 1.0
             elif has_sale:  # "sale" can imply buying
@@ -512,9 +513,8 @@ Respond with JSON only."""
 
         # SEARCH_RENT: Check if rent search keywords present
         elif primary_intent == "SEARCH_RENT":
-            rent_search_keywords = ["find to rent", "looking to rent", "need to rent",
-                                    "tìm thuê", "tim thue", "cần thuê", "can thue",
-                                    "หาเช่า", "賃貸を探す"]
+            # Load rent search keywords from master data (all languages)
+            rent_search_keywords = i18n_loader.get_intent_keywords('search_rent')
             if any(kw in query_lower for kw in rent_search_keywords):
                 return 1.0
             elif has_rent:  # Generic rent keyword
@@ -550,11 +550,8 @@ Respond with JSON only."""
         self.logger.warning(f"{LogEmoji.INFO} This means LLM classification failed - investigate why!")
 
         # PRIORITY 1: Check for CHAT intent first (greetings, general questions)
-        chat_keywords = [
-            "xin chào", "hi", "hello", "chào bạn", "cảm ơn", "tạm biệt", "bye",
-            "hôm nay", "thứ mấy", "mấy giờ", "bạn là ai", "bạn có thể",
-            "thời tiết", "để xây nhà", "thủ tục", "cách đầu tư", "làm thế nào"
-        ]
+        # Load chat keywords from master data (all languages)
+        chat_keywords = i18n_loader.get_intent_keywords('chat')
 
         if any(kw in query_lower for kw in chat_keywords):
             # Check if it's REALLY about property transaction
@@ -569,26 +566,9 @@ Respond with JSON only."""
                 }
 
         # PRIORITY 2: Detect intent (POST vs SEARCH, SALE vs RENT)
-        # FIX Bug#24: Add missing posting keywords for "muốn bán", "muốn cho thuê"
-        posting_keywords = [
-            # Original keywords
-            "đăng tin", "tôi có", "nhà của tôi", "cần bán", "cần cho thuê", "muốn đăng",
-            # ADDED: Common variations for "want to sell/rent"
-            "muốn bán",         # "want to sell" - FIX for "Tôi muốn bán nhà"
-            "muốn cho thuê",    # "want to rent out"
-            "có nhà bán",       # "have house to sell"
-            "có nhà cho thuê",  # "have house for rent"
-            "định bán",         # "planning to sell"
-            "sắp bán",          # "about to sell"
-        ]
-
-        search_keywords = [
-            # Original keywords
-            "tìm", "cần mua", "cần thuê", "muốn mua", "muốn thuê", "tìm kiếm",
-            # ADDED: Common variations
-            "đang tìm",         # "currently looking for"
-            "muốn tìm",         # "want to find"
-        ]
+        # Load posting and search keywords from master data (all languages)
+        posting_keywords = i18n_loader.get_intent_keywords('post_sale') + i18n_loader.get_intent_keywords('post_rent')
+        search_keywords = i18n_loader.get_intent_keywords('search_buy') + i18n_loader.get_intent_keywords('search_rent')
 
         # Load transaction type keywords from master data
         sale_keywords_vi = i18n_loader.get_listing_type_keywords('sale', 'vi')
@@ -614,20 +594,9 @@ Respond with JSON only."""
         else:
             primary_intent = "SEARCH_BUY"  # Default to search buy
 
-        # Check for structured keywords (for mode classification)
-        structured_keywords = [
-            "pn", "phòng ngủ", "bedroom",
-            "tỷ", "triệu", "vnd",
-            "quận", "district", "phường",
-            "căn hộ", "nhà phố", "biệt thự"
-        ]
-
-        # Check for semantic keywords
-        semantic_keywords = [
-            "đẹp", "sang", "hiện đại", "cổ điển",
-            "yên tĩnh", "sầm uất", "thoáng",
-            "gần", "view", "tiện ích"
-        ]
+        # Load structured and semantic keywords from master data (all languages)
+        structured_keywords = i18n_loader.get_classification_keywords('structured_keywords')
+        semantic_keywords = i18n_loader.get_classification_keywords('semantic_keywords')
 
         has_structured = any(kw in query_lower for kw in structured_keywords)
         has_semantic = any(kw in query_lower for kw in semantic_keywords)

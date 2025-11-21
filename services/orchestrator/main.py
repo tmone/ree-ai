@@ -2075,6 +2075,13 @@ Re-extract property attributes with improved understanding. Focus on filling mis
             if overall_score >= 75 and is_user_confirming:
                 self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Conversation ending: Score {overall_score}/100 + User confirmed")
 
+                # BUG#32 FIX: Add listing_type derived from intent (REQUIRED for validation)
+                # Validation service expects 'listing_type', not 'transaction_type'
+                if "listing_type" not in entities:
+                    # Derive listing_type from intent: POST_SALE -> "sale", POST_RENT -> "rent"
+                    entities["listing_type"] = "sale" if primary_intent == "POST_SALE" else "rent"
+                    self.logger.info(f"{LogEmoji.INFO} [Bug#32 Fix] Added listing_type from intent: {entities['listing_type']}")
+
                 # VALIDATE PROPERTY ATTRIBUTES (CTO Priority 2)
                 self.logger.info(f"{LogEmoji.AI} [Property Posting] Running validation checks...")
 
@@ -3840,15 +3847,8 @@ Nearby districts:"""
                 self.logger.warning(f"{LogEmoji.WARNING} No coordinates found for district: {district}")
                 return feedback
 
-            # Multilingual map suggestion messages
-            MAP_SUGGESTIONS = {
-                "vi": f"\n\n📍 **Chọn vị trí chính xác trên bản đồ**\n\nTôi đã xác định khu vực của bạn là **{district}**. Bạn có muốn chọn vị trí chính xác trên bản đồ không? (Tùy chọn, giúp người mua dễ tìm thấy hơn)",
-                "en": f"\n\n📍 **Select Exact Location on Map**\n\nI've identified your area as **{district}**. Would you like to select the exact location on the map? (Optional, helps buyers find it easier)",
-                "th": f"\n\n📍 **เลือกตำแหน่งที่แน่นอนบนแผนที่**\n\nฉันระบุพื้นที่ของคุณเป็น **{district}** คุณต้องการเลือกตำแหน่งที่แน่นอนบนแผนที่หรือไม่? (ทางเลือก ช่วยให้ผู้ซื้อค้นหาได้ง่ายขึ้น)",
-                "ja": f"\n\n📍 **地図で正確な場所を選択**\n\nあなたのエリアを **{district}** として特定しました。地図で正確な場所を選択しますか？ (オプション、買い手が見つけやすくなります)"
-            }
-
-            suggestion = MAP_SUGGESTIONS.get(language, MAP_SUGGESTIONS["en"])
+            # Load map suggestion message from master data
+            suggestion = t('ui_messages.map_suggestion', language=language).format(district=district)
 
             # Append metadata for frontend (hidden HTML comment)
             location_meta = {
@@ -4313,26 +4313,14 @@ Generate a warm, congratulatory closing message in **{language} language** that:
                             "longitude": 106.7009
                         }
 
-                        # Add suggestion text based on language
-                        location_suggestions = {
-                            "vi": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ để người mua dễ dàng tìm đến!",
-                            "en": "\n\n📍 **Suggestion:** Select the exact location on the map to help buyers find it easily!",
-                            "th": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งที่ถูกต้องบนแผนที่เพื่อให้ผู้ซื้อค้นหาได้ง่าย!",
-                            "ja": "\n\n📍 **提案:** 購入者が見つけやすいように地図上で正確な場所を選択してください！"
-                        }
-                        message += location_suggestions.get(language, location_suggestions["en"])
+                        # Add suggestion text from master data
+                        message += t('ui_messages.location_suggestion', language=language)
                         message += f"\n\n<!--LOCATION_SELECTION:{json.dumps(location_trigger)}-->"
 
                     return message
 
-            # Fallback
-            fallback_templates = {
-                "vi": f"✅ Hoàn tất! Thông tin đăng tin đã đầy đủ ({overall_score:.0f}/100). 🎉 Tin của bạn đã sẵn sàng đăng tải!",
-                "en": f"✅ Complete! Your posting information is ready ({overall_score:.0f}/100). 🎉 Your property is ready to be published!",
-                "th": f"✅ เสร็จสิ้น! ข้อมูลของคุณครบถ้วน ({overall_score:.0f}/100). 🎉 พร้อมเผยแพร่แล้ว!",
-                "ja": f"✅ 完了！情報は完全です ({overall_score:.0f}/100). 🎉 投稿の準備ができました！"
-            }
-            fallback_message = fallback_templates.get(language, fallback_templates["en"])
+            # Load completion message from master data
+            fallback_message = t('ui_messages.completion_message', language=language).format(score=f"{overall_score:.0f}")
 
             # Also add location trigger to fallback
             needs_location = (
@@ -4349,13 +4337,8 @@ Generate a warm, congratulatory closing message in **{language} language** that:
                     "latitude": 10.7769,
                     "longitude": 106.7009
                 }
-                location_suggestions = {
-                    "vi": "\n\n📍 **Gợi ý:** Chọn vị trí chính xác trên bản đồ!",
-                    "en": "\n\n📍 **Suggestion:** Select exact location on map!",
-                    "th": "\n\n📍 **คำแนะนำ:** เลือกตำแหน่งบนแผนที่!",
-                    "ja": "\n\n📍 **提案:** 地図で正確な場所を選択！"
-                }
-                fallback_message += location_suggestions.get(language, location_suggestions["en"])
+                # Load short location suggestion from master data
+                fallback_message += t('ui_messages.location_suggestion_short', language=language)
                 fallback_message += f"\n\n<!--LOCATION_SELECTION:{json.dumps(location_trigger)}-->"
 
             return fallback_message
@@ -4877,14 +4860,9 @@ Generate a professional price consultation report in **{language} language** tha
                 data = response.json()
                 return data.get("content", "").strip()
 
-            # Fallback if LLM fails
-            fallback = {
-                "vi": f"📊 Tư vấn giá: {'Có dữ liệu thị trường' if has_data else 'Không có dữ liệu'}. Phân tích {iterations} lần.",
-                "en": f"📊 Price consultation: {'Market data available' if has_data else 'No market data'}. Analyzed {iterations} times.",
-                "th": f"📊 การปรึกษาราคา: {'มีข้อมูลตลาด' if has_data else 'ไม่มีข้อมูลตลาด'}",
-                "ja": f"📊 価格相談: {'市場データあり' if has_data else '市場データなし'}"
-            }
-            return fallback.get(language, fallback["en"])
+            # Load price consultation status from master data
+            status_key = 'ui_messages.price_consultation_status_with_data' if has_data else 'ui_messages.price_consultation_status_no_data'
+            return t(status_key, language=language)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Failed to generate price consultation response: {e}")

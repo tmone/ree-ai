@@ -60,7 +60,7 @@ All routing decisions are language-agnostic. Users can query in ANY language (Vi
   "should_use_rag": true,
   "routing_params": {
     "query_rewrite": "Find 2BR apartment in District 7 under 3 billion",
-    "filters": {"bedrooms": 2, "district": "Quận 7"},
+    "filters": {"bedrooms": 2, "district": "District 7"},
     "limit": 10
   },
   "reasoning": "SEARCH intent requires RAG retrieval"

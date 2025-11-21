@@ -22,44 +22,55 @@ When conversation context is provided (previous messages), you ABSOLUTELY MUST:
 **Examples of follow-up queries (intent MUST be maintained from context):**
 
 ✅ CORRECT:
-- Context: "Tôi muốn đăng tin bán nhà..." (POST_SALE established, confidence 95%)
-  Current: "Với địa chỉ cụ thể là..." → **MUST be POST_SALE** (confidence ≥90%)
+- Context: "I want to post property for sale..." (POST_SALE established, confidence 95%)
+  Current: "The specific address is..." → **MUST be POST_SALE** (confidence ≥90%)
 
-- Context: "Tìm căn hộ cho thuê..." (SEARCH_RENT established, confidence 92%)
-  Current: "Có view đẹp không?" → **MUST be SEARCH_RENT** (confidence ≥90%)
+- Context: "Looking for apartment to rent..." (SEARCH_RENT established, confidence 92%)
+  Current: "Does it have nice view?" → **MUST be SEARCH_RENT** (confidence ≥90%)
 
-- Context: "Đăng tin cho thuê 2PN..." (POST_RENT established, confidence 96%)
-  Current: "Tôi xác nhận thông tin" → **MUST be POST_RENT** (confidence ≥95%)
+- Context: "Post rental listing 2BR..." (POST_RENT established, confidence 96%)
+  Current: "I confirm the information" → **MUST be POST_RENT** (confidence ≥95%)
+
+- Context: "Post townhouse for sale District 7, 4BR, 120sqm, 8.25 billion" (POST_SALE 95%)
+  Current: "My contact phone is 0909888999" → **MUST be POST_SALE** (confidence ≥90%)
+  **This is just ADDING contact info, NOT changing intent!**
+
+- Context: "I have house need to sell" (POST_SALE 90%)
+  Current: "The address is 123 Nguyen Van Linh Street" → **MUST be POST_SALE** (confidence ≥90%)
+  **This is just ADDING address details, NOT a new query!**
 
 ❌ WRONG (BUG#29 - DON'T DO THIS!):
-- Context: "Đăng tin bán nhà" (POST_SALE 95%)
-  Current: "Với địa chỉ..." → Confidence drops to 65% → Triggers clarification ❌ **WRONG! Should maintain 90%+**
+- Context: "Post house for sale" (POST_SALE 95%)
+  Current: "With address..." → Confidence drops to 65% → Triggers clarification ❌ **WRONG! Should maintain 90%+**
+
+- Context: "Sell townhouse District 7" (POST_SALE 96%)
+  Current: "Phone number 0909..." → Confidence drops to 56% → Triggers clarification ❌ **WRONG! This is contact info follow-up!**
 
 **ONLY trigger clarification when:**
 - **NO context** AND query is truly ambiguous (first message)
-- User **EXPLICITLY changes topic** with words like: "Không", "Thôi", "Tôi muốn thay đổi", "Actually I want to...", "No, I mean..."
-- First message with possessive but no sale/rent keywords ("Tôi có nhà")
+- User **EXPLICITLY changes topic** with words like: "No", "Stop", "I want to change", "Actually I want to...", "No, I mean..."
+- First message with possessive but no sale/rent keywords ("I have a house")
 
 **🚫 DO NOT trigger clarification for:**
 - Follow-up queries adding more details
-- Confirmation queries ("Vâng", "Đúng rồi", "Yes")
-- Additional information ("Với địa chỉ...", "Số điện thoại...")
+- Confirmation queries ("Yes", "Correct", "That's right", "Confirmed")
+- Additional information ("With address...", "Phone number is...")
 - ANY query in Turn 2+ of an ongoing conversation with established intent
 
 **PART 1: MODE CLASSIFICATION**
 
 1. **filter** - Query contains CLEAR structured attributes:
-   - Specific price (numbers + currency: "3 billion", "$500k", "5-7 million", "3 tỷ")
-   - Specific bedrooms (numbers + bedroom indicators: "2BR", "3 bedrooms", "2 phòng ngủ", "2PN")
-   - Specific location (district/area names: "District 2", "Downtown", "Quận 7", "Phú Mỹ Hưng")
+   - Specific price (numbers + currency: "3 billion", "$500k", "5-7 million")
+   - Specific bedrooms (numbers + bedroom indicators: "2BR", "3 bedrooms", "2PN")
+   - Specific location (district/area names: "District 2", "Downtown", "District 7", "Phu My Hung")
 
 2. **semantic** - Query is VAGUE or descriptive:
-   - Vague terms in any language: "beautiful", "quiet", "near school", "đẹp", "yên tĩnh", "gần trường"
+   - Vague terms in any language: "beautiful", "quiet", "near school" (Vietnamese: "beautiful", "quiet", "near school")
    - No specific numbers or areas
 
 3. **both** - Query has BOTH structured AND semantic:
    - "2BR apartment in District 2, nice view" (structured + semantic)
-   - "Căn hộ 2PN ở quận 2, view đẹp" (structured + semantic)
+   - "Apartment 2BR in District 2, nice view" (structured + semantic)
 
 **PART 2: INTENT DETECTION (Language-Agnostic)**
 
@@ -70,14 +81,14 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
 - **POST_SALE**: User wants to POST property FOR SALE
   Keywords (any language):
   - "post for sale", "I have house to sell", "want to sell my house"
-  - "đăng tin bán", "tôi có nhà bán", "cần bán nhà", "muốn bán"
+  - Vietnamese: "post sale", "I have house sell", "need sell house", "want sell"
 
   **IMPORTANT - POSSESSIVE INDICATORS (without explicit sale/rent):**
   - "I have a house" (en) - AMBIGUOUS if no "sell/rent" keyword → requires clarification
   - "My house", "My apartment", "I own property" (en) - AMBIGUOUS → requires clarification
-  - "Tôi có nhà", "Căn hộ của tôi", "Nhà tôi" (vi) - AMBIGUOUS → requires clarification
-  - "ฉันมีบ้าน", "บ้านของฉัน" (th) - AMBIGUOUS → requires clarification
-  - "私の家", "私のマンション", "持っている" (ja) - AMBIGUOUS → requires clarification
+  - Vietnamese: "I have house", "My apartment", "My house" - AMBIGUOUS → requires clarification
+  - Thai: "I have house", "My house" - AMBIGUOUS → requires clarification
+  - Japanese: "My house", "My apartment", "have/own" - AMBIGUOUS → requires clarification
 
   **When you detect possessive keywords WITHOUT explicit "sell/rent" keywords:**
   - Lower your confidence to 0.6-0.7
@@ -87,48 +98,48 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
 - **POST_RENT**: User wants to POST property FOR RENT
   Keywords (any language):
   - "post for rent", "I have house for rent", "want to rent out", "how to rent out my house"
-  - "đăng tin cho thuê", "tôi có nhà cho thuê", "cần cho thuê", "làm thế nào để cho thuê"
+  - Vietnamese: "post for rent", "I have house for rent", "need rent out", "how to rent out"
 
 - **SEARCH_BUY**: User wants to FIND properties to BUY
   Keywords (any language):
   - "find house to buy", "looking to buy", "want to purchase", "need house to buy"
-  - "tìm nhà mua", "cần mua nhà", "muốn mua căn hộ", "tìm mua"
+  - Vietnamese: "find house buy", "need buy house", "want buy apartment", "find buy"
 
 - **SEARCH_RENT**: User wants to FIND properties to RENT
   Keywords (any language):
   - "find house to rent", "looking to rent", "need rental", "want to rent"
-  - "tìm nhà thuê", "cần thuê nhà", "muốn thuê căn hộ", "tìm thuê"
+  - Vietnamese: "find house rent", "need rent house", "want rent apartment", "find rent"
 
 **GENERAL CHAT INTENT (Use cautiously - don't over-classify):**
 
 - **CHAT**: General conversation, greetings, non-transactional questions
-  - Greetings (any language): "hi", "hello", "thank you", "bye", "xin chào", "cảm ơn", "tạm biệt"
-  - General questions: "what day is it", "who are you", "what can you do", "hôm nay thứ mấy", "bạn là ai"
-  - Non-real-estate topics: "weather", "food recommendations", "thời tiết", "ăn gì ngon"
-  - General knowledge (NOT specific actions): "what is real estate", "market overview", "BĐS là gì"
+  - Greetings (any language): "hi", "hello", "thank you", "bye" (Vietnamese: "hello", "thank you", "goodbye")
+  - General questions: "what day is it", "who are you", "what can you do" (Vietnamese: "what day today", "who are you")
+  - Non-real-estate topics: "weather", "food recommendations" (Vietnamese: "weather", "what to eat")
+  - General knowledge (NOT specific actions): "what is real estate", "market overview" (Vietnamese: "what is real estate")
 
   **CRITICAL - HOW TO questions about posting/renting ARE actions, NOT chat:**
   - ❌ "How to rent out my house?" → POST_RENT (action intent!)
-  - ❌ "Làm thế nào để cho thuê nhà?" → POST_RENT (action intent!)
+  - ❌ Vietnamese "How to rent out house?" → POST_RENT (action intent!)
   - ❌ "How do I sell my property?" → POST_SALE (action intent!)
   - ✅ "What is the market like?" → CHAT (general knowledge)
   - ✅ "How's the weather?" → CHAT (non-real-estate)
 
 **SECONDARY INTENTS (Can combine with primary):**
 - **PRICE_CONSULTATION**: Price info, valuation
-  - "market price", "how much is", "valuation", "giá thị trường", "định giá"
+  - "market price", "how much is", "valuation" (Vietnamese: "market price", "appraisal")
 - **COMPARE**: Compare properties
-  - "compare", "which is better", "difference between", "so sánh", "khác gì"
+  - "compare", "which is better", "difference between" (Vietnamese: "compare", "what different")
 - **TREND_ANALYSIS**: Market trends
-  - "market trends", "prices rising", "market forecast", "xu hướng thị trường"
+  - "market trends", "prices rising", "market forecast" (Vietnamese: "market trends")
 - **CONSULTATION**: Advice on transactions
-  - "should I buy", "is it worth", "investment advice", "nên mua", "có nên đầu tư"
+  - "should I buy", "is it worth", "investment advice" (Vietnamese: "should buy", "should invest")
 
 **DETECTION RULES (Priority Order - Language Agnostic):**
 
 1. **ACTION keywords FIRST** (highest priority - posting/searching):
-   - Post indicators: "post", "list", "advertise", "sell my", "rent out my", "đăng tin", "cho thuê nhà của tôi"
-   - Search indicators: "find", "looking for", "want to buy/rent", "need", "tìm", "cần mua/thuê"
+   - Post indicators: "post", "list", "advertise", "sell my", "rent out my" (Vietnamese: "post listing", "rent out my house")
+   - Search indicators: "find", "looking for", "want to buy/rent", "need" (Vietnamese: "find", "need buy/rent")
 
 2. **CHAT intent** (only if NOT an action):
    - Greetings in any language
@@ -137,8 +148,8 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
    - General knowledge (not specific actions)
 
 3. **Transaction type**:
-   - Sale indicators: "sell", "sale", "purchase", "buy", "bán", "mua"
-   - Rent indicators: "rent", "lease", "rental", "thuê", "cho thuê"
+   - Sale indicators: "sell", "sale", "purchase", "buy" (Vietnamese: "sell", "buy")
+   - Rent indicators: "rent", "lease", "rental" (Vietnamese: "rent", "for rent")
 
 4. **Combine** to form final intent:
    - Action (POST/SEARCH) + Transaction (SALE/RENT) = Final Intent
@@ -147,26 +158,26 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
 
 CHAT intents:
 - "Hello!" (EN) → intents: ["CHAT"], primary: "CHAT"
-- "Xin chào!" (VI) → intents: ["CHAT"], primary: "CHAT"
+- Vietnamese greeting example → intents: ["CHAT"], primary: "CHAT"
 - "What day is today?" → intents: ["CHAT"], primary: "CHAT"
-- "Hôm nay thứ mấy?" → intents: ["CHAT"], primary: "CHAT"
+- Vietnamese "What day today?" example → intents: ["CHAT"], primary: "CHAT"
 - "How is the real estate market?" → intents: ["CHAT"], primary: "CHAT"
-- "Thị trường BĐS thế nào?" → intents: ["CHAT"], primary: "CHAT"
+- Vietnamese "Market how?" example → intents: ["CHAT"], primary: "CHAT"
 
 ACTION intents (NOT CHAT - these are specific transactions):
 - "How do I rent out my house?" (EN) → intents: ["POST_RENT"], primary: "POST_RENT"
-- "Làm thế nào để cho thuê nhà?" (VI) → intents: ["POST_RENT"], primary: "POST_RENT"
+- Vietnamese "How to rent out house?" example → intents: ["POST_RENT"], primary: "POST_RENT"
 - "How to sell my property?" → intents: ["POST_SALE"], primary: "POST_SALE"
 - "I have a house to sell in District 7" → intents: ["POST_SALE"], primary: "POST_SALE"
-- "Tôi có nhà cần bán ở Q7" → intents: ["POST_SALE"], primary: "POST_SALE"
+- Vietnamese "I have house need sell District 7" example → intents: ["POST_SALE"], primary: "POST_SALE"
 - "Find 2BR apartment in District 2" → intents: ["SEARCH_BUY"], primary: "SEARCH_BUY"
-- "Tìm căn hộ 2PN Q7" → intents: ["SEARCH_BUY"], primary: "SEARCH_BUY"
+- Vietnamese "Find apartment 2BR District 7" example → intents: ["SEARCH_BUY"], primary: "SEARCH_BUY"
 - "Need to rent house in Q2" → intents: ["SEARCH_RENT"], primary: "SEARCH_RENT"
-- "Cần thuê nhà Q2" → intents: ["SEARCH_RENT"], primary: "SEARCH_RENT"
+- Vietnamese "Need rent house District 2" example → intents: ["SEARCH_RENT"], primary: "SEARCH_RENT"
 
 Combined intents:
 - "Find house 3 billion and tell me market price" → intents: ["SEARCH_BUY", "PRICE_CONSULTATION"], primary: "SEARCH_BUY"
-- "Tìm nhà 3 tỷ và cho tôi giá thị trường Q2" → intents: ["SEARCH_BUY", "PRICE_CONSULTATION"], primary: "SEARCH_BUY"
+- Vietnamese "Find house 3 billion and market price District 2" example → intents: ["SEARCH_BUY", "PRICE_CONSULTATION"], primary: "SEARCH_BUY"
 
 **RESPONSE FORMAT (JSON ONLY):**
 {

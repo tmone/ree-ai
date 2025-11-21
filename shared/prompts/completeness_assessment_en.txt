@@ -88,29 +88,29 @@ Scoring:
 
 🎯 SCORING GUIDELINES:
 
-**90-100: EXCELLENT (Xuất sắc)**
+**90-100: EXCELLENT**
 - All critical fields present
 - Rich description
 - Multiple amenities listed
 - Ready to post immediately
 
-**70-89: GOOD (Tốt)**
+**70-89: GOOD**
 - All required fields present
 - Some nice-to-have info
 - Minor improvements possible
 - Ready to post
 
-**60-69: ACCEPTABLE (Chấp nhận được)**
+**60-69: ACCEPTABLE**
 - Required fields present
 - Missing some important details
 - Can post but could improve
 
-**40-59: WEAK (Yếu)**
+**40-59: WEAK**
 - Missing some critical fields
 - Needs significant improvement
 - NOT ready to post
 
-**0-39: VERY WEAK (Rất yếu)**
+**0-39: VERY WEAK**
 - Missing most critical fields
 - Needs major rework
 - NOT ready to post
@@ -142,10 +142,10 @@ Scoring:
 **FEEDBACK LANGUAGE TEMPLATES:**
 
 **Vietnamese:**
-- Missing critical: "Cần bổ sung: {field}"
-- Good: "Thông tin tốt về {category}"
-- Ready: "Tin đăng đã đủ thông tin cơ bản, có thể đăng ngay!"
-- Not ready: "Cần bổ sung thêm thông tin quan trọng trước khi đăng"
+- Missing critical: "Need to add: {field}"
+- Good: "Good information about {category}"
+- Ready: "Listing has sufficient basic information, ready to post!"
+- Not ready: "Need to add more critical information before posting"
 
 **English:**
 - Missing critical: "Need to add: {field}"
@@ -170,13 +170,13 @@ Round 3+ (Score >= 60):
 
 EXAMPLES (Multi-language):
 
-Input (Vietnamese): {"property_type": "apartment", "district": "Quận 7", "area": 70}
+Input (Vietnamese example): {"property_type": "apartment", "district": "District 7", "area": 70}
 Output: {
   "overall_score": 40,
   "missing_fields": ["price", "bedrooms"],
-  "suggestions": ["Cần bổ sung giá bán", "Cần cho biết số phòng ngủ"],
+  "suggestions": ["Need to add sale price", "Need to specify number of bedrooms"],
   "ready_to_post": false,
-  "next_question": "Giá bán của căn hộ là bao nhiêu?"
+  "next_question": "What is the sale price of the apartment?"
 }
 
 Input (English): {"property_type": "apartment", "district": "District 7", "area": 70, "price": 2500000000, "bedrooms": 2}

@@ -15,9 +15,9 @@ Characteristics:
 - Usually 2-5 floors
 - Private ownership, has yard/garden
 Keywords (multi-language):
-- Vietnamese: nhà, nhà riêng, nhà phố, nhà mặt tiền, nhà hẻm
+- Vietnamese: house, private house, townhouse, street-front house, alley house
 - English: house, townhouse, single-family, row house
-- Thai: บ้าน, ทาวน์เฮาส์
+- Thai: house, townhouse
 
 **2. APARTMENT (Condo, Flat)**
 Characteristics:
@@ -26,9 +26,9 @@ Characteristics:
 - Shared amenities (pool, gym, security)
 - Strata ownership
 Keywords (multi-language):
-- Vietnamese: căn hộ, chung cư, apartment, condo
+- Vietnamese: apartment, condo keywords
 - English: apartment, condo, flat, unit
-- Thai: คอนโด, อพาร์ทเมนท์
+- Thai: condo, apartment
 
 **3. VILLA (Luxury house, Estate)**
 Characteristics:
@@ -37,9 +37,9 @@ Characteristics:
 - High-end finishes
 - Often in gated community
 Keywords (multi-language):
-- Vietnamese: biệt thự, villa, nhà vườn
+- Vietnamese: villa, luxury house
 - English: villa, mansion, estate
-- Thai: วิลล่า, บ้านหรู
+- Thai: villa, luxury house
 
 **4. LAND (Plot, Lot)**
 Characteristics:
@@ -47,9 +47,9 @@ Characteristics:
 - No structure or under construction
 - For development/investment
 Keywords (multi-language):
-- Vietnamese: đất, lô đất, đất nền, mảnh đất
+- Vietnamese: land, lot, plot keywords
 - English: land, lot, plot, vacant land
-- Thai: ที่ดิน
+- Thai: land
 
 **5. COMMERCIAL (Office, Retail)**
 Characteristics:
@@ -57,9 +57,9 @@ Characteristics:
 - Office space, retail, shophouse
 - For business use
 Keywords (multi-language):
-- Vietnamese: văn phòng, mặt bằng, shophouse, thương mại
+- Vietnamese: office, commercial space, shophouse keywords
 - English: office, commercial, retail, shophouse
-- Thai: พื้นที่เชิงพาณิชย์, ออฟฟิศ
+- Thai: commercial space, office
 
 🤖 CLASSIFICATION LOGIC:
 
@@ -80,25 +80,25 @@ Keywords (multi-language):
 {
   "property_type": "APARTMENT",
   "confidence": 0.92,
-  "reasoning": "Contains keywords: căn hộ, shared pool, high-rise building"
+  "reasoning": "Contains keywords: apartment, shared pool, high-rise building"
 }
 
 EXAMPLES (Multi-language):
 
-Input (Vietnamese): "Căn hộ 2 phòng ngủ Vinhomes, có hồ bơi chung"
-Output: {"property_type": "APARTMENT", "confidence": 0.95, "reasoning": "Keywords: căn hộ, shared amenities (pool)"}
+Input (Vietnamese example): "Apartment 2 bedrooms Vinhomes, has shared pool"
+Output: {"property_type": "APARTMENT", "confidence": 0.95, "reasoning": "Keywords: apartment, shared amenities (pool)"}
 
 Input (English): "2BR condo in District 2 with gym and pool"
 Output: {"property_type": "APARTMENT", "confidence": 0.94, "reasoning": "Keywords: condo, shared amenities"}
 
-Input (Vietnamese): "Biệt thự Phú Mỹ Hưng 300m² có sân vườn riêng"
-Output: {"property_type": "VILLA", "confidence": 0.96, "reasoning": "Keywords: biệt thự, large area 300m², private garden"}
+Input (Vietnamese example): "Villa Phu My Hung 300sqm has private garden"
+Output: {"property_type": "VILLA", "confidence": 0.96, "reasoning": "Keywords: villa, large area 300sqm, private garden"}
 
 Input (English): "Townhouse 4 floors with rooftop terrace"
 Output: {"property_type": "HOUSE", "confidence": 0.93, "reasoning": "Keywords: townhouse, 4 floors"}
 
-Input (Vietnamese): "Đất nền 100m² đường Nguyễn Văn Linh"
-Output: {"property_type": "LAND", "confidence": 0.97, "reasoning": "Keywords: đất nền, no structure mentioned"}
+Input (Vietnamese example): "Land plot 100sqm Nguyen Van Linh street"
+Output: {"property_type": "LAND", "confidence": 0.97, "reasoning": "Keywords: land plot, no structure mentioned"}
 
 Input (English): "Office space 150m² in CBD"
 Output: {"property_type": "COMMERCIAL", "confidence": 0.95, "reasoning": "Keywords: office space, commercial use"}

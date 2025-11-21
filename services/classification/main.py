@@ -306,10 +306,14 @@ Respond with JSON only."""
                     # ========================================
                     query_lower = request.query.lower()
 
+                    # FIX: Handle 'auto' language - fallback to 'vi' for keyword matching
+                    # Language detection is done by LLM, but for keyword matching we need a specific language
+                    keyword_language = request.language if request.language != 'auto' else 'vi'
+
                     # Load keywords from master data
-                    sale_keywords = i18n_loader.get_listing_type_keywords('sale', request.language)
-                    rent_keywords = i18n_loader.get_listing_type_keywords('rent', request.language)
-                    possessive_keywords = i18n_loader.get_possessive_keywords(request.language)
+                    sale_keywords = i18n_loader.get_listing_type_keywords('sale', keyword_language)
+                    rent_keywords = i18n_loader.get_listing_type_keywords('rent', keyword_language)
+                    possessive_keywords = i18n_loader.get_possessive_keywords(keyword_language)
 
                     # Calculate keyword match score (0.0 - 1.0)
                     keyword_score = self._calculate_keyword_score(

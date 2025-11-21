@@ -241,6 +241,28 @@ class I18nLoader:
                 f"Possessive keywords not found for language '{lang}'. Error: {e}"
             )
 
+    def get_intent_keywords(self, intent_type: str, lang: str = 'vi') -> List[str]:
+        """
+        Get intent keywords for intent detection
+
+        Args:
+            intent_type: Intent type (post_sale, post_rent, search_buy, search_rent, chat, etc.)
+            lang: Language code (vi/en/th/ja)
+
+        Returns:
+            List of intent keywords
+
+        Example:
+            kw = i18n.get_intent_keywords('post_sale', 'vi')
+            # ['bán nhà', 'bán căn hộ', 'muốn bán', ...]
+        """
+        try:
+            return self._data['intent_keywords'][intent_type][lang]
+        except KeyError as e:
+            raise RuntimeError(
+                f"Intent keywords not found for intent='{intent_type}' lang='{lang}'. Error: {e}"
+            )
+
     def get_raw_data(self) -> Dict:
         """
         Get raw master data dictionary

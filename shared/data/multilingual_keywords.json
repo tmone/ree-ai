@@ -170,13 +170,23 @@
         "tư vấn giá", "tu van gia",
         "định giá", "dinh gia",
         "giá thị trường", "gia thi truong",
-        "có hợp lý không", "co hop ly khong"
+        "có hợp lý không", "co hop ly khong",
+        "hợp lý", "hop ly",
+        "nhà tôi giá", "nha toi gia",
+        "giá căn hộ", "gia can ho",
+        "giá nhà", "gia nha",
+        "trị giá", "tri gia",
+        "giá trị", "gia tri"
       ],
       "en": [
         "what's the price", "how much",
         "price inquiry", "price consultation",
         "market price", "property valuation",
-        "is it reasonable", "fair price"
+        "is it reasonable", "fair price",
+        "how much is my", "what is the value",
+        "worth", "value of",
+        "appraisal", "estimate price",
+        "price of my", "my house worth"
       ]
     },
 
@@ -211,6 +221,10 @@
         "hôm nay", "thế nào", "thứ mấy", "mấy giờ",
         "cảm ơn", "tạm biệt", "bye",
         "bạn là ai", "bạn có thể",
+        "giúp tôi với", "giup toi voi",
+        "giúp đỡ", "giup do",
+        "trợ giúp", "tro giup",
+        "hỗ trợ", "ho tro",
         "thời tiết", "để xây nhà", "thủ tục", "cách đầu tư", "làm thế nào"
       ],
       "en": [
@@ -219,6 +233,9 @@
         "thank you", "bye",
         "good morning", "good evening",
         "who are you", "what can you",
+        "help me", "i need help",
+        "can you help", "assist me",
+        "support", "assistance",
         "weather", "how to build", "procedures", "how to invest", "how do i"
       ],
       "th": [

@@ -112,22 +112,74 @@ Detect ALL intents. **CRITICAL**: Distinguish POSTING vs SEARCHING.
 
 **GENERAL CHAT INTENT (Use cautiously - don't over-classify):**
 
-- **CHAT**: General conversation, greetings, non-transactional questions
-  - Greetings (any language): "hi", "hello", "thank you", "bye" (Vietnamese: "hello", "thank you", "goodbye")
-  - General questions: "what day is it", "who are you", "what can you do" (Vietnamese: "what day today", "who are you")
-  - Non-real-estate topics: "weather", "food recommendations" (Vietnamese: "weather", "what to eat")
-  - General knowledge (NOT specific actions): "what is real estate", "market overview" (Vietnamese: "what is real estate")
+- **CHAT**: General conversation, greetings, non-transactional questions, general help requests
+
+  **CRITICAL - Use CHAT ONLY for:**
+  1. **Greetings and closings** (any language):
+     - "hi", "hello", "good morning", "thank you", "bye"
+     - Vietnamese: "xin chào", "chào bạn", "cảm ơn", "tạm biệt"
+
+  2. **Identity and capability questions:**
+     - "who are you", "what can you do", "how can you help"
+     - Vietnamese: "bạn là ai", "bạn có thể làm gì", "giúp gì được"
+
+  3. **General non-specific help requests:**
+     - "help me", "I need help", "can you assist"
+     - Vietnamese: "giúp tôi với", "tôi cần giúp đỡ"
+
+  4. **General time/day questions:**
+     - "what day is it", "what time is it"
+     - Vietnamese: "hôm nay thứ mấy", "mấy giờ rồi"
+
+  5. **Non-real-estate topics:**
+     - "weather", "food recommendations", "how are you"
+     - Vietnamese: "thời tiết", "ăn gì ngon"
+
+  **Examples of CHAT intent:**
+  ✅ "Xin chào" → intents: ["CHAT"], primary: "CHAT"
+  ✅ "Hello" → intents: ["CHAT"], primary: "CHAT"
+  ✅ "Bạn là ai?" → intents: ["CHAT"], primary: "CHAT"
+  ✅ "What can you do?" → intents: ["CHAT"], primary: "CHAT"
+  ✅ "Giúp tôi với" (vague, no context) → intents: ["CHAT"], primary: "CHAT"
+  ✅ "How are you?" → intents: ["CHAT"], primary: "CHAT"
+  ✅ "What is real estate?" → intents: ["CHAT"], primary: "CHAT"
 
   **CRITICAL - HOW TO questions about posting/renting ARE actions, NOT chat:**
   - ❌ "How to rent out my house?" → POST_RENT (action intent!)
-  - ❌ Vietnamese "How to rent out house?" → POST_RENT (action intent!)
+  - ❌ Vietnamese "Làm thế nào để cho thuê nhà?" → POST_RENT (action intent!)
   - ❌ "How do I sell my property?" → POST_SALE (action intent!)
-  - ✅ "What is the market like?" → CHAT (general knowledge)
-  - ✅ "How's the weather?" → CHAT (non-real-estate)
+  - ❌ "Làm sao để đăng tin bán nhà?" → POST_SALE (action intent!)
+
+  **NOT CHAT (these have specific intent):**
+  - ❌ "Giúp tôi tìm nhà" → SEARCH (specific action: find house)
+  - ❌ "Help me sell my house" → POST_SALE (specific action: sell)
+
+  ✅ "What is the market like?" → CHAT (general knowledge)
+  ✅ "How's the weather?" → CHAT (non-real-estate)
 
 **SECONDARY INTENTS (Can combine with primary):**
-- **PRICE_CONSULTATION**: Price info, valuation
-  - "market price", "how much is", "valuation" (Vietnamese: "market price", "appraisal")
+
+- **PRICE_CONSULTATION**: Price inquiry, property valuation, asking about prices
+  **CRITICAL - This is a DISTINCT intent for price-related questions:**
+
+  Keywords (any language):
+  - "how much", "what's the price", "market price", "property valuation"
+  - "how much is", "price of", "cost of", "value of"
+  - Vietnamese: "giá bao nhiêu", "hỏi giá", "tư vấn giá", "định giá", "giá thị trường"
+  - "is it reasonable", "fair price", "worth it"
+
+  **Examples of PRICE_CONSULTATION intent:**
+  ✅ "Nhà tôi giá bao nhiêu?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  ✅ "Giá căn hộ này hợp lý không?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  ✅ "Tư vấn giá bất động sản" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  ✅ "What's the market price?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  ✅ "How much is my house worth?" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+  ✅ "Property valuation in District 7" → intents: ["PRICE_CONSULTATION"], primary: "PRICE_CONSULTATION"
+
+  **NOT PRICE_CONSULTATION (these are actions):**
+  ❌ "Find house under 3 billion" → SEARCH_BUY (has specific price filter)
+  ❌ "I want to sell for 5 billion" → POST_SALE (has specific price)
+
 - **COMPARE**: Compare properties
   - "compare", "which is better", "difference between" (Vietnamese: "compare", "what different")
 - **TREND_ANALYSIS**: Market trends

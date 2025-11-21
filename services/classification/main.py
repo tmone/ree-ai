@@ -388,7 +388,7 @@ Respond with JSON only."""
                             possible_intents = ["SEARCH_BUY", "SEARCH_RENT", "POST_SALE", "POST_RENT"]
                             clarification_question = i18n_loader.get_ui_message(
                                 'clarification_main_intent',
-                                lang=request.language
+                                lang=keyword_language  # Use keyword_language with fallback, not request.language
                             )
                             self.logger.info(
                                 f"{LogEmoji.WARNING} Very low confidence ({confidence:.2f}) - "
@@ -413,7 +413,7 @@ Respond with JSON only."""
                         possible_intents = ["POST_SALE", "POST_RENT"]
                         clarification_question = i18n_loader.get_ui_message(
                             'clarification_sale_or_rent',
-                            lang=request.language
+                            lang=keyword_language  # Use keyword_language with fallback, not request.language
                         )
                         self.logger.info(
                             f"{LogEmoji.WARNING} Possessive without sale/rent keywords "

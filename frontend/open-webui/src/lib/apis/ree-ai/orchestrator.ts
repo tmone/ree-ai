@@ -17,6 +17,11 @@ export interface OrchestratorResponse {
 	service_used: string;
 	confidence: number;
 	metadata?: Record<string, any>;
+	// NEW: Structured Response Components (OpenAI Apps SDK Pattern)
+	components?: Array<{
+		type: string;
+		data: any;
+	}>;
 }
 
 /**

@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from shared.models.core_gateway import FileAttachment
 from shared.models.reasoning import ReasoningChain, AmbiguityDetectionResult, KnowledgeExpansion
+from shared.models.ui_components import UIComponent
 
 
 class IntentType(str, Enum):
@@ -57,10 +58,16 @@ class OrchestrationResponse(BaseModel):
     """Response from orchestration with transparent reasoning (Codex-inspired)."""
     intent: IntentType
     confidence: float
-    response: str = Field(..., description="Final response to user")
+    response: str = Field(..., description="Final response to user (text message)")
     service_used: Optional[str] = Field(None, description="Backend service that handled request")
     execution_time_ms: float
     metadata: Optional[Dict[str, Any]] = None
+
+    # NEW: Structured UI Components (Approach 1)
+    components: Optional[List[UIComponent]] = Field(
+        None,
+        description="UI components to be rendered by frontend (property cards, modals, etc.)"
+    )
 
     # NEW: Reasoning transparency (Phase 1)
     reasoning_chain: Optional[ReasoningChain] = Field(

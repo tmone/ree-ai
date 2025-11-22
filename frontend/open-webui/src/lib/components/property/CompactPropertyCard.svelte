@@ -1,193 +1,194 @@
 <script lang="ts">
 	/**
-	 * Compact Property Card - OpenAI Design Standards Compliant
+	 * Compact Property Card - OpenAI Apps SDK Compliant
 	 *
-	 * Follows OpenAI principle: "One card, a few key details, a clear CTA"
+	 * Follows "Simple" principle: One card, a few key details, one clear CTA
+	 * Design: Extracted from Figma (400px max-width, 60px thumbnail)
 	 *
-	 * Design Principles:
-	 * - Shows ONLY 4 critical data points (title, location, key feature, price)
-	 * - ONE clear call-to-action
-	 * - Fits in conversational flow (max height 100px)
-	 * - Brand color ONLY on CTA button
-	 * - WCAG AA accessible
+	 * Data points (4 only):
+	 * - Title
+	 * - Location + Key Feature (bedrooms + area)
+	 * - Price
+	 * - CTA: "Xem chi tiết"
 	 */
 
-	import type { Property } from '$lib/apis/ree-ai';
+	export let property: any;
+	export let onClick: ((property: any) => void) | undefined = undefined;
 
-	export let property: Property;
-	export let onViewDetails: ((property: Property) => void) | undefined = undefined;
+	// Format key feature: "2PN 75m²" or "Đất 200m²"
+	function getKeyFeature(prop: any): string {
+		const bedrooms = prop.bedrooms || 0;
+		const area = prop.area || prop.areaDisplay || '';
 
-	// Format price in Vietnamese style
-	const formatPrice = (price: number): string => {
-		if (price >= 1000000000) {
-			return `${(price / 1000000000).toFixed(1)} tỷ`;
+		if (bedrooms > 0) {
+			return `${bedrooms}PN ${area}m²`;
 		}
-		return `${(price / 1000000).toFixed(0)} triệu`;
-	};
+		return `${area}m²`;
+	}
 
-	// Get ONE key feature (most relevant to user)
-	const getKeyFeature = (property: Property): string => {
-		const parts: string[] = [];
-
-		// Property type specific features
-		if (property.property_type === 'apartment' || property.property_type === 'house') {
-			if (property.bedrooms) {
-				parts.push(`${property.bedrooms}PN`);
-			}
+	function handleClick() {
+		if (onClick) {
+			onClick(property);
 		}
-
-		// Always show area (universal)
-		if (property.area) {
-			parts.push(`${property.area.toFixed(0)}m²`);
-		}
-
-		return parts.join(' • ') || 'N/A';
-	};
-
-	// Handle CTA click
-	const handleClick = () => {
-		if (onViewDetails) {
-			onViewDetails(property);
-		}
-	};
-
-	// Get fallback image
-	const propertyImage = property.images && property.images.length > 0
-		? property.images[0]
-		: '/placeholder-property.jpg';
+	}
 </script>
 
 <article
 	class="compact-property-card"
-	role="article"
-	aria-label="Thông tin bất động sản: {property.title}"
+	role="button"
+	tabindex="0"
+	on:click={handleClick}
+	on:keypress={(e) => e.key === 'Enter' && handleClick()}
+	aria-label={`Property: ${property.title}`}
 >
-	<!-- Thumbnail Image -->
-	<div class="thumbnail-container">
+	<!-- Thumbnail (60x60px per Figma specs) -->
+	{#if property.imageUrl}
 		<img
-			src={propertyImage}
+			src={property.imageUrl}
 			alt={property.title}
 			class="thumbnail"
 			loading="lazy"
 		/>
-	</div>
+	{:else}
+		<div class="thumbnail placeholder" role="img" aria-label="No image available">
+			<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+			</svg>
+		</div>
+	{/if}
 
-	<!-- Property Information -->
+	<!-- Content: Title + Location + Price -->
 	<div class="content">
-		<!-- Title (1 line max) -->
+		<!-- Title (1 line max, truncated) -->
 		<h4 class="title">{property.title}</h4>
 
 		<!-- Location + Key Feature (1 line) -->
 		<p class="metadata">
-			<span class="location" aria-label="Vị trí">
-				📍 {property.location}
-			</span>
-			<span class="separator" aria-hidden="true">•</span>
-			<span class="feature" aria-label="Đặc điểm">
-				{getKeyFeature(property)}
-			</span>
+			<span class="sr-only">Location:</span>
+			📍 {property.address || property.location} • {getKeyFeature(property)}
 		</p>
 
 		<!-- Price (emphasized) -->
 		<p class="price">
-			<span class="sr-only">Giá:</span>
-			<strong aria-label="{property.price.toLocaleString()} đồng Việt Nam">
-				{formatPrice(property.price)} VNĐ
-			</strong>
+			<span class="sr-only">Price:</span>
+			<strong>{property.price} {property.priceUnit || 'VNĐ'}</strong>
 		</p>
 	</div>
 
-	<!-- ONE Clear CTA -->
+	<!-- ONE clear CTA (brand color per OpenAI standards) -->
 	<button
-		class="cta-button"
-		on:click={handleClick}
-		aria-label="Xem chi tiết {property.title}"
+		class="btn-primary cta-button"
+		on:click|stopPropagation={handleClick}
+		aria-label="View property details"
 	>
 		Xem chi tiết →
 	</button>
 </article>
 
 <style>
-	/* Container - Horizontal layout for chat integration */
 	.compact-property-card {
 		display: flex;
 		gap: 12px;
 		padding: 12px;
-		border: 1px solid var(--border-color, #e5e7eb);
+		max-width: 400px;
+		background: #ffffff;
+		border: 1px solid #e5e7eb;
 		border-radius: 8px;
 		align-items: center;
-		max-width: 500px;
-		background: var(--bg-primary, #ffffff);
-		transition: box-shadow 0.2s ease;
+		transition: border-color 150ms ease-in-out;
+		cursor: pointer;
 	}
 
 	.compact-property-card:hover {
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+		border-color: #d1d5db;
 	}
 
-	/* Thumbnail - Small, square aspect ratio */
-	.thumbnail-container {
-		flex-shrink: 0;
-		width: 64px;
-		height: 64px;
-		border-radius: 6px;
-		overflow: hidden;
-		background: var(--bg-secondary, #f3f4f6);
+	.compact-property-card:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
 	}
 
 	.thumbnail {
-		width: 100%;
-		height: 100%;
+		width: 60px;
+		height: 60px;
+		min-width: 60px;
+		border-radius: 6px;
 		object-fit: cover;
 	}
 
-	/* Content - Flexible text container */
+	.thumbnail.placeholder {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: #e8e8e8;
+		color: #9ca3af;
+	}
+
+	.thumbnail.placeholder svg {
+		width: 24px;
+		height: 24px;
+	}
+
 	.content {
 		flex: 1;
-		min-width: 0; /* Allow text truncation */
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
 	}
 
-	/* Title - Single line with ellipsis */
 	.title {
+		color: #0d0d0d;
 		font-size: 14px;
 		font-weight: 600;
-		color: var(--text-primary, #111827);
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		line-height: 1.4;
 	}
 
-	/* Metadata - Location + Key Feature */
 	.metadata {
+		color: #6b7280;
 		font-size: 12px;
-		color: var(--text-secondary, #6b7280);
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
-	.separator {
-		margin: 0 6px;
-	}
-
-	/* Price - Emphasized with weight, NOT custom color */
 	.price {
+		color: #0d0d0d;
 		font-size: 14px;
+		font-weight: 700;
 		margin: 0;
 	}
 
-	.price strong {
-		font-weight: 700;
-		color: var(--text-primary, #111827);
+	.cta-button {
+		padding: 8px 16px;
+		border-radius: 6px;
+		font-size: 14px;
+		font-weight: 600;
+		white-space: nowrap;
+		border: none;
+		cursor: pointer;
+		background-color: #3b82f6;
+		color: white;
+		transition: background-color 150ms ease-in-out;
 	}
 
-	/* Screen reader only text */
+	.cta-button:hover {
+		background-color: #2563eb;
+	}
+
+	.cta-button:active {
+		background-color: #1d4ed8;
+	}
+
+	.cta-button:focus-visible {
+		outline: 2px solid #3b82f6;
+		outline-offset: 2px;
+	}
+
 	.sr-only {
 		position: absolute;
 		width: 1px;
@@ -200,40 +201,15 @@
 		border-width: 0;
 	}
 
-	/* CTA Button - ONLY place for brand color (OpenAI requirement) */
-	.cta-button {
-		flex-shrink: 0;
-		padding: 8px 16px;
-		background: var(--brand-primary, #3b82f6);
-		color: white;
-		border: none;
-		border-radius: 6px;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-		white-space: nowrap;
-		transition: background 0.2s ease;
-	}
-
-	.cta-button:hover {
-		background: var(--brand-primary-hover, #2563eb);
-	}
-
-	.cta-button:focus-visible {
-		outline: 2px solid var(--brand-primary, #3b82f6);
-		outline-offset: 2px;
-	}
-
-	/* Mobile Responsive - Stack vertically on small screens */
 	@media (max-width: 480px) {
 		.compact-property-card {
 			flex-direction: column;
 			align-items: stretch;
 		}
 
-		.thumbnail-container {
+		.thumbnail {
 			width: 100%;
-			height: 120px;
+			height: 150px;
 		}
 
 		.cta-button {
@@ -241,23 +217,28 @@
 		}
 	}
 
-	/* Dark mode support (if needed) */
+	/* Dark mode */
 	@media (prefers-color-scheme: dark) {
 		.compact-property-card {
-			background: var(--bg-primary-dark, #1f2937);
-			border-color: var(--border-color-dark, #374151);
+			background: #212121;
+			border-color: #404040;
 		}
 
-		.title {
-			color: var(--text-primary-dark, #f9fafb);
+		.compact-property-card:hover {
+			border-color: #525252;
+		}
+
+		.title,
+		.price {
+			color: #ffffff;
 		}
 
 		.metadata {
-			color: var(--text-secondary-dark, #9ca3af);
+			color: #cdcdcd;
 		}
 
-		.price strong {
-			color: var(--text-primary-dark, #f9fafb);
+		.thumbnail.placeholder {
+			background: #2d2d2d;
 		}
 	}
 </style>

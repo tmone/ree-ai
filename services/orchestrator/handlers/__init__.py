@@ -1,13 +1,17 @@
 """
-Orchestrator Handler Modules
+Orchestrator Handlers - Structured Response Pattern
 
-This package contains specialized handlers for different intents:
-- SearchHandler: Property search flow
-- ChatHandler: Conversational chat flow
-- ListingHandler: Property listing creation flow
+All handlers follow BaseHandler pattern and return Dict[str, Any]:
+{
+    "message": str,  # Text response for user  
+    "components": List[UIComponent]  # UI components to render
+}
 """
 
 from services.orchestrator.handlers.search_handler import SearchHandler
-from services.orchestrator.handlers.chat_handler import ChatHandler
+from services.orchestrator.handlers.property_detail_handler import PropertyDetailHandler
 
-__all__ = ["SearchHandler", "ChatHandler"]
+__all__ = [
+    'SearchHandler',
+    'PropertyDetailHandler'
+]

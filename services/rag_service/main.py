@@ -70,6 +70,11 @@ class RAGQueryResponse(BaseModel):
     quality_score: Optional[float] = None
     operators_executed: Optional[List[str]] = None
     memory_context_used: Optional[bool] = None
+    # NEW: Full property data for frontend rendering (Structured Response Format)
+    properties: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description="Full property data for frontend components (property cards, etc.)"
+    )
 
 
 class RAGService(BaseService):
@@ -311,14 +316,10 @@ class RAGService(BaseService):
             )
             operators_executed.append("memory_storage")
 
-        # Append property data for frontend rendering (OpenAI Apps SDK Design)
-        property_cards_data = self._format_properties_for_frontend(retrieved_properties)
-        final_response = generated_response
-        if property_cards_data:
-            final_response = f"{generated_response}\n\n<!--PROPERTY_RESULTS:{property_cards_data}-->"
-
+        # NEW: Return properties data for Structured Response Format
+        # Frontend will handle rendering, backend just provides data
         return RAGQueryResponse(
-            response=final_response,
+            response=generated_response,  # Clean text response without embedded HTML
             retrieved_count=len(retrieved_properties),
             confidence=supervisor_result.confidence,
             sources=[
@@ -327,6 +328,7 @@ class RAGService(BaseService):
             ],
             pipeline_used="advanced",
             quality_score=quality_score,
+            properties=retrieved_properties,  # Full property data for frontend
             operators_executed=operators_executed,
             memory_context_used=memory_context_used
         )
@@ -369,21 +371,18 @@ class RAGService(BaseService):
             retrieved_properties=retrieved_properties
         )
 
-        # Append property data for frontend rendering (OpenAI Apps SDK Design)
-        property_cards_data = self._format_properties_for_frontend(retrieved_properties)
-        final_response = generated_response
-        if property_cards_data:
-            final_response = f"{generated_response}\n\n<!--PROPERTY_RESULTS:{property_cards_data}-->"
-
+        # NEW: Return properties data for Structured Response Format
+        # Frontend will handle rendering, backend just provides data
         return RAGQueryResponse(
-            response=final_response,
+            response=generated_response,  # Clean text response without embedded HTML
             retrieved_count=len(retrieved_properties),
             confidence=0.9,
             sources=[
                 {"property_id": p.get("property_id"), "title": p.get("title"), "price": p.get("price")}
                 for p in retrieved_properties[:3]
             ],
-            pipeline_used="basic"
+            pipeline_used="basic",
+            properties=retrieved_properties  # Full property data for frontend
         )
 
     # ==================== SHARED UTILITIES ====================

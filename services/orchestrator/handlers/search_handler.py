@@ -4,7 +4,7 @@ Search Handler - Property Search Flow
 Handles SEARCH intent:
 1. Extract attributes from query
 2. Call RAG Service for property search
-3. Return natural language response
+3. Return structured response with PropertyListComponent
 """
 import time
 from typing import Dict, Any, List, Optional
@@ -15,6 +15,7 @@ from services.orchestrator.utils.extraction_helpers import (
 )
 from shared.utils.logger import LogEmoji
 from shared.utils.i18n import t
+from shared.models.ui_components import PropertyListComponent, UIComponent
 
 
 class SearchHandler(BaseHandler):
@@ -24,7 +25,7 @@ class SearchHandler(BaseHandler):
     Flow:
     1. Extract search attributes (bedrooms, location, price, etc.)
     2. Query RAG Service with extracted attributes
-    3. Return AI-generated response with property results
+    3. Return AI-generated response with PropertyListComponent
     """
 
     async def handle(
@@ -34,7 +35,7 @@ class SearchHandler(BaseHandler):
         history: Optional[List[Dict[str, Any]]] = None,
         files: Optional[List] = None,
         language: str = "vi"
-    ) -> str:
+    ) -> Dict[str, Any]:
         """
         Execute search flow
 
@@ -46,7 +47,7 @@ class SearchHandler(BaseHandler):
             language: User's preferred language (vi, en, th, ja)
 
         Returns:
-            Natural language response with search results
+            Dict with 'message' (str) and 'components' (List[UIComponent])
         """
         start_time = time.time()
         self.log_handler_start(request_id, "SearchHandler", query)
@@ -112,16 +113,31 @@ class SearchHandler(BaseHandler):
             response_text = rag_result.get("response", "")
             retrieved_count = rag_result.get("retrieved_count", 0)
             pipeline_used = rag_result.get("pipeline_used", "unknown")
+            properties = rag_result.get("properties", [])  # NEW: Get properties data
 
             self.logger.info(
                 f"{LogEmoji.SUCCESS} [{request_id}] RAG returned {retrieved_count} properties "
                 f"(pipeline: {pipeline_used})"
             )
 
+            # STEP 3: Create UI components from properties data
+            components = []
+            if properties:
+                property_list_component = PropertyListComponent.create(
+                    properties=self._format_properties_for_frontend(properties),
+                    total=retrieved_count
+                )
+                components.append(property_list_component.dict())
+                self.logger.info(f"{LogEmoji.SUCCESS} [{request_id}] Created PropertyListComponent with {len(properties)} items")
+
             duration_ms = (time.time() - start_time) * 1000
             self.log_handler_complete(request_id, "SearchHandler", duration_ms)
 
-            return response_text
+            # Return structured response
+            return {
+                "message": response_text,
+                "components": components
+            }
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} [{request_id}] RAG Service failed: {e}")
@@ -129,4 +145,65 @@ class SearchHandler(BaseHandler):
             self.log_handler_complete(request_id, "SearchHandler", duration_ms)
 
             # Fallback response
-            return t('search.service_unavailable', language=language)
+            return {
+                "message": t('search.service_unavailable', language=language),
+                "components": []
+            }
+
+    def _format_properties_for_frontend(self, properties: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Format property data for frontend PropertyCard component
+
+        Args:
+            properties: Raw property data from database
+
+        Returns:
+            List of formatted properties for PropertyCard
+        """
+        formatted_properties = []
+
+        for prop in properties:
+            # Format price display
+            price_display = prop.get('price_display', '')
+            if not price_display:
+                price = prop.get('price', 0)
+                if isinstance(price, (int, float)) and price > 0:
+                    if price >= 1_000_000_000:
+                        price_display = f"{price/1_000_000_000:.1f} tỷ"
+                    else:
+                        price_display = f"{price/1_000_000:.0f} triệu"
+                else:
+                    price_display = "Thỏa thuận"
+
+            # Format area display
+            area_display = prop.get('area_display', '')
+            if not area_display and prop.get('area'):
+                area = prop['area']
+                area_display = str(area) if isinstance(area, (int, float)) else area
+
+            # Build location string
+            district = prop.get('district', '')
+            city = prop.get('city', '')
+            location_parts = [p for p in [district, city] if p]
+            address = ', '.join(location_parts) if location_parts else prop.get('location', '')
+
+            # Get first image or placeholder
+            images = prop.get('images', [])
+            image_url = images[0] if images else ''
+
+            formatted_properties.append({
+                "id": prop.get('property_id', prop.get('id', '')),
+                "title": prop.get('title', 'N/A'),
+                "address": address,
+                "price": price_display,
+                "priceUnit": "VNĐ",
+                "area": area_display,
+                "areaUnit": "m²",
+                "bedrooms": prop.get('bedrooms', 0),
+                "bathrooms": prop.get('bathrooms', 0),
+                "imageUrl": image_url,
+                "propertyType": prop.get('property_type', ''),
+                "transactionType": prop.get('listing_type', 'sale')  # 'sale' or 'rent'
+            })
+
+        return formatted_properties

@@ -1124,7 +1124,7 @@ Standalone query:"""
             # FIX EMPTY PROPERTY_TYPE BUG: Remove vague property_type filters
             # Database has empty property_type="" for most properties, so vague terms cause 0 results
             if "property_type" in entities:
-                vague_terms = ["nhà", "bds", "bất động sản", "property", "real estate", ""]
+                vague_terms = self.i18n_loader.get_vague_property_terms('all')
                 property_type_lower = entities["property_type"].lower().strip()
                 if property_type_lower in vague_terms or not property_type_lower:
                     self.logger.info(f"{LogEmoji.WARNING} [Filter Normalization] Removing vague property_type='{entities['property_type']}' (DB has empty property_type field)")
@@ -1258,7 +1258,7 @@ Standalone query:"""
                     filters["city"] = entities["city"]
                 if "property_type" in entities and entities["property_type"]:
                     # Remove vague terms
-                    vague_terms = ["nhà", "bds", "bất động sản", "property", "real estate", ""]
+                    vague_terms = self.i18n_loader.get_vague_property_terms('all')
                     prop_type = entities["property_type"].lower().strip()
                     if prop_type not in vague_terms and prop_type:
                         filters["property_type"] = entities["property_type"]
@@ -3350,7 +3350,8 @@ Query mới:"""
             clarification_parts = []
 
             # Part 1: Statistics & Context
-            property_type = requirements.get("property_type", "bất động sản")
+            field_labels = self.i18n_loader.get_field_labels('vi')
+            property_type = requirements.get("property_type", field_labels['property_fallback'])
             city = requirements.get("city", "TP.HCM")
             district = requirements.get("district")
             bedrooms = requirements.get("bedrooms")

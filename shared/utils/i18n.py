@@ -138,7 +138,17 @@ class I18n:
         # Template substitution
         if isinstance(value, str) and kwargs:
             try:
-                value = value.format(**kwargs)
+                # Filter None values to prevent "None" strings in output
+                # Replace None with empty string to avoid displaying "None"
+                # Caller should provide proper defaults, not i18n system
+                filtered_kwargs = {}
+                for k, v in kwargs.items():
+                    if v is None:
+                        filtered_kwargs[k] = ''  # Empty string for all None values
+                    else:
+                        filtered_kwargs[k] = v
+
+                value = value.format(**filtered_kwargs)
             except KeyError as e:
                 print(f"[WARNING] Missing template variable in '{key}': {e}")
 

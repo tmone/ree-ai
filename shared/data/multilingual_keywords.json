@@ -308,6 +308,13 @@
     }
   },
 
+  "vague_property_terms": {
+    "description": "Generic property terms that should be filtered out in searches (too vague, cause 0 results in DB)",
+    "vi": ["nhà", "bds", "bất động sản", ""],
+    "en": ["property", "real estate", ""],
+    "all": ["nhà", "nha", "bds", "bất động sản", "bat dong san", "property", "real estate", ""]
+  },
+
   "location_keywords": {
     "description": "Location-related keywords",
     "vi": {

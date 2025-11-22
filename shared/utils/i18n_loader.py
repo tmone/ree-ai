@@ -263,6 +263,27 @@ class I18nLoader:
                 f"Intent keywords not found for intent='{intent_type}' lang='{lang}'. Error: {e}"
             )
 
+    def get_vague_property_terms(self, lang: str = 'all') -> List[str]:
+        """
+        Get vague property terms that should be filtered out in searches
+
+        Args:
+            lang: Language code (vi/en/all). Default 'all' returns combined list.
+
+        Returns:
+            List of vague property terms
+
+        Example:
+            vague = i18n.get_vague_property_terms('all')
+            # ['nhà', 'bds', 'bất động sản', 'property', 'real estate', '']
+        """
+        try:
+            return self._data['vague_property_terms'][lang]
+        except KeyError as e:
+            raise RuntimeError(
+                f"Vague property terms not found for language '{lang}'. Error: {e}"
+            )
+
     def get_raw_data(self) -> Dict:
         """
         Get raw master data dictionary

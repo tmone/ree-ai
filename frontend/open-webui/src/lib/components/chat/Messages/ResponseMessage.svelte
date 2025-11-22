@@ -59,6 +59,8 @@
 	import { LocationPickerCard, MapPickerFullscreen } from '$lib/components/property';
 	// Property Search Results (OpenAI Apps SDK Design Guidelines)
 	import { PropertySearchResults } from '$lib/components/apps-sdk';
+	// Structured Response Renderer (OpenAI Apps SDK Pattern)
+	import StructuredResponseRenderer from '$lib/components/chat/StructuredResponseRenderer.svelte';
 
 	interface MessageType {
 		id: string;
@@ -109,6 +111,11 @@
 			usage?: unknown;
 		};
 		annotation?: { type: string; rating: number };
+		// Structured Response (OpenAI Apps SDK Pattern)
+		components?: Array<{
+			type: string;
+			data: any;
+		}>;
 	}
 
 	export let chatId = '';
@@ -267,6 +274,20 @@
 		} catch (error) {
 			console.error('Error updating coordinates:', error);
 			toast.error('Error updating location');
+		}
+	}
+
+	// Handle property detail request from StructuredResponseRenderer
+	// CTO Requirement: Click on item in list → AI auto-shows detail
+	async function handlePropertyDetailRequest(event: CustomEvent) {
+		const { propertyId, query } = event.detail;
+
+		console.log('[ResponseMessage] Property detail requested:', propertyId, query);
+
+		// Submit message to orchestrator to request property detail
+		// This will trigger PropertyDetailHandler which returns PropertyInspectorComponent
+		if (query) {
+			submitMessage(message?.id, query);
 		}
 	}
 
@@ -796,6 +817,16 @@
 						{#if showPropertyResults && message?.done}
 							<div class="my-3" transition:fade={{ duration: 200 }}>
 								<PropertySearchResults data={propertyResultsData} />
+							</div>
+						{/if}
+
+						<!-- Structured Response Components (OpenAI Apps SDK Pattern) -->
+						{#if message?.components && message.components.length > 0 && message?.done}
+							<div class="my-3" transition:fade={{ duration: 200 }}>
+								<StructuredResponseRenderer
+									components={message.components}
+									on:requestDetail={handlePropertyDetailRequest}
+								/>
 							</div>
 						{/if}
 

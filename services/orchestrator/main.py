@@ -58,6 +58,10 @@ from shared.utils.i18n import t, auto_detect_language, detect_language_from_head
 # ITERATION 1 IMPROVEMENT: Query normalization for better attribute extraction
 from shared.utils.query_normalizer import QueryNormalizer
 
+# NEW: Import Structured Response Handlers (OpenAI Apps SDK Pattern)
+from services.orchestrator.handlers.search_handler import SearchHandler
+from services.orchestrator.handlers.property_detail_handler import PropertyDetailHandler
+
 
 class Orchestrator(BaseService):
     """
@@ -128,10 +132,24 @@ class Orchestrator(BaseService):
         # ITERATION 1 IMPROVEMENT: Query normalizer for better attribute extraction
         self.query_normalizer = QueryNormalizer()
 
+        # NEW: Structured Response Handlers (OpenAI Apps SDK Pattern)
+        self.search_handler = SearchHandler(
+            http_client=self.http_client,
+            rag_service_url="http://ree-ai-rag-service:8080",
+            db_gateway_url=self.db_gateway_url,
+            logger=self.logger
+        )
+        self.property_detail_handler = PropertyDetailHandler(
+            http_client=self.http_client,
+            db_gateway_url=self.db_gateway_url,
+            logger=self.logger
+        )
+
         self.logger.info(f"{LogEmoji.SUCCESS} ReAct Reasoning Engine Initialized (Codex-style)")
         self.logger.info(f"{LogEmoji.SUCCESS} Knowledge Base Loaded: PROPERTIES.md + LOCATIONS.md")
         self.logger.info(f"{LogEmoji.SUCCESS} Ambiguity Detector Ready")
         self.logger.info(f"{LogEmoji.SUCCESS} Query Normalizer Ready (handles abbreviations & mixed languages)")
+        self.logger.info(f"{LogEmoji.SUCCESS} Structured Response Handlers Ready (SearchHandler, PropertyDetailHandler)")
 
     def _string_to_uuid(self, string_id: str) -> str:
         """Convert string ID to deterministic UUID string using UUID v5"""
@@ -319,6 +337,9 @@ class Orchestrator(BaseService):
                     intent = "chat"
 
                 # Step 2: Route based on intent (with history context + files)
+                # Initialize response_data to hold structured response
+                response_data = {"message": "", "components": []}
+
                 if intent == "post_property":
                     # Case 1: Handle property posting workflow with reasoning loop
                     response_text = await self._handle_property_posting(
@@ -329,9 +350,14 @@ class Orchestrator(BaseService):
                         language=request.language,
                         files=request.files  # NEW: Pass images to POST flow
                     )
+                    response_data["message"] = response_text
                 elif intent == "search":
-                    # Case 2: Handle search with ReAct agent
-                    response_text = await self._handle_search(request.query, history=history, files=request.files, language=request.language)
+                    # Case 2: NEW - Use SearchHandler for structured response
+                    response_data = await self.search_handler.handle(
+                        query=request.query,
+                        history=history,
+                        language=request.language
+                    )
                 elif intent == "price_consultation":
                     # Case 3: Handle price consultation with reasoning loop
                     response_text = await self._handle_price_consultation(
@@ -339,20 +365,23 @@ class Orchestrator(BaseService):
                         history=history,
                         language=request.language
                     )
+                    response_data["message"] = response_text
                 elif intent == "property_detail":
-                    # NEW Case 4: Handle property detail view by ID or keyword
-                    response_text = await self._handle_property_detail(
-                        request.query,
+                    # Case 4: NEW - Use PropertyDetailHandler for structured response
+                    response_data = await self.property_detail_handler.handle(
+                        query=request.query,
                         history=history,
                         language=request.language
                     )
                 else:
                     # Case 5: General chat (multimodal or text)
                     response_text = await self._handle_chat(request.query, history=history, files=request.files, language=request.language)
+                    response_data["message"] = response_text
 
                 # Step 3: Save conversation to memory
+                response_message = response_data.get("message", "")
                 await self._save_message(request.user_id, conversation_id, "user", request.query)
-                await self._save_message(request.user_id, conversation_id, "assistant", response_text, metadata={"intent": intent, "has_files": request.has_files()})
+                await self._save_message(request.user_id, conversation_id, "assistant", response_message, metadata={"intent": intent, "has_files": request.has_files()})
 
                 execution_time = (time.time() - start_time) * 1000
 
@@ -368,10 +397,14 @@ class Orchestrator(BaseService):
                 else:
                     intent_type = IntentType.CHAT
 
+                # NEW: Include components in response (OpenAI Apps SDK Pattern)
+                components = response_data.get("components", [])
+
                 return OrchestrationResponse(
                     intent=intent_type,
                     confidence=0.9,
-                    response=response_text,
+                    response=response_message,
+                    components=components if components else None,  # Include UI components
                     service_used="classification_routing_with_memory_multimodal",
                     execution_time_ms=execution_time,
                     metadata={
@@ -380,7 +413,8 @@ class Orchestrator(BaseService):
                         "multimodal": request.has_files(),
                         "files_count": len(request.files) if request.files else 0,
                         "request_id": request_id,  # MEDIUM FIX Bug#1: Include request ID for tracing
-                        "reasoning_loops": 1  # All cases use reasoning loops now
+                        "reasoning_loops": 1,  # All cases use reasoning loops now
+                        "has_components": len(components) > 0 if components else False
                     }
                 )
 

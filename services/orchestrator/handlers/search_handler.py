@@ -115,6 +115,10 @@ class SearchHandler(BaseHandler):
             pipeline_used = rag_result.get("pipeline_used", "unknown")
             properties = rag_result.get("properties", [])  # NEW: Get properties data
 
+            # DEBUG: Log full RAG response to see what's being returned
+            self.logger.info(f"{LogEmoji.INFO} [{request_id}] RAG response keys: {rag_result.keys()}")
+            self.logger.info(f"{LogEmoji.INFO} [{request_id}] Properties in response: {len(properties) if properties else 0}")
+
             self.logger.info(
                 f"{LogEmoji.SUCCESS} [{request_id}] RAG returned {retrieved_count} properties "
                 f"(pipeline: {pipeline_used})"

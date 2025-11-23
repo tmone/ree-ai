@@ -8,6 +8,8 @@ type TextStreamUpdate = {
 	sources?: any;
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	selectedModelId?: any;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	components?: any;
 	error?: any;
 	usage?: ResponseUsage;
 };
@@ -77,6 +79,11 @@ async function* openAIStreamToIterator(
 				continue;
 			}
 
+			if (parsedData.components) {
+				yield { done: false, value: '', components: parsedData.components };
+				continue;
+			}
+
 			if (parsedData.usage) {
 				yield { done: false, value: '', usage: parsedData.usage };
 				continue;
@@ -112,6 +119,10 @@ async function* streamLargeDeltasAsRandomChunks(
 			continue;
 		}
 		if (textStreamUpdate.selectedModelId) {
+			yield textStreamUpdate;
+			continue;
+		}
+		if (textStreamUpdate.components) {
 			yield textStreamUpdate;
 			continue;
 		}

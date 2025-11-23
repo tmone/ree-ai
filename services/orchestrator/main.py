@@ -133,16 +133,21 @@ class Orchestrator(BaseService):
         self.query_normalizer = QueryNormalizer()
 
         # NEW: Structured Response Handlers (OpenAI Apps SDK Pattern)
+        handler_service_urls = {
+            "rag_service": "http://ree-ai-rag-service:8080",
+            "db_gateway": self.db_gateway_url,
+            "attribute_extraction": self.extraction_url,
+            "core_gateway": self.core_gateway_url
+        }
         self.search_handler = SearchHandler(
             http_client=self.http_client,
-            rag_service_url="http://ree-ai-rag-service:8080",
-            db_gateway_url=self.db_gateway_url,
-            logger=self.logger
+            logger=self.logger,
+            service_urls=handler_service_urls
         )
         self.property_detail_handler = PropertyDetailHandler(
             http_client=self.http_client,
-            db_gateway_url=self.db_gateway_url,
-            logger=self.logger
+            logger=self.logger,
+            service_urls=handler_service_urls
         )
 
         self.logger.info(f"{LogEmoji.SUCCESS} ReAct Reasoning Engine Initialized (Codex-style)")
@@ -354,6 +359,7 @@ class Orchestrator(BaseService):
                 elif intent == "search":
                     # Case 2: NEW - Use SearchHandler for structured response
                     response_data = await self.search_handler.handle(
+                        request_id=request_id,
                         query=request.query,
                         history=history,
                         language=request.language
@@ -369,6 +375,7 @@ class Orchestrator(BaseService):
                 elif intent == "property_detail":
                     # Case 4: NEW - Use PropertyDetailHandler for structured response
                     response_data = await self.property_detail_handler.handle(
+                        request_id=request_id,
                         query=request.query,
                         history=history,
                         language=request.language
@@ -777,6 +784,16 @@ class Orchestrator(BaseService):
 
                 orch_response = await orchestrate(orch_request)
 
+                # Build message with components if available
+                message_response = {
+                    "role": "assistant",
+                    "content": orch_response.response
+                }
+
+                # Include components for structured response (property cards, modals, etc.)
+                if orch_response.components and len(orch_response.components) > 0:
+                    message_response["components"] = orch_response.components
+
                 return {
                     "id": f"chatcmpl-{int(time.time())}",
                     "object": "chat.completion",
@@ -784,10 +801,7 @@ class Orchestrator(BaseService):
                     "model": "ree-ai-orchestrator-v3-multimodal",
                     "choices": [{
                         "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": orch_response.response
-                        },
+                        "message": message_response,
                         "finish_reason": "stop"
                     }],
                     "usage": {

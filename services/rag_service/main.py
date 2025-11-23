@@ -15,7 +15,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.base_service import BaseService
 from shared.config import settings
@@ -316,9 +316,13 @@ class RAGService(BaseService):
             )
             operators_executed.append("memory_storage")
 
+        # DEBUG: Log properties before returning
+        self.logger.info(f"{LogEmoji.INFO} Advanced pipeline returning {len(retrieved_properties)} properties")
+        self.logger.info(f"{LogEmoji.INFO} First property sample: {retrieved_properties[0] if retrieved_properties else 'None'}")
+
         # NEW: Return properties data for Structured Response Format
         # Frontend will handle rendering, backend just provides data
-        return RAGQueryResponse(
+        response_obj = RAGQueryResponse(
             response=generated_response,  # Clean text response without embedded HTML
             retrieved_count=len(retrieved_properties),
             confidence=supervisor_result.confidence,
@@ -332,6 +336,13 @@ class RAGService(BaseService):
             operators_executed=operators_executed,
             memory_context_used=memory_context_used
         )
+
+        # DEBUG: Log response dict to see if properties is included
+        response_dict = response_obj.dict()
+        self.logger.info(f"{LogEmoji.INFO} Response dict keys: {response_dict.keys()}")
+        self.logger.info(f"{LogEmoji.INFO} Properties in response dict: {len(response_dict.get('properties', [])) if response_dict.get('properties') else 0}")
+
+        return response_obj
 
     # ==================== BASIC PIPELINE ====================
 

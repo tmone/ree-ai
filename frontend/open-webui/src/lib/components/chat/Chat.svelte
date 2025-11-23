@@ -371,6 +371,8 @@
 					message.files = data.files;
 				} else if (type === 'chat:message:embeds' || type === 'embeds') {
 					message.embeds = data.embeds;
+				} else if (type === 'chat:message:components' || type === 'components') {
+					message.components = data.components;
 				} else if (type === 'chat:message:error') {
 					message.error = data.error;
 				} else if (type === 'chat:message:follow_ups') {
@@ -1335,6 +1337,22 @@
 
 		if (sources && !message?.sources) {
 			message.sources = sources;
+		}
+
+		// Handle structured components (property cards, modals, etc.)
+		if (choices) {
+			// Non-stream: Get components from message object
+			if (choices[0]?.message?.components) {
+				message.components = choices[0].message.components;
+			}
+
+			// Stream: Accumulate components from delta
+			if (choices[0]?.delta?.components) {
+				if (!message.components) {
+					message.components = [];
+				}
+				message.components.push(...choices[0].delta.components);
+			}
 		}
 
 		if (choices) {

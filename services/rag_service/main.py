@@ -375,12 +375,9 @@ class RAGService(BaseService):
         # STEP 2: AUGMENT - Build rich context
         context = self._build_context(retrieved_properties, request.query)
 
-        # STEP 3: GENERATE - Use LLM to create natural response
-        generated_response = await self._generate(
-            query=request.query,
-            context=context,
-            retrieved_properties=retrieved_properties
-        )
+        # STEP 3: GENERATE - Use template-based response instead of LLM to avoid hallucination
+        # Template ensures accurate count and data consistency with components
+        generated_response = self._format_simple_response(retrieved_properties)
 
         # NEW: Return properties data for Structured Response Format
         # Frontend will handle rendering, backend just provides data

@@ -60,9 +60,16 @@ class BaseService:
         )
 
         # Add CORS middleware
+        # NOTE: Cannot use wildcard "*" with credentials=True
+        # Support both dev (Vite on 5173) and production (Open WebUI on 3000)
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=[
+                "http://localhost:5173",  # Vite dev server
+                "http://localhost:3000",  # Open WebUI production
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000"
+            ],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
@@ -189,9 +196,16 @@ class SimpleService:
         self.app = FastAPI(title=name, version=version)
 
         # Add CORS middleware
+        # NOTE: Cannot use wildcard "*" with credentials=True
+        # Support both dev (Vite on 5173) and production (Open WebUI on 3000)
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],
+            allow_origins=[
+                "http://localhost:5173",  # Vite dev server
+                "http://localhost:3000",  # Open WebUI production
+                "http://127.0.0.1:5173",
+                "http://127.0.0.1:3000"
+            ],
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],

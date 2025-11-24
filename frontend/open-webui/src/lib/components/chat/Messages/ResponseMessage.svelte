@@ -57,8 +57,6 @@
 
 	// Map Picker Components (OpenAI Apps SDK Design Guidelines)
 	import { LocationPickerCard, MapPickerFullscreen } from '$lib/components/property';
-	// Property Search Results (OpenAI Apps SDK Design Guidelines)
-	import { PropertySearchResults } from '$lib/components/apps-sdk';
 	// Structured Response Renderer (OpenAI Apps SDK Pattern)
 	import StructuredResponseRenderer from '$lib/components/chat/StructuredResponseRenderer.svelte';
 
@@ -192,10 +190,6 @@
 		longitude: 106.7009
 	};
 
-	// Property Search Results State (OpenAI Apps SDK Design Guidelines)
-	let showPropertyResults = false;
-	let propertyResultsData: string = '';
-
 	// Detect LOCATION_SELECTION trigger from message content (HTML comment pattern)
 	$: if (message?.content && message?.done) {
 		const locationMatch = message.content.match(/<!--LOCATION_SELECTION:(.*?)-->/);
@@ -214,20 +208,6 @@
 			} catch (e) {
 				console.error('Failed to parse location trigger:', e);
 			}
-		}
-
-		// Detect PROPERTY_RESULTS trigger from message content
-		const propertyMatch = message.content.match(/<!--PROPERTY_RESULTS:(.*?)-->/s);
-		if (propertyMatch) {
-			try {
-				showPropertyResults = true;
-				propertyResultsData = propertyMatch[1];
-			} catch (e) {
-				console.error('Failed to parse property results:', e);
-			}
-		} else {
-			showPropertyResults = false;
-			propertyResultsData = '';
 		}
 	}
 
@@ -810,13 +790,6 @@
 									on:skip={handleMapSkip}
 									on:expand={handleMapExpand}
 								/>
-							</div>
-						{/if}
-
-						<!-- Property Search Results (OpenAI Apps SDK Design Guidelines) -->
-						{#if showPropertyResults && message?.done}
-							<div class="my-3" transition:fade={{ duration: 200 }}>
-								<PropertySearchResults data={propertyResultsData} />
 							</div>
 						{/if}
 

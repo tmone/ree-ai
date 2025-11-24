@@ -55,6 +55,7 @@ class RAGQueryRequest(BaseModel):
     query: str
     filters: Optional[Dict[str, Any]] = None
     limit: int = 5
+    language: str = "vi"  # User's preferred language (vi, en, th, ja)
     user_id: Optional[str] = None  # For memory personalization
     use_advanced_rag: bool = True  # Enable/disable advanced features per request
 
@@ -277,10 +278,14 @@ class RAGService(BaseService):
 
         # STEP 4: Generate response
         context = self._build_context(retrieved_properties, request.query)
+
+        # Load system prompt based on language
+        system_prompt = self._get_system_prompt(request.language)
+
         generation_result = await self.generation_operator.execute({
             "query": request.query,
             "documents": [{"content": context}],
-            "system_prompt": "Bạn là chuyên gia tư vấn bất động sản REE AI. Hãy tạo câu trả lời tự nhiên, hữu ích."
+            "system_prompt": system_prompt
         })
         operators_executed.append("generation")
 
@@ -361,7 +366,7 @@ class RAGService(BaseService):
         )
 
         if not retrieved_properties:
-            no_results_msg = i18n_loader.get_ui_message('no_results', 'vi')
+            no_results_msg = i18n_loader.get_ui_message('no_results', request.language)
             return RAGQueryResponse(
                 response=no_results_msg,
                 retrieved_count=0,
@@ -377,7 +382,7 @@ class RAGService(BaseService):
 
         # STEP 3: GENERATE - Use template-based response instead of LLM to avoid hallucination
         # Template ensures accurate count and data consistency with components
-        generated_response = self._format_simple_response(retrieved_properties)
+        generated_response = self._format_simple_response(retrieved_properties, request.language)
 
         # NEW: Return properties data for Structured Response Format
         # Frontend will handle rendering, backend just provides data
@@ -507,54 +512,21 @@ class RAGService(BaseService):
 
         return "".join(context_parts)
 
-    async def _generate(self, query: str, context: str, retrieved_properties: List[Dict[str, Any]]) -> str:
+    async def _generate(self, query: str, context: str, retrieved_properties: List[Dict[str, Any]], language: str = "vi") -> str:
         """
         STEP 3: GENERATE
         Use Core Gateway (LLM) to generate natural language response with augmented context
+
+        Args:
+            query: User query
+            context: Augmented context with property data
+            retrieved_properties: List of properties
+            language: User's preferred language (vi, en, th, ja)
         """
         try:
-            # Import OpenAI-compliant prompts (if available)
-            try:
-                from services.rag_service.openai_compliant_prompts import (
-                    SYSTEM_PROMPT_OPENAI_COMPLIANT,
-                    build_user_prompt_openai_compliant
-                )
-            except ImportError:
-                # Fallback to inline prompts
-                SYSTEM_PROMPT_OPENAI_COMPLIANT = """Bạn là chuyên gia tư vấn bất động sản REE AI.
-
-⛔ QUY TẮC TỐI QUAN TRỌNG: KHÔNG ĐƯỢC TỰ TẠO DỮ LIỆU GIẢ
-- CHỈ sử dụng bất động sản có trong dữ liệu được cung cấp
-- Nếu có 1 BĐS, chỉ giới thiệu 1 BĐS
-- Nếu không có BĐS nào, nói rõ "Tôi không tìm thấy bất động sản phù hợp"
-- TUYỆT ĐỐI KHÔNG tự tạo thêm địa chỉ, giá, hoặc thông tin BĐS
-
-NHIỆM VỤ:
-Dựa vào dữ liệu bất động sản được cung cấp, hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng.
-
-QUY TẮC:
-1. Đếm chính xác số lượng bất động sản trong dữ liệu
-2. Giới thiệu TẤT CẢ bất động sản có trong dữ liệu (không tự tạo thêm)
-3. Cung cấp thông tin chi tiết: giá, vị trí, diện tích, số phòng (từ dữ liệu thật)
-4. Tư vấn dựa trên dữ liệu có sẵn, không bịa đặt
-5. Kết thúc với câu hỏi hoặc lời mời hành động
-
-PHONG CÁCH:
-- Thân thiện, chuyên nghiệp
-- Sử dụng tiếng Việt tự nhiên
-- Chỉ dùng thông tin có trong dữ liệu"""
-
-                def build_user_prompt_openai_compliant(q, c):
-                    return f"""Câu hỏi của khách hàng: {q}
-
-{c}
-
-⛔ CHỈ sử dụng dữ liệu ở trên, KHÔNG tự tạo thêm bất động sản.
-Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ liệu trên."""
-
-            # Build prompt for LLM with retrieved context
-            system_prompt = SYSTEM_PROMPT_OPENAI_COMPLIANT
-            user_prompt = build_user_prompt_openai_compliant(query, context)
+            # Load system prompt based on language
+            system_prompt = self._get_system_prompt(language)
+            user_prompt = self._get_user_prompt(query, context, language)
 
             llm_request = {
                 "model": "gpt-4o-mini",
@@ -581,18 +553,31 @@ Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ
                 return generated_text
             else:
                 self.logger.warning(f"{LogEmoji.WARNING} Core Gateway returned {response.status_code}")
-                return self._format_simple_response(retrieved_properties)
+                return self._format_simple_response(retrieved_properties, language)
 
         except Exception as e:
             self.logger.error(f"{LogEmoji.ERROR} Generation failed: {e}")
-            return self._format_simple_response(retrieved_properties)
+            return self._format_simple_response(retrieved_properties, language)
 
-    def _format_simple_response(self, properties: List[Dict[str, Any]]) -> str:
-        """Fallback: Simple formatting without LLM generation"""
+    def _format_simple_response(self, properties: List[Dict[str, Any]], language: str = "vi") -> str:
+        """
+        Fallback: Simple formatting without LLM generation
+
+        Args:
+            properties: List of properties to format
+            language: User's preferred language (vi, en, th, ja)
+        """
         if not properties:
-            return i18n_loader.get_ui_message('no_results', 'vi')
+            return i18n_loader.get_ui_message('no_results', language)
 
-        response_parts = [f"Tôi đã tìm thấy {len(properties)} bất động sản phù hợp:\n\n"]
+        # Load intro message template based on language
+        intro_templates = {
+            "vi": f"Tôi đã tìm thấy {len(properties)} bất động sản phù hợp:\n\n",
+            "en": f"I found {len(properties)} properties matching your criteria:\n\n",
+            "th": f"ฉันพบ {len(properties)} อสังหาริมทรัพย์ที่ตรงกับเกณฑ์ของคุณ:\n\n",
+            "ja": f"{len(properties)}件の物件が見つかりました:\n\n"
+        }
+        response_parts = [intro_templates.get(language, intro_templates["vi"])]
 
         for i, prop in enumerate(properties, 1):
             # Use price_display if available (normalized format)
@@ -633,6 +618,156 @@ Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ
         constraint_keywords = ["và", "gần", "giá", "dưới", "trên", "có", "với"]
         count = sum(1 for kw in constraint_keywords if kw in query.lower())
         return count >= 2
+
+    def _get_system_prompt(self, language: str = "vi") -> str:
+        """
+        Get system prompt based on user's language
+
+        Args:
+            language: User's preferred language (vi, en, th, ja)
+
+        Returns:
+            System prompt for LLM
+        """
+        prompts = {
+            "vi": """Bạn là chuyên gia tư vấn bất động sản REE AI.
+
+⛔ QUY TẮC TỐI QUAN TRỌNG: KHÔNG ĐƯỢC TỰ TẠO DỮ LIỆU GIẢ
+- CHỈ sử dụng bất động sản có trong dữ liệu được cung cấp
+- Nếu có 1 BĐS, chỉ giới thiệu 1 BĐS
+- Nếu không có BĐS nào, nói rõ "Tôi không tìm thấy bất động sản phù hợp"
+- TUYỆT ĐỐI KHÔNG tự tạo thêm địa chỉ, giá, hoặc thông tin BĐS
+
+NHIỆM VỤ:
+Dựa vào dữ liệu bất động sản được cung cấp, hãy tạo câu trả lời tự nhiên, hữu ích cho khách hàng.
+
+QUY TẮC:
+1. Đếm chính xác số lượng bất động sản trong dữ liệu
+2. Giới thiệu TẤT CẢ bất động sản có trong dữ liệu (không tự tạo thêm)
+3. Cung cấp thông tin chi tiết: giá, vị trí, diện tích, số phòng (từ dữ liệu thật)
+4. Tư vấn dựa trên dữ liệu có sẵn, không bịa đặt
+5. Kết thúc với câu hỏi hoặc lời mời hành động
+
+PHONG CÁCH:
+- Thân thiện, chuyên nghiệp
+- Sử dụng tiếng Việt tự nhiên
+- Chỉ dùng thông tin có trong dữ liệu""",
+
+            "en": """You are REE AI, a real estate consultation expert.
+
+⛔ CRITICAL RULE: DO NOT CREATE FAKE DATA
+- ONLY use properties from the provided data
+- If there is 1 property, introduce only 1 property
+- If there are no properties, clearly state "I could not find any matching properties"
+- ABSOLUTELY DO NOT create additional addresses, prices, or property information
+
+MISSION:
+Based on the provided property data, create a natural, helpful response for the customer.
+
+RULES:
+1. Count the exact number of properties in the data
+2. Introduce ALL properties in the data (do not create more)
+3. Provide detailed information: price, location, area, rooms (from real data)
+4. Advise based on available data, do not fabricate
+5. End with a question or call to action
+
+STYLE:
+- Friendly, professional
+- Use natural English
+- Only use information from the data""",
+
+            "th": """คุณคือ REE AI ผู้เชี่ยวชาญด้านการให้คำปรึกษาอสังหาริมทรัพย์
+
+⛔ กฎสำคัญ: ห้ามสร้างข้อมูลปลอม
+- ใช้เฉพาะอสังหาริมทรัพย์จากข้อมูลที่ให้มาเท่านั้น
+- ถ้ามี 1 ทรัพย์ ให้แนะนำเพียง 1 ทรัพย์
+- ถ้าไม่มีทรัพย์ที่ตรง ให้ระบุชัดเจนว่า "ฉันไม่พบอสังหาริมทรัพย์ที่ตรงกับเกณฑ์"
+- ห้ามสร้างที่อยู่ ราคา หรือข้อมูลทรัพย์เพิ่มเติมเด็ดขาด
+
+ภารกิจ:
+สร้างคำตอบที่เป็นธรรมชาติและเป็นประโยชน์ตามข้อมูลอสังหาริมทรัพย์ที่ให้มา
+
+กฎ:
+1. นับจำนวนอสังหาริมทรัพย์ในข้อมูลอย่างถูกต้อง
+2. แนะนำทรัพย์สินทั้งหมดในข้อมูล (ไม่สร้างเพิ่ม)
+3. ให้ข้อมูลรายละเอียด: ราคา ที่อยู่ พื้นที่ จำนวนห้อง (จากข้อมูลจริง)
+4. ให้คำแนะนำตามข้อมูลที่มี ไม่แต่งเรื่อง
+5. จบด้วยคำถามหรือคำเชื้อเชิญ
+
+สไตล์:
+- เป็นมิตร เป็นมืออาชีพ
+- ใช้ภาษาไทยธรรมชาติ
+- ใช้ข้อมูลที่มีในข้อมูลเท่านั้น""",
+
+            "ja": """あなたはREE AIという不動産コンサルティングの専門家です。
+
+⛔ 重要なルール: 偽のデータを作成しないでください
+- 提供されたデータの物件のみを使用してください
+- 1件の物件がある場合は、1件のみを紹介してください
+- 物件がない場合は、「条件に合う物件が見つかりませんでした」と明記してください
+- 住所、価格、または物件情報を追加で作成することは絶対に禁止です
+
+使命:
+提供された物件データに基づいて、顧客にとって自然で役立つ回答を作成してください。
+
+ルール:
+1. データ内の物件の正確な数を数えてください
+2. データ内のすべての物件を紹介してください（追加で作成しないでください）
+3. 詳細情報を提供してください: 価格、場所、面積、部屋数（実際のデータから）
+4. 利用可能なデータに基づいてアドバイスしてください。でっち上げないでください
+5. 質問または行動を促す言葉で終わってください
+
+スタイル:
+- フレンドリーでプロフェッショナル
+- 自然な日本語を使用
+- データにある情報のみを使用"""
+        }
+
+        return prompts.get(language, prompts["vi"])
+
+    def _get_user_prompt(self, query: str, context: str, language: str = "vi") -> str:
+        """
+        Get user prompt based on language
+
+        Args:
+            query: User query
+            context: Augmented context
+            language: User's preferred language
+
+        Returns:
+            User prompt for LLM
+        """
+        prompts = {
+            "vi": f"""Câu hỏi của khách hàng: {query}
+
+{context}
+
+⛔ CHỈ sử dụng dữ liệu ở trên, KHÔNG tự tạo thêm bất động sản.
+Hãy tạo câu trả lời tự nhiên, hữu ích dựa CHÍNH XÁC trên dữ liệu trên.""",
+
+            "en": f"""Customer question: {query}
+
+{context}
+
+⛔ ONLY use the data above, DO NOT create additional properties.
+Create a natural, helpful response based EXACTLY on the data above.""",
+
+            "th": f"""คำถามของลูกค้า: {query}
+
+{context}
+
+⛔ ใช้เฉพาะข้อมูลข้างต้น ห้ามสร้างอสังหาริมทรัพย์เพิ่มเติม
+สร้างคำตอบที่เป็นธรรมชาติและเป็นประโยชน์โดยอิงจากข้อมูลข้างต้นเท่านั้น""",
+
+            "ja": f"""顧客の質問: {query}
+
+{context}
+
+⛔ 上記のデータのみを使用し、追加の物件を作成しないでください。
+上記のデータに正確に基づいて、自然で役立つ回答を作成してください。"""
+        }
+
+        return prompts.get(language, prompts["vi"])
 
     def _format_properties_for_frontend(self, properties: List[Dict[str, Any]]) -> str:
         """

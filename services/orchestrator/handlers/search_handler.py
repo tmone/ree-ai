@@ -105,6 +105,7 @@ class SearchHandler(BaseHandler):
                     "query": query,
                     "filters": extracted_attrs,
                     "limit": 5,
+                    "language": language,  # Pass user language to RAG
                     "use_advanced_rag": True  # Use advanced pipeline if available
                 },
                 timeout=90.0  # RAG can be slow
@@ -167,17 +168,15 @@ class SearchHandler(BaseHandler):
         formatted_properties = []
 
         for prop in properties:
-            # Format price display
+            # Format price display - use existing price_display from database
             price_display = prop.get('price_display', '')
             if not price_display:
                 price = prop.get('price', 0)
                 if isinstance(price, (int, float)) and price > 0:
-                    if price >= 1_000_000_000:
-                        price_display = f"{price/1_000_000_000:.1f} tỷ"
-                    else:
-                        price_display = f"{price/1_000_000:.0f} triệu"
+                    # Return raw number, let frontend format based on user language
+                    price_display = str(int(price))
                 else:
-                    price_display = "Thỏa thuận"
+                    price_display = ""  # Empty string means negotiable
 
             # Format area display
             area_display = prop.get('area_display', '')

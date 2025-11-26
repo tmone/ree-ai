@@ -21,29 +21,20 @@
 	let modalOpen = false;
 	let selectedProperty: any = null;
 
-	// Handle property card click - request detail from backend
+	// Handle property card click - open modal directly with available data
 	async function handlePropertyClick(property: any) {
 		console.log('[StructuredResponseRenderer] Property clicked:', property);
 
-		// Option 1: Open inspector directly (if we have all data)
-		if (property.fullData) {
-			selectedProperty = property.fullData;
-			modalOpen = true;
-			return;
-		}
+		// Open modal directly with property data from card
+		// Property from carousel already has: id, title, address, price, bedrooms, area, imageUrl, etc.
+		selectedProperty = property;
+		modalOpen = true;
 
-		// Option 2: Request detail from orchestrator (preferred - follows CTO requirement)
-		try {
-			// Dispatch event to parent (ResponseMessage) to send query
-			dispatch('requestDetail', {
-				propertyId: property.id,
-				query: `cho tôi xem chi tiết thông tin căn nhà ${property.id}`
-			});
-
-			// Note: Modal will be opened when backend returns PropertyInspectorComponent
-		} catch (error) {
-			console.error('[StructuredResponseRenderer] Error requesting property detail:', error);
-		}
+		// Also dispatch event for parent to handle if needed (e.g., analytics, fetch more data)
+		dispatch('propertySelected', {
+			propertyId: property.id,
+			property: property
+		});
 	}
 
 	// Handle modal close

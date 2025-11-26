@@ -58,6 +58,7 @@ class RAGQueryRequest(BaseModel):
     language: str = "vi"  # User's preferred language (vi, en, th, ja)
     user_id: Optional[str] = None  # For memory personalization
     use_advanced_rag: bool = True  # Enable/disable advanced features per request
+    response_format: str = "components"  # "text" = full text response, "components" = simple msg + JSON for UI
 
 
 class RAGQueryResponse(BaseModel):
@@ -382,7 +383,11 @@ class RAGService(BaseService):
 
         # STEP 3: GENERATE - Use template-based response instead of LLM to avoid hallucination
         # Template ensures accurate count and data consistency with components
-        generated_response = self._format_simple_response(retrieved_properties, request.language)
+        generated_response = self._format_simple_response(
+            retrieved_properties,
+            request.language,
+            request.response_format
+        )
 
         # NEW: Return properties data for Structured Response Format
         # Frontend will handle rendering, backend just provides data
@@ -559,55 +564,64 @@ class RAGService(BaseService):
             self.logger.error(f"{LogEmoji.ERROR} Generation failed: {e}")
             return self._format_simple_response(retrieved_properties, language)
 
-    def _format_simple_response(self, properties: List[Dict[str, Any]], language: str = "vi") -> str:
+    def _format_simple_response(
+        self,
+        properties: List[Dict[str, Any]],
+        language: str = "vi",
+        response_format: str = "components"
+    ) -> str:
         """
-        Fallback: Simple formatting without LLM generation
+        Format response based on response_format parameter
 
         Args:
             properties: List of properties to format
             language: User's preferred language (vi, en, th, ja)
+            response_format: "components" = simple msg (UI renders details), "text" = full text list
+
+        Returns:
+            Formatted response string
         """
         if not properties:
             return i18n_loader.get_ui_message('no_results', language)
 
-        # Load intro message template based on language
+        # Intro message templates
         intro_templates = {
-            "vi": f"Tôi đã tìm thấy {len(properties)} bất động sản phù hợp:\n\n",
-            "en": f"I found {len(properties)} properties matching your criteria:\n\n",
-            "th": f"ฉันพบ {len(properties)} อสังหาริมทรัพย์ที่ตรงกับเกณฑ์ของคุณ:\n\n",
-            "ja": f"{len(properties)}件の物件が見つかりました:\n\n"
+            "vi": f"Tìm thấy {len(properties)} bất động sản phù hợp với yêu cầu của bạn.",
+            "en": f"Found {len(properties)} properties matching your criteria.",
+            "th": f"พบ {len(properties)} อสังหาริมทรัพย์ที่ตรงกับเกณฑ์ของคุณ",
+            "ja": f"{len(properties)}件の物件が見つかりました。"
         }
-        response_parts = [intro_templates.get(language, intro_templates["vi"])]
 
+        intro = intro_templates.get(language, intro_templates["vi"])
+
+        # "components" format: Simple message only - frontend renders property cards
+        if response_format == "components":
+            return intro
+
+        # "text" format: Full text list with details (backward compatibility)
+        labels = {
+            "vi": {"price": "Giá", "location": "Vị trí", "bedrooms": "phòng ngủ", "area": "Diện tích"},
+            "en": {"price": "Price", "location": "Location", "bedrooms": "bedrooms", "area": "Area"},
+            "th": {"price": "ราคา", "location": "ที่อยู่", "bedrooms": "ห้องนอน", "area": "พื้นที่"},
+            "ja": {"price": "価格", "location": "場所", "bedrooms": "寝室", "area": "面積"}
+        }
+        lbl = labels.get(language, labels["vi"])
+
+        response_parts = [intro + "\n\n"]
         for i, prop in enumerate(properties, 1):
-            # Use price_display if available (normalized format)
-            price_str = prop.get('price_display')
-            if not price_str:
-                price = prop.get('price', 0)
-                if isinstance(price, (int, float)) and price > 0:
-                    # Format price using i18n_loader
-                    price_str = i18n_loader.format_price(price, 'vi')
-                else:
-                    price_str = i18n_loader.get_price_format('negotiable', 'vi')
-
-            # Use district/city if available
+            price_str = prop.get('price_display') or i18n_loader.format_price(prop.get('price', 0), language)
             location_str = prop.get('district', prop.get('location', 'N/A'))
 
             response_parts.append(f"{i}. **{prop.get('title', 'N/A')}**\n")
-            response_parts.append(f"   - 💰 Giá: {price_str}\n")
-            response_parts.append(f"   - 📍 Vị trí: {location_str}\n")
+            response_parts.append(f"   - {lbl['price']}: {price_str}\n")
+            response_parts.append(f"   - {lbl['location']}: {location_str}\n")
 
             if prop.get('bedrooms'):
-                response_parts.append(f"   - 🛏️ {prop['bedrooms']} phòng ngủ\n")
+                response_parts.append(f"   - {prop['bedrooms']} {lbl['bedrooms']}\n")
 
-            # Use area_display if available (normalized format)
-            area_str = prop.get('area_display')
-            if not area_str and prop.get('area'):
-                area = prop['area']
-                area_str = f"{area} m²" if isinstance(area, (int, float)) else str(area)
-
+            area_str = prop.get('area_display') or (f"{prop['area']} m²" if prop.get('area') else None)
             if area_str:
-                response_parts.append(f"   - 📏 Diện tích: {area_str}\n")
+                response_parts.append(f"   - {lbl['area']}: {area_str}\n")
 
             response_parts.append("\n")
 

@@ -11,7 +11,8 @@ from typing import Dict, Any, List, Optional
 from services.orchestrator.handlers.base_handler import BaseHandler
 from services.orchestrator.utils.extraction_helpers import (
     build_filters_from_extraction_response,
-    extract_entities_for_logging
+    extract_entities_for_logging,
+    convert_legacy_extraction_response
 )
 from shared.utils.logger import LogEmoji
 from shared.utils.i18n import t
@@ -76,7 +77,7 @@ class SearchHandler(BaseHandler):
                 f"{len(mapped_attrs)} mapped, {len(new_attrs)} new, confidence: {confidence:.2f}"
             )
 
-            # Build filters using helper function
+            # Build filters using helper function (handles both legacy and new formats)
             extracted_attrs = build_filters_from_extraction_response(extraction_result)
 
             # Log in human-readable format
@@ -106,7 +107,8 @@ class SearchHandler(BaseHandler):
                     "filters": extracted_attrs,
                     "limit": 5,
                     "language": language,  # Pass user language to RAG
-                    "use_advanced_rag": True  # Use advanced pipeline if available
+                    "use_advanced_rag": True,  # Use advanced pipeline if available
+                    "response_format": "components"  # Simple msg + JSON for frontend components
                 },
                 timeout=90.0  # RAG can be slow
             )

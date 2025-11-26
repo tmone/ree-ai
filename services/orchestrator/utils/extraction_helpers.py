@@ -7,32 +7,40 @@ from typing import Dict, Any, List
 
 def build_filters_from_extraction_response(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Convert new extraction response format (raw/mapped/new) to filters dict
+    Convert extraction response to filters dict
 
-    Args:
-        extraction_result: Response from /extract-query-enhanced endpoint
-            {
-                "raw": {...},
-                "mapped": [{property_name, table, id, value, value_translated}],
-                "new": [{...}],
-                "confidence": 0.85
-            }
+    Supports both formats:
+    1. New format: {"raw": {...}, "mapped": [...], "new": [...]}
+    2. Legacy format: {"entities": {"bedrooms": 2, "district": "district_7", ...}}
 
     Returns:
-        Filters dict compatible with RAG/DB Gateway:
-            {
-                "bedrooms": 2,
-                "district_id": 1,
-                "district": "district_1",
-                "property_type_id": 1,
-                "property_type": "apartment",
-                "amenity_ids": [1, 2, 3],
-                ...
-            }
+        Filters dict compatible with RAG/DB Gateway
     """
     filters = {}
 
-    # Extract raw attributes (numeric/free-form)
+    # FIRST: Check for direct "entities" format (from enhanced extraction)
+    entities = extraction_result.get("entities", {})
+    if entities:
+        # Direct extraction from entities - already normalized
+        numeric_fields = ["bedrooms", "bathrooms", "area", "min_area", "max_area",
+                        "price", "min_price", "max_price", "floor", "total_floors"]
+        text_fields = ["district", "property_type", "listing_type", "direction", "furniture"]
+
+        for field in numeric_fields:
+            if field in entities and entities[field] is not None:
+                filters[field] = entities[field]
+
+        for field in text_fields:
+            if field in entities and entities[field]:
+                value = entities[field]
+                # Normalize district format: "district_7" -> "District 7"
+                if field == "district" and value.startswith("district_"):
+                    value = "District " + value.replace("district_", "")
+                filters[field] = value
+
+        return filters
+
+    # FALLBACK: Old format with raw/mapped/new structure
     raw_attrs = extraction_result.get("raw", {})
     mapped_attrs = extraction_result.get("mapped", [])
     new_attrs = extraction_result.get("new", [])
@@ -188,11 +196,22 @@ def extract_entities_for_logging(extraction_result: Dict[str, Any]) -> Dict[str,
     Useful for logs that expect old format: {"bedrooms": 2, "district": "Quận 1"}
 
     Args:
-        extraction_result: New-format extraction response
+        extraction_result: Extraction response (supports both formats)
 
     Returns:
         Simple entities dict
     """
+    # FIRST: Check for direct entities format
+    direct_entities = extraction_result.get("entities", {})
+    if direct_entities:
+        # Return relevant fields for logging
+        log_entities = {}
+        for key in ["bedrooms", "bathrooms", "area", "price", "district", "property_type"]:
+            if key in direct_entities and direct_entities[key]:
+                log_entities[key] = direct_entities[key]
+        return log_entities
+
+    # FALLBACK: Old raw/mapped format
     entities = {}
 
     # Add raw numeric fields

@@ -206,7 +206,8 @@ class ReasoningEngine:
                 json={
                     "query": query,
                     "filters": filters,
-                    "limit": 10
+                    "limit": 10,
+                    "response_format": "components"  # Simple msg + JSON for frontend
                 },
                 timeout=30.0
             )

@@ -123,8 +123,17 @@
 
 	let message: MessageType = JSON.parse(JSON.stringify(history.messages[messageId]));
 	$: if (history.messages) {
-		if (JSON.stringify(message) !== JSON.stringify(history.messages[messageId])) {
-			message = JSON.parse(JSON.stringify(history.messages[messageId]));
+		const historyMsg = history.messages[messageId];
+		// DEBUG: Track components propagation
+		if (historyMsg?.components && historyMsg.components.length > 0) {
+			console.log('[ResponseMessage] historyMsg has components:', historyMsg.components.length);
+		}
+		if (JSON.stringify(message) !== JSON.stringify(historyMsg)) {
+			message = JSON.parse(JSON.stringify(historyMsg));
+			// DEBUG: Log after update
+			if (message?.components && message.components.length > 0) {
+				console.log('[ResponseMessage] message updated with components:', message.components.length);
+			}
 		}
 	}
 
@@ -794,6 +803,12 @@
 						{/if}
 
 						<!-- Structured Response Components (OpenAI Apps SDK Pattern) -->
+						<!-- DEBUG: Always show component status -->
+						{#if message?.done}
+							<div class="text-xs text-gray-400 my-1" style="display: none;">
+								[DEBUG] done={message.done}, components={message?.components?.length ?? 0}
+							</div>
+						{/if}
 						{#if message?.components && message.components.length > 0 && message?.done}
 							<div class="my-3" transition:fade={{ duration: 200 }}>
 								<StructuredResponseRenderer
@@ -801,6 +816,9 @@
 									on:requestDetail={handlePropertyDetailRequest}
 								/>
 							</div>
+						{:else if message?.components && message.components.length > 0}
+							<!-- Components exist but message not done yet -->
+							<div class="text-xs text-orange-500">[Waiting for done signal... components={message.components.length}]</div>
 						{/if}
 
 						{#if message?.files && message.files?.filter((f) => f.type === 'image').length > 0}

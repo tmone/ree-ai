@@ -75,7 +75,26 @@
 
 			<!-- Property Inspector Component -->
 			<div class="modal-content">
-				<PropertyInspector {...property} />
+				<PropertyInspector
+					id={property?.id || ''}
+					title={property?.title || ''}
+					address={property?.address || property?.location || ''}
+					price={property?.price || ''}
+					pricePerM2={property?.pricePerM2 || ''}
+					area={property?.area || property?.areaDisplay || ''}
+					bedrooms={property?.bedrooms || 0}
+					bathrooms={property?.bathrooms || 0}
+					floors={property?.floors || 0}
+					direction={property?.direction || ''}
+					images={property?.images || (property?.imageUrl ? [property.imageUrl] : [])}
+					description={property?.description || ''}
+					propertyType={property?.propertyType || ''}
+					transactionType={property?.transactionType || 'sale'}
+					legalStatus={property?.legalStatus || ''}
+					furniture={property?.furniture || ''}
+					contact={property?.contact || null}
+					amenities={property?.amenities || []}
+				/>
 			</div>
 		</div>
 	</div>

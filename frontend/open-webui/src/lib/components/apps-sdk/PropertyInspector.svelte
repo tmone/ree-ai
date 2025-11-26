@@ -26,6 +26,24 @@
 	export let contact: { name: string; phone: string } | null = null;
 	export let amenities: string[] = [];
 
+	// Format price to Vietnamese format (e.g., 5500000000 -> "5.5 tỷ")
+	function formatPrice(priceValue: string | number): string {
+		const num = typeof priceValue === 'string' ? parseFloat(priceValue) : priceValue;
+		if (isNaN(num) || num <= 0) return 'Thương lượng';
+
+		if (num >= 1000000000) {
+			const billions = num / 1000000000;
+			return `${billions % 1 === 0 ? billions : billions.toFixed(1)} tỷ`;
+		} else if (num >= 1000000) {
+			const millions = num / 1000000;
+			return `${millions % 1 === 0 ? millions : millions.toFixed(0)} triệu`;
+		}
+		return num.toLocaleString('vi-VN') + ' VNĐ';
+	}
+
+	// Computed formatted price
+	$: formattedPrice = formatPrice(price);
+
 	function handleClose() {
 		dispatch('close');
 	}
@@ -96,7 +114,7 @@
 
 			<div class="price-row">
 				<div class="price-main">
-					<span class="price">{price}</span>
+					<span class="price">{formattedPrice}</span>
 					{#if transactionType === 'rent'}
 						<span class="price-period">/tháng</span>
 					{/if}

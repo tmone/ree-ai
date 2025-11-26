@@ -338,11 +338,28 @@
 	};
 
 	const chatEventHandler = async (event, cb) => {
-		console.log(event);
+		console.log('[chatEventHandler] Event received:', event?.data?.type, event);
+		// DEBUG: Log raw event data for components tracing
+		if (event?.data?.data?.choices) {
+			const c = event.data.data.choices[0];
+			console.log('[chatEventHandler] Choices found:', {
+				hasMessage: !!c?.message,
+				hasComponents: !!c?.message?.components,
+				componentsCount: c?.message?.components?.length || 0
+			});
+		}
 
 		if (event.chat_id === $chatId) {
 			await tick();
 			let message = history.messages[event.message_id];
+
+			// DEBUG: Log when message not found
+			if (!message && event?.data?.type === 'chat:message:components') {
+				console.warn('[Chat] Components event received but message not found!', {
+					message_id: event.message_id,
+					available_ids: Object.keys(history.messages)
+				});
+			}
 
 			if (message) {
 				const type = event?.data?.type ?? null;
@@ -372,7 +389,9 @@
 				} else if (type === 'chat:message:embeds' || type === 'embeds') {
 					message.embeds = data.embeds;
 				} else if (type === 'chat:message:components' || type === 'components') {
+					console.log('[Chat] Received components event!', data.components?.length, 'components');
 					message.components = data.components;
+					console.log('[Chat] Set message.components =', message.components?.length);
 				} else if (type === 'chat:message:error') {
 					message.error = data.error;
 				} else if (type === 'chat:message:follow_ups') {
@@ -1340,9 +1359,17 @@
 		}
 
 		// Handle structured components (property cards, modals, etc.)
+		// DEBUG: Log incoming data to trace components
+		console.log('[Chat] chatCompletionEventHandler - choices:', JSON.stringify(choices?.slice(0, 1).map(c => ({
+			hasMessage: !!c.message,
+			hasComponents: !!c.message?.components,
+			componentsCount: c.message?.components?.length || 0
+		}))));
+
 		if (choices) {
 			// Non-stream: Get components from message object
 			if (choices[0]?.message?.components) {
+				console.log('[Chat] Setting message.components:', choices[0].message.components.length, 'items');
 				message.components = choices[0].message.components;
 			}
 

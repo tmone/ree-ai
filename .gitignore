@@ -183,3 +183,4 @@ temp_*.py
 docs/design/UI.fig
 .clauderules
 frontend/open-webui/package-lock.json
+screenshots/

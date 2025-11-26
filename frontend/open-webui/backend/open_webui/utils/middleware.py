@@ -1728,6 +1728,28 @@ async def process_chat_response(
                     choices = response_data.get("choices", [])
                     if choices and choices[0].get("message", {}).get("content"):
                         content = response_data["choices"][0]["message"]["content"]
+                        # DEBUG: Log components presence
+                        components = choices[0].get("message", {}).get("components")
+                        if components:
+                            log.info(f"[COMPONENTS] Found {len(components)} components in response")
+                            # SAVE COMPONENTS TO DATABASE - so frontend can load them
+                            if not metadata.get("chat_id", "").startswith("local:"):
+                                Chats.upsert_message_to_chat_by_id_and_message_id(
+                                    metadata["chat_id"],
+                                    metadata["message_id"],
+                                    {"components": components},
+                                )
+                                log.info(f"[COMPONENTS] Saved {len(components)} components to database")
+                            # Also emit event
+                            await event_emitter(
+                                {
+                                    "type": "chat:message:components",
+                                    "data": {"components": components},
+                                }
+                            )
+                            log.info(f"[COMPONENTS] Emitted chat:message:components event")
+                        else:
+                            log.info(f"[COMPONENTS] No components in response. Message keys: {choices[0].get('message', {}).keys()}")
 
                         if content:
                             await event_emitter(
@@ -1739,14 +1761,26 @@ async def process_chat_response(
 
                             title = Chats.get_chat_title_by_id(metadata["chat_id"])
 
+                            # Include components in done event so frontend can render them
+                            done_event_data = {
+                                "done": True,
+                                "content": content,
+                                "title": title,
+                            }
+                            # CRITICAL: Include components in done event for proper rendering
+                            if components:
+                                done_event_data["choices"] = [{
+                                    "message": {
+                                        "content": content,
+                                        "components": components
+                                    }
+                                }]
+                                log.info(f"[COMPONENTS] Including {len(components)} components in done event")
+
                             await event_emitter(
                                 {
                                     "type": "chat:completion",
-                                    "data": {
-                                        "done": True,
-                                        "content": content,
-                                        "title": title,
-                                    },
+                                    "data": done_event_data,
                                 }
                             )
 

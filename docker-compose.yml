@@ -202,6 +202,8 @@ services:
       - OPENSEARCH_PORT=${OPENSEARCH_PORT:-9200}
       - OPENSEARCH_USER=${OPENSEARCH_USER}
       - OPENSEARCH_PASSWORD=${OPENSEARCH_PASSWORD}
+      - OPENSEARCH_USE_SSL=${OPENSEARCH_USE_SSL:-false}
+      - OPENSEARCH_VERIFY_CERTS=${OPENSEARCH_VERIFY_CERTS:-false}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -209,7 +211,7 @@ services:
       - GCS_BUCKET_NAME=${GCS_BUCKET_NAME:-asset-dev.entreal.com}
       - GCS_PROJECT_ID=${GCS_PROJECT_ID}
     ports:
-      - "8081:8080"
+      - "7004:8080"
     volumes:
       - ./core:/app/core
       - ./shared:/app/shared

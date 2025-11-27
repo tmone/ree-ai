@@ -11,7 +11,12 @@
 
 	import CompactPropertyCard from '$lib/components/property/CompactPropertyCard.svelte';
 	import PropertyDetailModal from '$lib/components/property/PropertyDetailModal.svelte';
+	import { getContext } from 'svelte';
 	import { createEventDispatcher } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
+
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let components: any[] = [];
 
@@ -80,7 +85,7 @@
 				{#if carouselData.total > 0}
 					<div class="carousel-header">
 						<p class="result-count">
-							Tìm thấy <strong>{carouselData.total}</strong> bất động sản
+							{$i18n.t('Found')} <strong>{carouselData.total}</strong> {$i18n.t('properties')}
 						</p>
 					</div>
 				{/if}
@@ -95,7 +100,7 @@
 				<!-- Empty State -->
 				{#if carouselData.properties.length === 0}
 					<div class="empty-state">
-						<p>Không tìm thấy bất động sản phù hợp</p>
+						<p>{$i18n.t('No matching properties found')}</p>
 					</div>
 				{/if}
 			</div>

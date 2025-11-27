@@ -9,11 +9,37 @@
 	 * - Title
 	 * - Location + Key Feature (bedrooms + area)
 	 * - Price
-	 * - CTA: "Xem chi tiết"
+	 * - CTA: "View details"
 	 */
+
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
+
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let property: any;
 	export let onClick: ((property: any) => void) | undefined = undefined;
+
+	// Format price to Vietnamese format (e.g., 5500000000 -> "5.5 tỷ")
+	function formatPrice(priceValue: string | number): string {
+		// If already formatted (contains non-digit chars like "tỷ", "triệu"), return as-is
+		if (typeof priceValue === 'string' && /[^\d.,\s]/.test(priceValue)) {
+			return priceValue;
+		}
+
+		const num = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/[,.\s]/g, '')) : priceValue;
+		if (isNaN(num) || num <= 0) return 'Thương lượng';
+
+		if (num >= 1000000000) {
+			const billions = num / 1000000000;
+			return `${billions % 1 === 0 ? billions : billions.toFixed(1)} tỷ`;
+		} else if (num >= 1000000) {
+			const millions = num / 1000000;
+			return `${millions % 1 === 0 ? millions : millions.toFixed(0)} triệu`;
+		}
+		return num.toLocaleString('vi-VN');
+	}
 
 	// Format key feature: "2PN 75m²" or "Đất 200m²"
 	function getKeyFeature(prop: any): string {
@@ -71,7 +97,7 @@
 		<!-- Price (emphasized) -->
 		<p class="price">
 			<span class="sr-only">Price:</span>
-			<strong>{property.price} {property.priceUnit || 'VNĐ'}</strong>
+			<strong>{formatPrice(property.price)}</strong>
 		</p>
 	</div>
 
@@ -81,7 +107,7 @@
 		on:click|stopPropagation={handleClick}
 		aria-label="View property details"
 	>
-		Xem chi tiết →
+		{$i18n.t('View details')} →
 	</button>
 </article>
 

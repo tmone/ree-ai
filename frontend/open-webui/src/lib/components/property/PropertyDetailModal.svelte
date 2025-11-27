@@ -94,6 +94,7 @@
 					furniture={property?.furniture || ''}
 					contact={property?.contact || null}
 					amenities={property?.amenities || []}
+					on:close={handleClose}
 				/>
 			</div>
 		</div>

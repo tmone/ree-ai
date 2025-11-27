@@ -388,6 +388,7 @@ async def search_properties(request: SearchRequest):
                 area=source.get('area', 0),  # Keep as-is (string or number)
                 district=source.get('district', ''),
                 city=source.get('city', ''),
+                images=source.get('images', []),  # Include property images
                 score=float(hit['_score'])
             ))
 
@@ -609,6 +610,7 @@ async def vector_search_properties(request: SearchRequest):
                 area=source.get('area', 0),
                 district=source.get('district', ''),
                 city=source.get('city', ''),
+                images=source.get('images', []),  # Include property images
                 score=float(hit['_score'])
             ))
 
@@ -712,6 +714,7 @@ async def hybrid_search_properties(
                 area=source.get('area', 0),
                 district=source.get('district', ''),
                 city=source.get('city', ''),
+                images=source.get('images', []),  # Include property images
                 score=float(hit.get('hybrid_score', hit.get('score', 0)))
             ))
 

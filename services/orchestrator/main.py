@@ -167,6 +167,8 @@ class Orchestrator(BaseService):
         Format: data:image/jpeg;base64,<base64_data>
         """
         try:
+            import hashlib
+
             if not data_uri.startswith("data:"):
                 return None
 
@@ -183,8 +185,9 @@ class Orchestrator(BaseService):
             mime_parts = header.split(";")
             mime_type = mime_parts[0].replace("data:", "")
 
-            # Generate file ID and filename
-            file_id = str(uuid.uuid4())
+            # FIX: Use hash of base64_data as file_id for consistent duplicate detection
+            # Same image data = same file_id, regardless of when it's parsed
+            file_id = hashlib.sha256(base64_data.encode()).hexdigest()[:32]
             extension = mime_type.split("/")[-1]  # e.g., "jpeg" from "image/jpeg"
             filename = f"upload_{file_id[:8]}.{extension}"
 
@@ -716,7 +719,29 @@ class Orchestrator(BaseService):
                 user_message = ""
                 files = []
 
-                # Extract last user message and any files
+                # FIX: Extract files from ALL user messages in conversation history
+                # This ensures images uploaded in earlier turns are persisted for POSTING flow
+                for msg in messages:
+                    if msg.get("role") == "user":
+                        content = msg.get("content", "")
+
+                        # Handle multimodal content (Open WebUI format)
+                        if isinstance(content, list):
+                            # Content is array of blocks: [{"type": "text", "text": "..."}, {"type": "image_url", ...}]
+                            for block in content:
+                                if block.get("type") == "image_url":
+                                    # Extract image from ANY user message in history
+                                    image_url = block.get("image_url", {})
+                                    url = image_url.get("url", "")
+                                    if url.startswith("data:"):
+                                        # Parse data URI: data:image/jpeg;base64,<base64_data>
+                                        file_attachment = self._parse_data_uri(url)
+                                        if file_attachment:
+                                            # Avoid duplicates by checking file_id
+                                            if not any(f.file_id == file_attachment.file_id for f in files):
+                                                files.append(file_attachment)
+
+                # Extract LAST user message text (for current query)
                 for msg in reversed(messages):
                     if msg.get("role") == "user":
                         content = msg.get("content", "")
@@ -728,15 +753,6 @@ class Orchestrator(BaseService):
                             for block in content:
                                 if block.get("type") == "text":
                                     text_parts.append(block.get("text", ""))
-                                elif block.get("type") == "image_url":
-                                    # Extract image
-                                    image_url = block.get("image_url", {})
-                                    url = image_url.get("url", "")
-                                    if url.startswith("data:"):
-                                        # Parse data URI: data:image/jpeg;base64,<base64_data>
-                                        file_attachment = self._parse_data_uri(url)
-                                        if file_attachment:
-                                            files.append(file_attachment)
                             user_message = " ".join(text_parts)
                         else:
                             # Text-only content
@@ -3802,7 +3818,7 @@ Nearby districts:"""
 
             # Upload via DB Gateway
             upload_response = await self.http_client.post(
-                f"{self.db_gateway_url}/properties/{property_id}/images/upload-files",
+                f"{self.db_gateway_url}/properties/{property_id}/images/upload",
                 files=form_files,
                 headers={"Authorization": auth_token},
                 timeout=60.0

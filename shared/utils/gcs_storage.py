@@ -36,9 +36,23 @@ class GCSStorageClient:
 
     def __init__(self):
         """Initialize GCS client with credentials"""
-        self.bucket_name = os.getenv('GCS_BUCKET_NAME', 'ree-ai-property-images')
-        self.project_id = os.getenv('GCS_PROJECT_ID', '')
+        # Default bucket is asset-dev.entreal.com (same as test_gcs_integration.py)
+        self.bucket_name = os.getenv('GCS_BUCKET_NAME', 'asset-dev.entreal.com')
+        self.project_id = os.getenv('GCS_PROJECT_ID', 'crastonic-rwa')
+
+        # Try to find credentials file - check common locations
         credentials_path = os.getenv('GOOGLE_APPLICATION_CREDENTIALS', '')
+        if not credentials_path or not os.path.exists(credentials_path):
+            # Try relative to project root (for local dev and Docker)
+            for possible_path in [
+                './credentials/gcs-service-account.json',
+                '../credentials/gcs-service-account.json',
+                '/app/credentials/gcs-service-account.json',
+                'credentials/gcs-service-account.json',
+            ]:
+                if os.path.exists(possible_path):
+                    credentials_path = possible_path
+                    break
 
         # Initialize client
         if credentials_path and os.path.exists(credentials_path):
@@ -162,8 +176,9 @@ class GCSStorageClient:
                 )
             )
 
-            # Make publicly accessible
-            await loop.run_in_executor(None, blob.make_public)
+            # NOTE: Don't call make_public() - it requires storage.objects.setIamPolicy permission
+            # The bucket asset-dev.entreal.com is already configured as public
+            # Objects uploaded to public buckets are automatically accessible via public_url
 
             public_url = blob.public_url
             logger.info(f"Uploaded image to GCS: {blob_name}")

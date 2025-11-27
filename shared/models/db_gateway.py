@@ -43,6 +43,7 @@ class PropertyResult(BaseModel):
     area: Union[str, float, int, None] = Field(None, description="Area (flexible: can be string '95m²' or number)")
     district: Optional[str] = None
     city: Optional[str] = None
+    images: Optional[List[str]] = Field(default_factory=list, description="Property image URLs")
     score: float = Field(..., description="Relevance score")
     metadata: Optional[Dict[str, Any]] = None
 

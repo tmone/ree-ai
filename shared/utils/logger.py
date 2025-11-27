@@ -4,6 +4,22 @@ import sys
 from typing import Optional
 
 
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get or create a logger with the given name.
+
+    This is a convenience alias for setup_logger with default settings.
+    Useful for quick logger creation without configuration.
+
+    Args:
+        name: Logger name (usually module __name__)
+
+    Returns:
+        Configured logger instance
+    """
+    return setup_logger(name)
+
+
 def setup_logger(
     name: str,
     level: str = "INFO",

@@ -24,11 +24,18 @@ from shared.utils.http_client import HTTPClientFactory
 from shared.utils.retry import retry_on_http_error
 from shared.exceptions import ServiceUnavailableError, RAGPipelineError
 from shared.utils.i18n_loader import get_i18n_loader
+from shared.utils.i18n import t  # For loading messages from JSON
 
 # Load master data using i18n_loader - NEVER hardcode display names or field labels!
 i18n_loader = get_i18n_loader()
-LISTING_TYPE_DISPLAY = i18n_loader.get_listing_type_display('vi')
-FIELD_LABELS = i18n_loader.get_field_labels('vi')
+
+def get_listing_type_display(language: str = 'en') -> Dict[str, str]:
+    """Get listing type display names for given language (dynamic, not hardcoded)."""
+    return i18n_loader.get_listing_type_display(language)
+
+def get_field_labels(language: str = 'en') -> Dict[str, str]:
+    """Get field labels for given language (dynamic, not hardcoded)."""
+    return i18n_loader.get_field_labels(language)
 
 # Try importing advanced RAG components
 try:
@@ -278,7 +285,7 @@ class RAGService(BaseService):
         self.logger.info(f"{LogEmoji.SUCCESS} Retrieved {len(retrieved_properties)} properties")
 
         # STEP 4: Generate response
-        context = self._build_context(retrieved_properties, request.query)
+        context = self._build_context(retrieved_properties, request.query, request.language)
 
         # Load system prompt based on language
         system_prompt = self._get_system_prompt(request.language)
@@ -379,7 +386,7 @@ class RAGService(BaseService):
         self.logger.info(f"{LogEmoji.SUCCESS} Retrieved {len(retrieved_properties)} properties")
 
         # STEP 2: AUGMENT - Build rich context
-        context = self._build_context(retrieved_properties, request.query)
+        context = self._build_context(retrieved_properties, request.query, request.language)
 
         # STEP 3: GENERATE - Use template-based response instead of LLM to avoid hallucination
         # Template ensures accurate count and data consistency with components
@@ -450,40 +457,56 @@ class RAGService(BaseService):
             self.logger.error(f"{LogEmoji.ERROR} Network error: {e}, will retry")
             raise ServiceUnavailableError("db_gateway", {"original_error": str(e)})
 
-    def _build_context(self, properties: List[Dict[str, Any]], query: str) -> str:
+    def _build_context(self, properties: List[Dict[str, Any]], query: str, language: str = 'en') -> str:
         """
         STEP 2: AUGMENT
         Build rich context from retrieved properties
+
+        Args:
+            properties: List of property dictionaries
+            query: Original search query
+            language: User's language (en, vi, th, ja, ko)
         """
+        # Get localized labels dynamically from master data (NEVER hardcode!)
+        field_labels = get_field_labels(language)
+        listing_type_display = get_listing_type_display(language)
+
+        # Get context headers from translation files (RULE #0 compliance)
+        header_title = t('rag_context.header_title', language=language)
+        property_label = t('rag_context.property_label', language=language)
+
         if not properties:
-            return "Không có dữ liệu bất động sản phù hợp."
+            return t('rag_context.no_data', language=language)
+
+        # Build found_count message from JSON
+        found_count_msg = t('rag_context.found_count', language=language, count=len(properties), query=query)
 
         context_parts = [
-            "# DỮ LIỆU BẤT ĐỘNG SẢN TÌM ĐƯỢC\n",
-            f"Tìm thấy {len(properties)} bất động sản phù hợp với yêu cầu: '{query}'\n\n"
+            f"# {header_title}\n",
+            f"{found_count_msg}\n\n"
         ]
 
         for i, prop in enumerate(properties, 1):
-            context_parts.append(f"## BẤT ĐỘNG SẢN #{i}\n")
+            context_parts.append(f"## {property_label} #{i}\n")
             # Use i18n field labels from master data
-            context_parts.append(f"- **{FIELD_LABELS['title']}**: {prop.get('title', 'N/A')}\n")
+            context_parts.append(f"- **{field_labels.get('title', 'Title')}**: {prop.get('title', 'N/A')}\n")
 
             # Listing Type - CRITICAL: Show sale/rent info using master data
             listing_type = prop.get('listing_type', 'N/A')
             if listing_type != 'N/A':
                 # Get display name from master data (never hardcode!)
-                listing_type_display = LISTING_TYPE_DISPLAY.get(listing_type, listing_type)
-                context_parts.append(f"- **{FIELD_LABELS['listing_type']}**: {listing_type_display}\n")
+                lt_display = listing_type_display.get(listing_type, listing_type)
+                context_parts.append(f"- **{field_labels.get('listing_type', 'Type')}**: {lt_display}\n")
 
             # Price - use price_display if available (normalized format)
             price_display = prop.get('price_display')
             if price_display:
-                context_parts.append(f"- **{FIELD_LABELS['price']}**: {price_display}\n")
+                context_parts.append(f"- **{field_labels.get('price', 'Price')}**: {price_display}\n")
             else:
                 price = prop.get('price', 0)
                 if isinstance(price, (int, float)) and price > 0:
-                    price_str = f"{price/1_000_000_000:.1f} tỷ VNĐ" if price >= 1_000_000_000 else f"{price/1_000_000:.0f} triệu VNĐ"
-                    context_parts.append(f"- **{FIELD_LABELS['price']}**: {price_str}\n")
+                    price_str = i18n_loader.format_price(price, language)
+                    context_parts.append(f"- **{field_labels.get('price', 'Price')}**: {price_str}\n")
 
             # Location - use city/district if available
             city = prop.get('city', '')
@@ -491,27 +514,27 @@ class RAGService(BaseService):
             ward = prop.get('ward', '')
             location_parts = [p for p in [ward, district, city] if p]
             location_str = ', '.join(location_parts) if location_parts else prop.get('location', 'N/A')
-            context_parts.append(f"- **{FIELD_LABELS['location']}**: {location_str}\n")
+            context_parts.append(f"- **{field_labels.get('location', 'Location')}**: {location_str}\n")
 
             # Attributes
             if prop.get('bedrooms'):
-                context_parts.append(f"- **{FIELD_LABELS['bedrooms']}**: {prop['bedrooms']}\n")
+                context_parts.append(f"- **{field_labels.get('bedrooms', 'Bedrooms')}**: {prop['bedrooms']}\n")
             if prop.get('bathrooms'):
-                context_parts.append(f"- **{FIELD_LABELS['bathrooms']}**: {prop['bathrooms']}\n")
+                context_parts.append(f"- **{field_labels.get('bathrooms', 'Bathrooms')}**: {prop['bathrooms']}\n")
 
             # Area - use area_display if available (normalized format)
             area_display = prop.get('area_display')
             if area_display:
-                context_parts.append(f"- **{FIELD_LABELS['area']}**: {area_display}\n")
+                context_parts.append(f"- **{field_labels.get('area', 'Area')}**: {area_display}\n")
             elif prop.get('area'):
                 area = prop['area']
                 area_str = f"{area} m²" if isinstance(area, (int, float)) else str(area)
-                context_parts.append(f"- **{FIELD_LABELS['area']}**: {area_str}\n")
+                context_parts.append(f"- **{field_labels.get('area', 'Area')}**: {area_str}\n")
 
             # Description excerpt
             if prop.get('description'):
                 desc = prop['description'][:200]
-                context_parts.append(f"- **{FIELD_LABELS['description']}**: {desc}...\n")
+                context_parts.append(f"- **{field_labels.get('description', 'Description')}**: {desc}...\n")
 
             context_parts.append("\n")
 
@@ -584,28 +607,22 @@ class RAGService(BaseService):
         if not properties:
             return i18n_loader.get_ui_message('no_results', language)
 
-        # Intro message templates
-        intro_templates = {
-            "vi": f"Tìm thấy {len(properties)} bất động sản phù hợp với yêu cầu của bạn.",
-            "en": f"Found {len(properties)} properties matching your criteria.",
-            "th": f"พบ {len(properties)} อสังหาริมทรัพย์ที่ตรงกับเกณฑ์ของคุณ",
-            "ja": f"{len(properties)}件の物件が見つかりました。"
-        }
-
-        intro = intro_templates.get(language, intro_templates["vi"])
+        # Use translation from JSON (RULE #0 compliance - no hardcoded text!)
+        intro = t('search.found_properties', language=language, count=len(properties))
 
         # "components" format: Simple message only - frontend renders property cards
         if response_format == "components":
             return intro
 
         # "text" format: Full text list with details (backward compatibility)
-        labels = {
-            "vi": {"price": "Giá", "location": "Vị trí", "bedrooms": "phòng ngủ", "area": "Diện tích"},
-            "en": {"price": "Price", "location": "Location", "bedrooms": "bedrooms", "area": "Area"},
-            "th": {"price": "ราคา", "location": "ที่อยู่", "bedrooms": "ห้องนอน", "area": "พื้นที่"},
-            "ja": {"price": "価格", "location": "場所", "bedrooms": "寝室", "area": "面積"}
+        # Use dynamic field labels from master data
+        field_labels = get_field_labels(language)
+        lbl = {
+            "price": field_labels.get("price", "Price"),
+            "location": field_labels.get("location", "Location"),
+            "bedrooms": field_labels.get("bedrooms", "bedrooms"),
+            "area": field_labels.get("area", "Area")
         }
-        lbl = labels.get(language, labels["vi"])
 
         response_parts = [intro + "\n\n"]
         for i, prop in enumerate(properties, 1):

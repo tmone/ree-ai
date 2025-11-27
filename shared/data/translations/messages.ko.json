@@ -165,7 +165,17 @@
     "extraction_error_detail": "부동산 정보 추출 실패. 다시 시도해 주세요",
     "fallback_completeness": "완전성 점수: {score}점",
     "fallback_please_add": "다음을 추가해 주세요: {missing_fields}",
-    "fallback_complete": "매물 등록이 완료되었습니다!"
+    "fallback_complete": "매물 등록이 완료되었습니다!",
+    "fallback_ask_more": "부동산에 대해 더 많은 정보를 제공해 주세요."
+  },
+  "rag_context": {
+    "header_title": "검색된 부동산 데이터",
+    "found_count": "'{query}'에 대해 {count}개의 매물을 찾았습니다",
+    "property_label": "부동산",
+    "no_data": "일치하는 부동산 데이터가 없습니다."
+  },
+  "search": {
+    "found_properties": "{count}개의 매물을 찾았습니다."
   },
   "errors": {
     "retry_error": "오류가 발생했습니다. 다시 시도해 주세요",
@@ -174,5 +184,65 @@
     "unknown_error": "알 수 없는 오류가 발생했습니다",
     "system_error": "시스템 오류",
     "no_request": "요청이 없습니다"
+  },
+  "completeness": {
+    "core_gateway_error": "Core Gateway 오류: {detail}",
+    "assessment_failed": "완전성 평가 실패: {error}",
+
+    "score_excellent": "우수 - 매물 정보가 매우 완전합니다",
+    "score_good": "양호 - 주요 정보가 제공되었습니다",
+    "score_fair": "보통 - 일부 정보가 누락되었습니다",
+    "score_average": "평균 - 많은 중요한 세부 정보가 누락되었습니다",
+    "score_poor": "미흡 - 긴급히 추가 정보가 필요합니다",
+
+    "missing_property_type": "property_type (부동산 유형)",
+    "missing_transaction_type": "transaction_type (매매/임대)",
+    "missing_title": "title (제목)",
+    "missing_district": "district (구/지역)",
+    "missing_address": "address (상세 주소)",
+    "missing_area": "area (면적)",
+    "missing_bedrooms": "bedrooms (침실 수)",
+    "missing_price": "price (가격) - 필수",
+    "missing_legal_status": "legal_status (법적 상태)",
+    "missing_contact_phone": "contact_phone (전화번호) - 필수",
+
+    "strength_description": "✅ 상세한 설명이 있습니다",
+    "strength_location": "✅ 위치 정보가 있습니다",
+    "strength_area": "✅ 면적 정보가 있습니다",
+    "strength_price": "✅ 가격 정보가 있습니다",
+    "strength_contact": "✅ 연락처가 있습니다",
+
+    "suggestion_add_phone": "📌 지금 전화번호를 추가하세요 - 필수!",
+    "suggestion_add_price": "📌 지금 가격을 추가하세요 - 필수 정보!",
+    "suggestion_add_legal": "📌 신뢰도를 높이기 위해 법적 상태를 추가하세요",
+    "suggestion_add_bedrooms": "📌 침실 수를 추가하세요 - 중요한 정보",
+    "suggestion_add_description": "📌 더 상세한 설명(100자 이상)을 작성하여 시청자를 유도하세요",
+
+    "priority_phone_urgent": "1. 전화번호 추가 - 긴급",
+    "priority_price_urgent": "2. 가격 추가 - 긴급",
+    "priority_legal_important": "3. 법적 정보 추가 - 중요",
+
+    "strength_dimensions": "길이와 너비 정보가 있습니다",
+    "missing_dimensions": "길이 또는 너비가 누락되었습니다",
+    "strength_images_many": "완전한 이미지가 있습니다 (5장 이상)",
+    "suggestion_add_5_images": "시청자를 유도하기 위해 5장 이상의 이미지를 추가하는 것이 좋습니다",
+    "suggestion_add_3_images": "더 매력적인 매물을 위해 3장 이상의 이미지가 필요합니다",
+    "missing_images": "이미지 (필수)",
+    "suggestion_images_required": "중요: 매물을 게시하려면 부동산 이미지를 추가하세요",
+    "strength_video": "소개 동영상이 있습니다",
+    "priority_images_required": "필수: 매물을 게시하려면 이미지를 추가하세요",
+    "suggestion_add_area": "면적 (㎡)을 추가하세요",
+    "suggestion_add_location": "주소/구를 추가하세요",
+    "priority_images_critical": "필수: 부동산 이미지를 추가하세요",
+    "priority_area_important": "중요: 면적을 추가하세요",
+    "priority_location_important": "중요: 주소를 추가하세요",
+    "suggestion_add_map": "제안: 더 쉽게 찾을 수 있도록 지도에서 위치를 선택하세요"
+  },
+
+  "ui_messages": {
+    "location_suggestion": "\n\n📍 매물을 완성하려면 아래 지도에서 정확한 위치를 선택하세요:",
+    "location_suggestion_short": "\n\n📍 지도에서 위치 선택:",
+    "save_failed_error": "죄송합니다. 매물 저장 중 오류가 발생했습니다. 다시 시도해 주세요.",
+    "please_prefix": "부탁드립니다"
   }
 }

@@ -258,10 +258,10 @@ Trả về JSON theo định dạng đã nêu."""
         # Width & Depth (dài, rộng) - Important for townhouse/land
         if property_data.get("width") and property_data.get("depth"):
             category_scores["physical_attributes"] += 6
-            strengths.append("Có thông tin chiều dài và chiều rộng")
+            strengths.append(t("completeness.strength_dimensions", language=language))
         elif property_data.get("width") or property_data.get("depth"):
             category_scores["physical_attributes"] += 3
-            missing_fields.append("Thiếu chiều dài hoặc chiều rộng")
+            missing_fields.append(t("completeness.missing_dimensions", language=language))
 
         if property_data.get("bedrooms"):
             category_scores["physical_attributes"] += 3
@@ -291,20 +291,20 @@ Trả về JSON theo định dạng đã nêu."""
         if images and len(images) > 0:
             if len(images) >= 5:
                 category_scores["media"] += 15
-                strengths.append("Có đầy đủ hình ảnh (5+ ảnh)")
+                strengths.append(t("completeness.strength_images_many", language=language))
             elif len(images) >= 3:
                 category_scores["media"] += 10
-                suggestions.append("Nên thêm ít nhất 5 hình ảnh để thu hút người xem")
+                suggestions.append(t("completeness.suggestion_add_5_images", language=language))
             else:
                 category_scores["media"] += 5
-                suggestions.append("Cần thêm ít nhất 3 hình ảnh để tin đăng hấp dẫn hơn")
+                suggestions.append(t("completeness.suggestion_add_3_images", language=language))
         else:
-            missing_fields.append("Hình ảnh (bắt buộc)")
-            suggestions.append("⚠️ QUAN TRỌNG: Thêm hình ảnh bất động sản để đăng tin")
+            missing_fields.append(t("completeness.missing_images", language=language))
+            suggestions.append(t("completeness.suggestion_images_required", language=language))
 
         # Bonus for video
         if property_data.get("videos") and len(property_data["videos"]) > 0:
-            strengths.append("Có video giới thiệu")
+            strengths.append(t("completeness.strength_video", language=language))
 
         # Amenities & Contact (10 points)
         if property_data.get("contact_phone"):
@@ -328,13 +328,13 @@ Trả về JSON theo định dạng đã nêu."""
 
         # Generate suggestions based on missing fields
         if not images or len(images) == 0:
-            suggestions.insert(0, "⚠️ BẮT BUỘC: Thêm hình ảnh để đăng tin")
+            suggestions.insert(0, t("completeness.priority_images_required", language=language))
         if not property_data.get("price"):
             suggestions.append(t("completeness.suggestion_add_price", language=language))
         if not (property_data.get("area") or property_data.get("land_area")):
-            suggestions.append("Thêm diện tích (m²)")
+            suggestions.append(t("completeness.suggestion_add_area", language=language))
         if not property_data.get("district"):
-            suggestions.append("Thêm địa chỉ/quận huyện")
+            suggestions.append(t("completeness.suggestion_add_location", language=language))
         if not property_data.get("bedrooms") and property_data.get("property_type") not in ["land", "đất"]:
             suggestions.append(t("completeness.suggestion_add_bedrooms", language=language))
 
@@ -343,17 +343,17 @@ Trả về JSON theo định dạng đã nêu."""
         # Priority actions - Images first!
         priority_actions = []
         if not images or len(images) == 0:
-            priority_actions.append("🔴 BẮT BUỘC: Thêm hình ảnh bất động sản")
+            priority_actions.append(t("completeness.priority_images_critical", language=language))
         if not property_data.get("price"):
             priority_actions.append(t("completeness.priority_price_urgent", language=language))
         if not (property_data.get("area") or property_data.get("land_area")):
-            priority_actions.append("🟡 QUAN TRỌNG: Thêm diện tích")
+            priority_actions.append(t("completeness.priority_area_important", language=language))
         if not property_data.get("district"):
-            priority_actions.append("🟡 QUAN TRỌNG: Thêm địa chỉ")
+            priority_actions.append(t("completeness.priority_location_important", language=language))
 
         # Suggest map GPS if basic location is provided
         if property_data.get("district") and not property_data.get("latitude"):
-            suggestions.append("💡 GỢI Ý: Chọn vị trí trên bản đồ để người mua dễ tìm")
+            suggestions.append(t("completeness.suggestion_add_map", language=language))
 
         return CompletenessResponse(
             overall_score=overall_score,

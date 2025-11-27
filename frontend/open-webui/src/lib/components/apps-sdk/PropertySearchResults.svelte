@@ -2,6 +2,7 @@
 	import { createEventDispatcher } from 'svelte';
 	import PropertyCard from './PropertyCard.svelte';
 	import AppAttribution from './AppAttribution.svelte';
+	import i18n from '$lib/i18n';
 
 	const dispatch = createEventDispatcher();
 
@@ -106,7 +107,7 @@
 			{/if}
 		</div>
 
-		<p class="results-count">Tìm thấy {properties.length} bất động sản</p>
+		<p class="results-count">{$i18n.t('Found')} {properties.length} {$i18n.t('properties')}</p>
 	</div>
 {/if}
 

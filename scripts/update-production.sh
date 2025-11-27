@@ -30,7 +30,7 @@ echo ""
 
 # Step 1: Pull latest code
 echo -e "${BLUE}[1/5]${NC} Pulling latest code from GitHub..."
-ssh -i "$SSH_KEY" root@$SERVER << EOF
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no root@$SERVER << EOF
 cd $PROJECT_PATH
 git fetch origin
 git pull origin $GIT_BRANCH
@@ -43,7 +43,7 @@ echo ""
 
 # Step 2: Rebuild services
 echo -e "${BLUE}[2/5]${NC} Rebuilding Docker images..."
-ssh -i "$SSH_KEY" root@$SERVER << EOF
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no root@$SERVER << EOF
 cd $PROJECT_PATH
 docker-compose build --parallel
 EOF
@@ -52,7 +52,7 @@ echo ""
 
 # Step 3: Restart services
 echo -e "${BLUE}[3/5]${NC} Restarting services..."
-ssh -i "$SSH_KEY" root@$SERVER << EOF
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no root@$SERVER << EOF
 cd $PROJECT_PATH
 
 # Restart in order
@@ -97,7 +97,7 @@ check_service() {
     local name=$1
     local port=$2
     echo -n "  $name ($port)... "
-    if ssh -i "$SSH_KEY" root@$SERVER "curl -sf http://localhost:$port/health" &>/dev/null; then
+    if ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no root@$SERVER "curl -sf http://localhost:$port/health" &>/dev/null; then
         echo -e "${GREEN}OK${NC}"
     else
         echo -e "${YELLOW}CHECK MANUALLY${NC}"

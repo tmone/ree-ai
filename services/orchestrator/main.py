@@ -2134,9 +2134,17 @@ Re-extract property attributes with improved understanding. Focus on filling mis
             # Check if user confirms completion (conversation ending logic)
             is_user_confirming = self._detect_completion_confirmation(query, history)
 
-            # Ending Condition: High completeness + User confirmation
-            if overall_score >= 75 and is_user_confirming:
-                self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Conversation ending: Score {overall_score}/100 + User confirmed")
+            # Ending Condition: User confirmation with minimum score
+            # - Score >= 75: Save directly (high quality)
+            # - Score >= 50 + User confirms: Save with warning (user accepts lower quality)
+            # - Score < 50: Require more info even if user confirms
+            MINIMUM_SAVE_SCORE = 50  # Absolute minimum to save
+            IDEAL_SAVE_SCORE = 75    # Ideal score for high quality listing
+
+            can_save = (overall_score >= IDEAL_SAVE_SCORE) or (overall_score >= MINIMUM_SAVE_SCORE and is_user_confirming)
+
+            if can_save:
+                self.logger.info(f"{LogEmoji.SUCCESS} [Property Posting] ✅ Saving property: Score {overall_score}/100, User confirmed: {is_user_confirming}")
 
                 # BUG#32 FIX: Add listing_type derived from intent (REQUIRED for validation)
                 # Validation service expects 'listing_type', not 'transaction_type'
@@ -4654,11 +4662,18 @@ Generate a detailed review response in **{language} language**:
             # Build message using i18n
             message = t('property_posting.fallback_completeness', language=language, score=int(score))
 
+            # Only say "complete" if score is high enough (>=80) AND no missing fields
+            # This fixes the bug where 0/100 was showing "Information is complete!"
             if missing_fields:
                 missing_str = ', '.join(missing_fields[:3])
                 message += " " + t('property_posting.fallback_please_add', language=language, missing_fields=missing_str)
-            else:
+            elif score >= 80:
+                # Only show "complete" message when score is actually high
                 message += " " + t('property_posting.fallback_complete', language=language)
+            else:
+                # Low score but no specific missing fields - ask for more info
+                # Use translation from JSON (RULE #0 compliance - no hardcoded text!)
+                message += " " + t('property_posting.fallback_ask_more', language=language)
 
             return message
 

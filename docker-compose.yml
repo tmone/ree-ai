@@ -30,7 +30,7 @@ services:
     image: redis:alpine
     container_name: ree-ai-redis
     ports:
-      - "6379:6379"
+      - "7379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -48,8 +48,8 @@ services:
       - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
       - DISABLE_SECURITY_PLUGIN=true
     ports:
-      - "9200:9200"
-      - "9600:9600"
+      - "7200:9200"
+      - "7600:9600"
     volumes:
       - opensearch_data:/usr/share/opensearch/data
     healthcheck:
@@ -79,7 +79,7 @@ services:
       - ENABLE_OPENAI_API=true
       - WEBUI_NAME=REE AI - Real Estate Assistant
       - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:-secret-key-change-me}
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ree_ai_user}:${POSTGRES_PASSWORD:-ree_ai_pass_2025}@postgres:5432/${POSTGRES_DB:-ree_ai}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ree_ai_user}:${POSTGRES_PASSWORD:-ree_ai_password_2024}@postgres:5432/${POSTGRES_DB:-ree_ai}
       # Task Model for Auto Text Generation (Follow-ups, Title, Tags)
       - TASK_MODEL=${TASK_MODEL:-llama3.2:latest}
       - ENABLE_FOLLOW_UP_GENERATION=${ENABLE_FOLLOW_UP_GENERATION:-true}
@@ -222,6 +222,8 @@ services:
       - opensearch
     networks:
       - ree-ai-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     profiles:
       - real
       - all
@@ -262,7 +264,9 @@ services:
       - attribute-extraction
       - validation
     networks:
-      - ree-ai-network
+      ree-ai-network:
+        aliases:
+          - orchestrator
     profiles:
       - real
       - all
@@ -320,7 +324,10 @@ services:
       - core-gateway
       - redis
     networks:
-      - ree-ai-network
+      ree-ai-network:
+        aliases:
+          - classification
+          - ree-ai-classification
     profiles:
       - real
       - all
@@ -389,7 +396,10 @@ services:
       - core-gateway
       - db-gateway
     networks:
-      - ree-ai-network
+      ree-ai-network:
+        aliases:
+          - rag-service
+          - ree-ai-rag-service
     profiles:
       - real
       - all
@@ -445,7 +455,10 @@ services:
       - postgres
       - core-gateway
     networks:
-      - ree-ai-network
+      ree-ai-network:
+        aliases:
+          - attribute-extraction
+          - ree-ai-attribute-extraction
     profiles:
       - real
       - all

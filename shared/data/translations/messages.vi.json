@@ -46,11 +46,19 @@
 
     "fallback_completeness": "Cảm ơn bạn đã cung cấp thông tin! Độ hoàn thiện: {score}/100.",
     "fallback_please_add": "Vui lòng bổ sung: {missing_fields}",
-    "fallback_complete": "Thông tin đã đầy đủ!"
+    "fallback_complete": "Thông tin đã đầy đủ!",
+    "fallback_ask_more": "Vui lòng cung cấp thêm thông tin về bất động sản."
+  },
+
+  "rag_context": {
+    "header_title": "DỮ LIỆU BẤT ĐỘNG SẢN TÌM ĐƯỢC",
+    "found_count": "Tìm thấy {count} bất động sản phù hợp với yêu cầu: '{query}'",
+    "property_label": "BẤT ĐỘNG SẢN",
+    "no_data": "Không có dữ liệu bất động sản phù hợp."
   },
 
   "search": {
-    "found_properties": "Tôi đã tìm thấy {count} bất động sản phù hợp",
+    "found_properties": "Tìm thấy {count} bất động sản phù hợp với yêu cầu của bạn.",
     "found_exact": "Tôi đã tìm thấy {count} bất động sản **rất phù hợp** với yêu cầu của bạn:",
     "found_good": "Tôi tìm thấy {match_count}/{total_count} bất động sản phù hợp với yêu cầu của bạn:",
     "found_partial": "Tìm thấy {total_count} BDS, nhưng chỉ {match_count} BDS phù hợp một phần:",
@@ -221,7 +229,23 @@
 
     "priority_phone_urgent": "1. BỔ SUNG SỐ ĐIỆN THOẠI - URGENT",
     "priority_price_urgent": "2. BỔ SUNG GIÁ - URGENT",
-    "priority_legal_important": "3. Thêm thông tin pháp lý - QUAN TRỌNG"
+    "priority_legal_important": "3. Thêm thông tin pháp lý - QUAN TRỌNG",
+
+    "strength_dimensions": "Có thông tin chiều dài và chiều rộng",
+    "missing_dimensions": "Thiếu chiều dài hoặc chiều rộng",
+    "strength_images_many": "Có đầy đủ hình ảnh (5+ ảnh)",
+    "suggestion_add_5_images": "Nên thêm ít nhất 5 hình ảnh để thu hút người xem",
+    "suggestion_add_3_images": "Cần thêm ít nhất 3 hình ảnh để tin đăng hấp dẫn hơn",
+    "missing_images": "Hình ảnh (bắt buộc)",
+    "suggestion_images_required": "QUAN TRỌNG: Thêm hình ảnh bất động sản để đăng tin",
+    "strength_video": "Có video giới thiệu",
+    "priority_images_required": "BẮT BUỘC: Thêm hình ảnh để đăng tin",
+    "suggestion_add_area": "Thêm diện tích (m²)",
+    "suggestion_add_location": "Thêm địa chỉ/quận huyện",
+    "priority_images_critical": "BẮT BUỘC: Thêm hình ảnh bất động sản",
+    "priority_area_important": "QUAN TRỌNG: Thêm diện tích",
+    "priority_location_important": "QUAN TRỌNG: Thêm địa chỉ",
+    "suggestion_add_map": "GỢI Ý: Chọn vị trí trên bản đồ để người mua dễ tìm"
   },
 
   "common": {
@@ -236,5 +260,12 @@
     "loading": "Đang tải...",
     "processing": "Đang xử lý...",
     "please_wait": "Vui lòng đợi..."
+  },
+
+  "ui_messages": {
+    "location_suggestion": "\n\n📍 Để tin đăng hoàn thiện hơn, bạn có thể chọn vị trí chính xác trên bản đồ bên dưới:",
+    "location_suggestion_short": "\n\n📍 Chọn vị trí trên bản đồ:",
+    "save_failed_error": "Xin lỗi, đã xảy ra lỗi khi lưu tin đăng. Vui lòng thử lại.",
+    "please_prefix": "Vui lòng"
   }
 }

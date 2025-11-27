@@ -288,12 +288,20 @@ async def search_properties(request: SearchRequest):
                     }
                 })
 
-            # Property type filter - ADD TO QUERY TEXT (most property_type fields are empty)
+            # Property type filter - USE TERM FILTER + TEXT BOOST
+            # FIX: Add term filter on property_type field for exact matching
             if request.filters.property_type:
-                must_clauses.append({
+                # Primary: Term filter on property_type field (hard filter)
+                filter_clauses.append({
+                    "term": {
+                        "property_type.keyword": request.filters.property_type.lower()
+                    }
+                })
+                # Secondary: Boost text matching in title/description (soft match)
+                should_clauses.append({
                     "multi_match": {
                         "query": request.filters.property_type,
-                        "fields": ["title^3", "description"],  # Search in text, not empty field
+                        "fields": ["title^3", "description"],
                         "type": "best_fields",
                         "operator": "or"
                     }
@@ -335,19 +343,40 @@ async def search_properties(request: SearchRequest):
                 })
 
         # Build the complete query
-        search_body = {
-            "query": {
-                "bool": {
-                    "must": must_clauses if must_clauses else [{"match_all": {}}],
-                    "filter": filter_clauses
-                }
-            },
-            "size": request.limit,
-            "sort": [
-                {"_score": {"order": "desc"}},  # Sort by relevance score
-                {"created_at": {"order": "desc"}}  # Then by recency
-            ]
-        }
+        # FIX: When filters are provided, use "should" for text matching to allow
+        # multilingual search (Vietnamese query text won't block English filter results)
+        has_filters = bool(filter_clauses)
+
+        if has_filters:
+            # When we have hard filters (term filters), user query text becomes optional boost
+            all_should_clauses = must_clauses + should_clauses  # Combine for relevance boosting
+            search_body = {
+                "query": {
+                    "bool": {
+                        "should": all_should_clauses if all_should_clauses else [],
+                        "filter": filter_clauses,
+                        "minimum_should_match": 0  # Allow results even if no text match
+                    }
+                },
+            }
+        else:
+            # No hard filters - require text match
+            search_body = {
+                "query": {
+                    "bool": {
+                        "must": must_clauses if must_clauses else [{"match_all": {}}],
+                        "should": should_clauses,
+                        "filter": filter_clauses
+                    }
+                },
+            }
+
+        # Add pagination and sorting
+        search_body["size"] = request.limit
+        search_body["sort"] = [
+            {"_score": {"order": "desc"}},  # Sort by relevance score
+            {"created_at": {"order": "desc"}}  # Then by recency
+        ]
 
         # Execute search
         response = await opensearch_client.search(

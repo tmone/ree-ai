@@ -46,11 +46,19 @@
 
     "fallback_completeness": "Thank you for providing information! Completeness: {score}/100.",
     "fallback_please_add": "Please add: {missing_fields}",
-    "fallback_complete": "Information is complete!"
+    "fallback_complete": "Information is complete!",
+    "fallback_ask_more": "Please provide more details about your property."
+  },
+
+  "rag_context": {
+    "header_title": "PROPERTY DATA FOUND",
+    "found_count": "Found {count} properties matching: '{query}'",
+    "property_label": "PROPERTY",
+    "no_data": "No matching property data found."
   },
 
   "search": {
-    "found_properties": "I found {count} matching properties",
+    "found_properties": "Found {count} properties matching your criteria.",
     "found_exact": "I found {count} properties that **match very well** with your requirements:",
     "found_good": "I found {match_count}/{total_count} properties matching your requirements:",
     "found_partial": "Found {total_count} properties, but only {match_count} partially match:",
@@ -221,7 +229,23 @@
 
     "priority_phone_urgent": "1. ADD PHONE NUMBER - URGENT",
     "priority_price_urgent": "2. ADD PRICE - URGENT",
-    "priority_legal_important": "3. Add legal information - IMPORTANT"
+    "priority_legal_important": "3. Add legal information - IMPORTANT",
+
+    "strength_dimensions": "Has length and width information",
+    "missing_dimensions": "Missing length or width",
+    "strength_images_many": "Has complete images (5+ images)",
+    "suggestion_add_5_images": "Consider adding at least 5 images to attract viewers",
+    "suggestion_add_3_images": "Need to add at least 3 images for more appealing listing",
+    "missing_images": "Images (required)",
+    "suggestion_images_required": "IMPORTANT: Add property images to post listing",
+    "strength_video": "Has introduction video",
+    "priority_images_required": "REQUIRED: Add images to post listing",
+    "suggestion_add_area": "Add area (sqm)",
+    "suggestion_add_location": "Add address/district",
+    "priority_images_critical": "REQUIRED: Add property images",
+    "priority_area_important": "IMPORTANT: Add area",
+    "priority_location_important": "IMPORTANT: Add address",
+    "suggestion_add_map": "SUGGESTION: Select location on map for easier finding"
   },
 
   "common": {
@@ -236,5 +260,12 @@
     "loading": "Loading...",
     "processing": "Processing...",
     "please_wait": "Please wait..."
+  },
+
+  "ui_messages": {
+    "location_suggestion": "\n\n📍 To complete your listing, you can select the exact location on the map below:",
+    "location_suggestion_short": "\n\n📍 Select location on map:",
+    "save_failed_error": "Sorry, an error occurred while saving your listing. Please try again.",
+    "please_prefix": "Please"
   }
 }

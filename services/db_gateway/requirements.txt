@@ -6,3 +6,4 @@ opensearch-py==2.4.2
 asyncpg==0.29.0
 pyjwt==2.8.0
 bcrypt==4.1.2
+google-cloud-storage==2.14.0

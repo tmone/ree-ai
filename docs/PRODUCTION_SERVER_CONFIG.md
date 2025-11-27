@@ -199,12 +199,105 @@ curl -u admin:realWorldAsset@2025 -k https://localhost:9200/properties/_count
 - `/opt/ree-ai/docker-compose.yml` - Service definitions
 - `/app/opensearch/docker-compose.yaml` - Shared OpenSearch config
 
+## ⚠️ CRITICAL: Multiple OpenSearch Clusters
+
+**Production server co NHIEU OpenSearch clusters - DE NHAM LAN!**
+
+### OpenSearch Clusters tren Server
+
+| Cluster | Container(s) | Port | SSL | Purpose |
+|---------|-------------|------|-----|---------|
+| **Shared Cluster** | `opensearch-node1`, `opensearch-node2` | 9200 | YES | **REE-AI data (properties)** |
+| REE-AI Internal | `ree-ai-opensearch` | 7200 | NO | Development only - NOT USED |
+
+### LOI THUONG GAP: Query sai OpenSearch cluster
+
+**SAI** (Query `ree-ai-opensearch` tren port 7200 - KHONG CO DATA):
+```bash
+curl -s 'http://localhost:7200/properties/_doc/<property_id>?pretty'
+# Result: {"found": false}  <-- DATA KHONG TON TAI O DAY!
+```
+
+**DUNG** (Query `opensearch-node1` tren port 9200 voi SSL):
+```bash
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/properties/_doc/<property_id>?pretty'
+# Result: {"found": true, "_source": {...}}  <-- DATA O DAY!
+```
+
+### Query Commands Reference
+
+```bash
+# Check property exists
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/properties/_doc/<property_id>?pretty'
+
+# Count all properties
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/properties/_count?pretty'
+
+# Search properties
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/properties/_search?q=title:house&pretty'
+
+# Get cluster health
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/_cluster/health?pretty'
+
+# List all indices
+curl -s -k -u admin:realWorldAsset@2025 \
+  'https://localhost:9200/_cat/indices?v'
+```
+
+### Tai sao co 2 OpenSearch clusters?
+
+1. **`opensearch-node1/node2` (Shared)**: Cluster production dung chung cho nhieu projects, chay doc lap tu docker-compose rieng tai `/app/opensearch/`
+
+2. **`ree-ai-opensearch` (Internal)**: Duoc dinh nghia trong `ree-ai/docker-compose.yml` nhung **KHONG DUOC SU DUNG** trong production. db-gateway duoc config de ket noi toi shared cluster thay vi internal.
+
+### Verify db-gateway dang connect dung cluster
+
+```bash
+# Check db-gateway env vars
+docker exec ree-ai-db-gateway env | grep -i opensearch
+
+# Expected output:
+# OPENSEARCH_HOST=opensearch-node1  <-- NOT localhost, NOT ree-ai-opensearch
+# OPENSEARCH_PORT=9200
+# OPENSEARCH_USE_SSL=true
+# OPENSEARCH_USER=admin
+# OPENSEARCH_PASSWORD=realWorldAsset@2025
+```
+
+## GCS (Google Cloud Storage) Configuration
+
+### Environment Variables
+```env
+GCS_BUCKET_NAME=asset-dev.entreal.com
+GCS_PROJECT_ID=crastonic-rwa
+GOOGLE_APPLICATION_CREDENTIALS=./credentials/gcs-service-account.json
+GCS_REGION=asia-southeast1
+```
+
+### Credentials File Location
+- **Server path**: `/opt/ree-ai/credentials/gcs-service-account.json`
+- **Local path**: `D:\Crastonic\ree-ai\credentials\gcs-service-account.json`
+
+### Test Image Upload
+```bash
+# Check if image URL is accessible (from anywhere)
+curl -I "https://storage.googleapis.com/asset-dev.entreal.com/properties/<property_id>/<filename>"
+# Expected: HTTP 200 OK, Content-Type: image/jpeg
+```
+
 ## Lessons Learned
 
 1. ❌ **DO NOT** stop/remove containers not belonging to ree-ai
 2. ❌ **DO NOT** assume localhost in container = host machine
 3. ❌ **DO NOT** use default ports without checking conflicts
-4. ✅ **DO** check network connectivity before troubleshooting
-5. ✅ **DO** verify environment variables are loaded (restart may not reload .env)
-6. ✅ **DO** use `docker compose up -d --no-deps <service>` to recreate single service
-7. ✅ **DO** connect db-gateway to opensearch_opensearch-net for external OpenSearch access
+4. ❌ **DO NOT** query `localhost:7200` - do la internal OpenSearch KHONG CO DATA
+5. ✅ **DO** query `https://localhost:9200` voi SSL va credentials cho production data
+6. ✅ **DO** check network connectivity before troubleshooting
+7. ✅ **DO** verify environment variables are loaded (restart may not reload .env)
+8. ✅ **DO** use `docker compose up -d --no-deps <service>` to recreate single service
+9. ✅ **DO** connect db-gateway to opensearch_opensearch-net for external OpenSearch access

@@ -81,15 +81,6 @@
 
 			<!-- Property Carousel (🎠 Inline Carousel) -->
 			<div class="property-carousel" role="region" aria-label="Property search results">
-				<!-- Header -->
-				{#if carouselData.total > 0}
-					<div class="carousel-header">
-						<p class="result-count">
-							{$i18n.t('Found')} <strong>{carouselData.total}</strong> {$i18n.t('properties')}
-						</p>
-					</div>
-				{/if}
-
 				<!-- Property Cards -->
 				<div class="property-list">
 					{#each carouselData.properties as property}
@@ -130,21 +121,6 @@
 		gap: var(--space-3, 12px);
 	}
 
-	.carousel-header {
-		padding: var(--space-2, 8px) 0;
-	}
-
-	.result-count {
-		color: var(--text-secondary, #6b7280);
-		font-size: var(--text-sm, 14px);
-		margin: 0;
-	}
-
-	.result-count strong {
-		color: var(--text-primary, #0d0d0d);
-		font-weight: var(--font-semibold, 600);
-	}
-
 	/* Property List */
 	.property-list {
 		display: flex;
@@ -162,14 +138,6 @@
 
 	/* Dark Mode */
 	@media (prefers-color-scheme: dark) {
-		.result-count {
-			color: var(--text-secondary, #cdcdcd);
-		}
-
-		.result-count strong {
-			color: var(--text-primary, #ffffff);
-		}
-
 		.empty-state {
 			color: var(--text-secondary, #cdcdcd);
 		}

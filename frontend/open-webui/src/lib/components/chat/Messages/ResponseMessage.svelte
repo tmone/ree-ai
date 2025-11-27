@@ -220,6 +220,11 @@
 		}
 	}
 
+	// Strip LOCATION_SELECTION command from displayed content (keep it hidden from user)
+	$: displayContent = message?.content
+		? message.content.replace(/<!--LOCATION_SELECTION:.*?-->/g, '').trim()
+		: '';
+
 	// Also detect LOCATION_SELECTION action from message status (legacy support)
 	$: if (message?.status?.action === 'LOCATION_SELECTION' && message?.done) {
 		showMapPicker = true;
@@ -931,7 +936,7 @@
 										messageId={message.id}
 										{history}
 										{selectedModels}
-										content={message.content}
+										content={displayContent}
 										sources={message.sources}
 										floatingButtons={message?.done &&
 											!readOnly &&

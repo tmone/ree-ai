@@ -107,7 +107,6 @@
 			{/if}
 		</div>
 
-		<p class="results-count">{$i18n.t('Found')} {properties.length} {$i18n.t('properties')}</p>
 	</div>
 {/if}
 
@@ -182,12 +181,5 @@
 		background: var(--bg-secondary, #1a1a1a);
 		border-color: var(--border-default-dark, rgba(255, 255, 255, 0.1));
 		color: white;
-	}
-
-	.results-count {
-		margin: 12px 0 0 0;
-		font-family: var(--font-sans, system-ui);
-		font-size: 13px;
-		color: var(--text-secondary, #5d5d5d);
 	}
 </style>

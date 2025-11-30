@@ -1740,11 +1740,16 @@ async def process_chat_response(
                                     {"components": components},
                                 )
                                 log.info(f"[COMPONENTS] Saved {len(components)} components to database")
-                            # Also emit event
+                            # Also emit event - include language for i18n override in property cards
+                            detected_language = response_data.get("language") or choices[0].get("message", {}).get("language")
+                            event_data = {"components": components}
+                            if detected_language:
+                                event_data["language"] = detected_language
+                                log.info(f"[COMPONENTS] Including detected language: {detected_language}")
                             await event_emitter(
                                 {
                                     "type": "chat:message:components",
-                                    "data": {"components": components},
+                                    "data": event_data,
                                 }
                             )
                             log.info(f"[COMPONENTS] Emitted chat:message:components event")

@@ -74,7 +74,9 @@
     "how_can_help": "どのようにお手伝いしましょうか?",
     "search_nearby_districts": "**近隣地区**で検索 ({districts})",
     "service_unavailable": "申し訳ございませんが、現在物件を検索できません。後でもう一度お試しください",
-    "found_some_provide_more_info": "一部の一致する物件が見つかりました。より正確に検索できるよう、詳細を教えていただけますか?"
+    "found_some_provide_more_info": "一部の一致する物件が見つかりました。より正確に検索できるよう、詳細を教えていただけますか?",
+    "suggestions_header": "\n\n💡 **ご提案:**",
+    "try_other_property_types": "他の物件タイプをお試しください: {types}"
   },
 
   "price_consultation": {

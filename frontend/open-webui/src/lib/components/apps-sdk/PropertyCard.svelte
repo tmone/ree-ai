@@ -1,7 +1,10 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 
 	const dispatch = createEventDispatcher();
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	// Props - Property data structure for REE AI
 	export let id: string = '';
@@ -42,9 +45,9 @@
 				</div>
 			{/if}
 			{#if transactionType === 'rent'}
-				<div class="transaction-badge rent">Cho thuê</div>
+				<div class="transaction-badge rent">{$i18n.t('For Rent')}</div>
 			{:else}
-				<div class="transaction-badge sale">Bán</div>
+				<div class="transaction-badge sale">{$i18n.t('For Sale')}</div>
 			{/if}
 		</div>
 	{/if}
@@ -78,7 +81,7 @@
 						<path d="M3 11H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 						<path d="M7 11V7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					</svg>
-					<span>{bedrooms} PN</span>
+					<span>{bedrooms} {$i18n.t('BR')}</span>
 				</div>
 			{/if}
 			{#if bathrooms > 0}
@@ -87,13 +90,13 @@
 						<path d="M4 12H20V16C20 18.2091 18.2091 20 16 20H8C5.79086 20 4 18.2091 4 16V12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 						<path d="M6 12V5C6 3.89543 6.89543 3 8 3H8.5C9.60457 3 10.5 3.89543 10.5 5V6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 					</svg>
-					<span>{bathrooms} WC</span>
+					<span>{bathrooms} {$i18n.t('BA')}</span>
 				</div>
 			{/if}
 		</div>
 
 		<button class="view-details-btn" on:click|stopPropagation={handleViewDetails}>
-			Xem chi tiết
+			{$i18n.t('View details')}
 		</button>
 	</div>
 </div>

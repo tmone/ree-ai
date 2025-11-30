@@ -2,7 +2,90 @@
 Extraction Response Helpers
 Utilities for handling new extraction service response structure
 """
+import json
+import os
 from typing import Dict, Any, List
+
+# Load multilingual keywords for synonym expansion
+_keywords_data = None
+
+def _load_keywords():
+    """Load multilingual keywords JSON file"""
+    global _keywords_data
+    if _keywords_data is None:
+        keywords_path = os.path.join(
+            os.path.dirname(__file__),
+            "..", "..", "..", "shared", "data", "multilingual_keywords.json"
+        )
+        try:
+            with open(keywords_path, 'r', encoding='utf-8') as f:
+                _keywords_data = json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load multilingual keywords: {e}")
+            _keywords_data = {}
+    return _keywords_data
+
+
+def expand_property_type_synonyms(property_type: str) -> List[str]:
+    """
+    Expand a property type search term to include all synonyms.
+
+    When user searches for "house", this returns all equivalent terms
+    that might exist in the database: ["house", "home", "nhà", "townhouse", ...]
+
+    Args:
+        property_type: The user's search term (e.g., "house", "apartment")
+
+    Returns:
+        List of all synonyms to search for (includes original term)
+    """
+    if not property_type:
+        return []
+
+    keywords = _load_keywords()
+    synonyms_map = keywords.get("property_type_search_synonyms", {})
+
+    # Normalize input
+    search_term = property_type.lower().strip()
+
+    # Check if we have synonyms for this term
+    if search_term in synonyms_map:
+        return synonyms_map[search_term]
+
+    # Check if term appears in any synonym list (reverse lookup)
+    for key, synonyms in synonyms_map.items():
+        if isinstance(synonyms, list):
+            lowercase_synonyms = [s.lower() for s in synonyms]
+            if search_term in lowercase_synonyms:
+                return synonyms
+
+    # No synonyms found - return original term
+    return [property_type]
+
+
+def get_search_suggestions(language: str = "vi") -> Dict[str, Any]:
+    """
+    Get search suggestions for when no results are found.
+
+    Args:
+        language: User's language (vi, en, th, ja)
+
+    Returns:
+        Dict with property_types and action suggestions
+    """
+    keywords = _load_keywords()
+    suggestions_data = keywords.get("search_suggestions", {})
+
+    property_types = suggestions_data.get("property_types", {}).get(language,
+        suggestions_data.get("property_types", {}).get("en", []))
+
+    actions = suggestions_data.get("actions", {}).get(language,
+        suggestions_data.get("actions", {}).get("en", []))
+
+    return {
+        "property_types": property_types,
+        "actions": actions
+    }
 
 
 def build_filters_from_extraction_response(extraction_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -36,7 +119,15 @@ def build_filters_from_extraction_response(extraction_result: Dict[str, Any]) ->
                 # Normalize district format: "district_7" -> "District 7"
                 if field == "district" and value.startswith("district_"):
                     value = "District " + value.replace("district_", "")
-                filters[field] = value
+                # Expand property_type synonyms for better search results
+                if field == "property_type":
+                    synonyms = expand_property_type_synonyms(value)
+                    if len(synonyms) > 1:
+                        filters["property_types"] = synonyms  # Multiple types to search
+                    else:
+                        filters[field] = value
+                else:
+                    filters[field] = value
 
         return filters
 

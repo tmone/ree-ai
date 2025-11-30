@@ -12,7 +12,8 @@ from services.orchestrator.handlers.base_handler import BaseHandler
 from services.orchestrator.utils.extraction_helpers import (
     build_filters_from_extraction_response,
     extract_entities_for_logging,
-    convert_legacy_extraction_response
+    convert_legacy_extraction_response,
+    get_search_suggestions
 )
 from shared.utils.logger import LogEmoji
 from shared.utils.i18n import t
@@ -136,14 +137,34 @@ class SearchHandler(BaseHandler):
                 )
                 components.append(property_list_component.dict())
                 self.logger.info(f"{LogEmoji.SUCCESS} [{request_id}] Created PropertyListComponent with {len(properties)} items")
+            else:
+                # No results found - provide helpful suggestions
+                suggestions = get_search_suggestions(language)
+                self.logger.info(f"{LogEmoji.INFO} [{request_id}] No results found, adding suggestions")
+
+                # Build suggestion message using i18n
+                property_types_str = ", ".join(suggestions.get("property_types", []))
+                actions = suggestions.get("actions", [])
+
+                # Use translated messages from i18n system
+                suggestion_message = t('search.suggestions_header', language=language)
+                suggestion_message += f"\n• {t('search.try_other_property_types', language=language, types=property_types_str)}"
+
+                if actions:
+                    suggestion_message += f"\n• {actions[1] if len(actions) > 1 else actions[0]}"
+                    if len(actions) > 2 and actions[2]:
+                        suggestion_message += f"\n• {actions[2]}"
+
+                response_text = response_text + suggestion_message
 
             duration_ms = (time.time() - start_time) * 1000
             self.log_handler_complete(request_id, "SearchHandler", duration_ms)
 
-            # Return structured response
+            # Return structured response with detected language for frontend i18n
             return {
                 "message": response_text,
-                "components": components
+                "components": components,
+                "language": language  # Pass detected language to frontend
             }
 
         except Exception as e:

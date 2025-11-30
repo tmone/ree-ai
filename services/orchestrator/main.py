@@ -410,6 +410,9 @@ class Orchestrator(BaseService):
                 # NEW: Include components in response (OpenAI Apps SDK Pattern)
                 components = response_data.get("components", [])
 
+                # Get language from response data or fall back to detected language
+                response_language = response_data.get("language", request.language)
+
                 return OrchestrationResponse(
                     intent=intent_type,
                     confidence=0.9,
@@ -417,6 +420,7 @@ class Orchestrator(BaseService):
                     components=components if components else None,  # Include UI components
                     service_used="classification_routing_with_memory_multimodal",
                     execution_time_ms=execution_time,
+                    language=response_language,  # NEW: Pass detected language for frontend i18n
                     metadata={
                         "flow": "cto_architecture",
                         "history_messages": len(history),

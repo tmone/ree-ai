@@ -20,34 +20,43 @@
 
 	export let property: any;
 	export let onClick: ((property: any) => void) | undefined = undefined;
+	export let language: string | undefined = undefined; // Override language from detected query language
 
-	// Format price to Vietnamese format (e.g., 5500000000 -> "5.5 tỷ")
+	// Helper to translate with optional language override
+	function t(key: string): string {
+		if (language) {
+			return $i18n.t(key, { lng: language });
+		}
+		return $i18n.t(key);
+	}
+
+	// Format price with i18n support
 	function formatPrice(priceValue: string | number): string {
-		// If already formatted (contains non-digit chars like "tỷ", "triệu"), return as-is
+		// If already formatted (contains non-digit chars like "tỷ", "triệu", "billion"), return as-is
 		if (typeof priceValue === 'string' && /[^\d.,\s]/.test(priceValue)) {
 			return priceValue;
 		}
 
 		const num = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/[,.\s]/g, '')) : priceValue;
-		if (isNaN(num) || num <= 0) return 'Thương lượng';
+		if (isNaN(num) || num <= 0) return t('Negotiable');
 
 		if (num >= 1000000000) {
 			const billions = num / 1000000000;
-			return `${billions % 1 === 0 ? billions : billions.toFixed(1)} tỷ`;
+			return `${billions % 1 === 0 ? billions : billions.toFixed(1)} ${t('billion')}`;
 		} else if (num >= 1000000) {
 			const millions = num / 1000000;
-			return `${millions % 1 === 0 ? millions : millions.toFixed(0)} triệu`;
+			return `${millions % 1 === 0 ? millions : millions.toFixed(0)} ${t('million')}`;
 		}
 		return num.toLocaleString('vi-VN');
 	}
 
-	// Format key feature: "2PN 75m²" or "Đất 200m²"
+	// Format key feature: "2BR 75m²" or "200m²" with i18n
 	function getKeyFeature(prop: any): string {
 		const bedrooms = prop.bedrooms || 0;
 		const area = prop.area || prop.areaDisplay || '';
 
 		if (bedrooms > 0) {
-			return `${bedrooms}PN ${area}m²`;
+			return `${bedrooms}${t('BR')} ${area}m²`;
 		}
 		return `${area}m²`;
 	}
@@ -107,7 +116,7 @@
 		on:click|stopPropagation={handleClick}
 		aria-label="View property details"
 	>
-		{$i18n.t('View details')} →
+		{t('View details')} →
 	</button>
 </article>
 

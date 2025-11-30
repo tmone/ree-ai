@@ -114,6 +114,8 @@
 			type: string;
 			data: any;
 		}>;
+		// Detected language from backend for i18n override
+		language?: string;
 	}
 
 	export let chatId = '';
@@ -818,6 +820,7 @@
 							<div class="my-3" transition:fade={{ duration: 200 }}>
 								<StructuredResponseRenderer
 									components={message.components}
+									language={message?.language}
 									on:requestDetail={handlePropertyDetailRequest}
 								/>
 							</div>

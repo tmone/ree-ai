@@ -91,6 +91,12 @@ class OrchestrationResponse(BaseModel):
         description="How domain knowledge expanded the query"
     )
 
+    # NEW: Detected language for i18n support in frontend
+    language: Optional[str] = Field(
+        None,
+        description="Detected query language (en, vi, th, ja) for frontend i18n"
+    )
+
 
 class RoutingDecision(BaseModel):
     """Internal routing decision."""

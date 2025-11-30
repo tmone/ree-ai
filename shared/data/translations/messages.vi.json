@@ -74,7 +74,9 @@
     "how_can_help": "Bạn muốn tôi hỗ trợ như thế nào?",
     "search_nearby_districts": "Tìm thêm ở **các quận lân cận** ({districts})",
     "service_unavailable": "Xin lỗi, tôi không thể tìm kiếm bất động sản lúc này. Vui lòng thử lại sau.",
-    "found_some_provide_more_info": "Tôi tìm thấy một số bất động sản phù hợp. Bạn có thể cung cấp thêm thông tin để tôi tìm chính xác hơn?"
+    "found_some_provide_more_info": "Tôi tìm thấy một số bất động sản phù hợp. Bạn có thể cung cấp thêm thông tin để tôi tìm chính xác hơn?",
+    "suggestions_header": "\n\n💡 **Gợi ý:**",
+    "try_other_property_types": "Thử tìm với loại BĐS khác: {types}"
   },
 
   "price_consultation": {

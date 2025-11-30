@@ -155,7 +155,9 @@
     "provide_details": "{requirement}을(를) 제공하세요",
     "adjust_bedrooms": "침실 수를 조정하세요: {bedrooms}개",
     "nearby_alternatives": "근처 대안 {count}개",
-    "how_can_help": "더 도와드릴까요?"
+    "how_can_help": "더 도와드릴까요?",
+    "suggestions_header": "\n\n💡 **제안:**",
+    "try_other_property_types": "다른 부동산 유형을 시도해 보세요: {types}"
   },
   "chat": {
     "service_unavailable": "채팅 서비스를 일시적으로 사용할 수 없습니다",

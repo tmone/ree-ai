@@ -288,10 +288,29 @@ async def search_properties(request: SearchRequest):
                     }
                 })
 
-            # Property type filter - USE TERM FILTER + TEXT BOOST
-            # FIX: Add term filter on property_type field for exact matching
-            if request.filters.property_type:
-                # Primary: Term filter on property_type field (hard filter)
+            # Property type filter - SUPPORT BOTH SINGLE AND MULTIPLE TYPES (synonyms)
+            # When searching for "house", we may want to match: house, nhà, townhouse, villa, etc.
+            if request.filters.property_types and len(request.filters.property_types) > 0:
+                # Multiple property types (synonyms) - use "terms" filter (OR)
+                lowercase_types = [pt.lower() for pt in request.filters.property_types]
+                filter_clauses.append({
+                    "terms": {
+                        "property_type.keyword": lowercase_types
+                    }
+                })
+                # Boost text matching for any of the property types
+                for pt in request.filters.property_types[:3]:  # Limit boost to first 3
+                    should_clauses.append({
+                        "multi_match": {
+                            "query": pt,
+                            "fields": ["title^3", "description"],
+                            "type": "best_fields",
+                            "operator": "or"
+                        }
+                    })
+                logger.info(f"✅ Applied property_types filter (synonyms): {lowercase_types[:5]}...")
+            elif request.filters.property_type:
+                # Single property type - use "term" filter (exact match)
                 filter_clauses.append({
                     "term": {
                         "property_type.keyword": request.filters.property_type.lower()

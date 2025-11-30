@@ -74,7 +74,9 @@
     "how_can_help": "How can I help you?",
     "search_nearby_districts": "Search in **nearby districts** ({districts})",
     "service_unavailable": "Sorry, I cannot search for properties right now. Please try again later.",
-    "found_some_provide_more_info": "I found some matching properties. Could you provide more details to help me search more accurately?"
+    "found_some_provide_more_info": "I found some matching properties. Could you provide more details to help me search more accurately?",
+    "suggestions_header": "\n\n💡 **Suggestions:**",
+    "try_other_property_types": "Try different property types: {types}"
   },
 
   "price_consultation": {

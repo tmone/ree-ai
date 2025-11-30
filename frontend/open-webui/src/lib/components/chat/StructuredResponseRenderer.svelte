@@ -19,6 +19,7 @@
 	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let components: any[] = [];
+	export let language: string | undefined = undefined; // Detected query language from backend
 
 	const dispatch = createEventDispatcher();
 
@@ -84,7 +85,7 @@
 				<!-- Property Cards -->
 				<div class="property-list">
 					{#each carouselData.properties as property}
-						<CompactPropertyCard {property} onClick={() => handlePropertyClick(property)} />
+						<CompactPropertyCard {property} {language} onClick={() => handlePropertyClick(property)} />
 					{/each}
 				</div>
 

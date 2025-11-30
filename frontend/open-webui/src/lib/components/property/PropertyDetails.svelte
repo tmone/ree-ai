@@ -1,5 +1,10 @@
 <script lang="ts">
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
+	import type { i18n as i18nType } from 'i18next';
 	import type { Property } from '$lib/apis/ree-ai';
+
+	const i18n: Writable<i18nType> = getContext('i18n');
 
 	export let property: Property;
 	export let onClose: (() => void) | undefined = undefined;
@@ -240,9 +245,9 @@
 				</div>
 				{#if property.source_url}
 					<div class="meta-item">
-						<span class="meta-label">Nguồn:</span>
+						<span class="meta-label">{$i18n.t('Source')}:</span>
 						<a href={property.source_url} target="_blank" rel="noopener noreferrer">
-							Xem chi tiết
+							{$i18n.t('View details')}
 						</a>
 					</div>
 				{/if}

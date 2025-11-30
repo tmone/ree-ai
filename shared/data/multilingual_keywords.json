@@ -308,6 +308,39 @@
     }
   },
 
+  "property_type_search_synonyms": {
+    "description": "Maps user search terms to database property_type values to search. When user says 'house', search for all these property types.",
+    "house": ["house", "home", "nhà", "nhà phố", "nha", "nha pho", "townhouse", "villa", "biệt thự"],
+    "apartment": ["apartment", "condo", "flat", "căn hộ", "can ho", "chung cư", "chung cu"],
+    "villa": ["villa", "mansion", "biệt thự", "biet thu"],
+    "townhouse": ["townhouse", "row house", "nhà phố", "nha pho"],
+    "land": ["land", "plot", "đất", "dat", "mảnh đất"],
+    "office": ["office", "commercial space", "văn phòng", "van phong", "commercial"],
+    "condo": ["condo", "condominium", "apartment", "căn hộ", "can ho", "chung cư"]
+  },
+
+  "search_suggestions": {
+    "description": "Suggestions to show when no results found",
+    "property_types": {
+      "vi": ["căn hộ", "nhà phố", "biệt thự", "đất nền", "văn phòng"],
+      "en": ["apartment", "house", "villa", "land", "office"]
+    },
+    "actions": {
+      "vi": [
+        "Thử tìm với từ khóa khác như: căn hộ, nhà phố, biệt thự",
+        "Mở rộng khu vực tìm kiếm",
+        "Điều chỉnh mức giá hoặc diện tích",
+        "Đăng tin cần mua/thuê để người bán liên hệ"
+      ],
+      "en": [
+        "Try different keywords: apartment, house, villa",
+        "Expand your search area",
+        "Adjust price or area range",
+        "Post a wanted ad so sellers can contact you"
+      ]
+    }
+  },
+
   "vague_property_terms": {
     "description": "Generic property terms that should be filtered out in searches (too vague, cause 0 results in DB)",
     "vi": ["nhà", "bds", "bất động sản", ""],

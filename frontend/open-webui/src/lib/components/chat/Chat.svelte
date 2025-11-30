@@ -391,7 +391,11 @@
 				} else if (type === 'chat:message:components' || type === 'components') {
 					console.log('[Chat] Received components event!', data.components?.length, 'components');
 					message.components = data.components;
-					console.log('[Chat] Set message.components =', message.components?.length);
+					// Also capture language for i18n override in property cards
+					if (data.language) {
+						message.language = data.language;
+					}
+					console.log('[Chat] Set message.components =', message.components?.length, 'language =', message.language);
 				} else if (type === 'chat:message:error') {
 					message.error = data.error;
 				} else if (type === 'chat:message:follow_ups') {
@@ -1373,12 +1377,22 @@
 				message.components = choices[0].message.components;
 			}
 
+			// Also capture language for i18n override in property cards (non-stream)
+			if (choices[0]?.message?.language) {
+				message.language = choices[0].message.language;
+			}
+
 			// Stream: Accumulate components from delta
 			if (choices[0]?.delta?.components) {
 				if (!message.components) {
 					message.components = [];
 				}
 				message.components.push(...choices[0].delta.components);
+			}
+
+			// Stream: Capture language from delta
+			if (choices[0]?.delta?.language) {
+				message.language = choices[0].delta.language;
 			}
 		}
 
